@@ -13,7 +13,8 @@ logging.basicConfig(level=logging.INFO)
 
 with st.sidebar:
     openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.1, value=0.1, step=0.1, key="temperature")
+    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=5.0, value=0.1, step=0.1, key="temperature")
+    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
     "[View the source code](https://github.com/streamlit/llm-examples/blob/main/Chatbot.py)"
     "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
@@ -37,7 +38,9 @@ if prompt := st.chat_input():
     #    st.stop()
 
     #client = OpenAI(api_key=openai_api_key)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    message_history = st.session_state.messages.copy()
+    message_history.append({"role": "user", "content": prompt})
+    #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
     #user_message =  {"role": "user", "content": f"{prompt}"}
@@ -47,11 +50,11 @@ if prompt := st.chat_input():
     request = {
         "anthropic_version": "bedrock-2023-05-31",
         "temperature": opt_temperature,
-        "top_p": 0.5,
+        "top_p": opt_top_p,
         "top_k": 200,
         "max_tokens": 2048,
         "system": "You are a helpful assistant.",
-        "messages": st.session_state.messages
+        "messages": message_history #st.session_state.messages
     }
     json.dumps(request, indent=3)
 
@@ -64,9 +67,9 @@ if prompt := st.chat_input():
             body = json.dumps(request))
 
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+        result_text = ""
         with st.chat_message("assistant"):
             result_area = st.empty()
-            result_text = ""
             stream = response["body"]
             for event in stream:
 
@@ -75,8 +78,10 @@ if prompt := st.chat_input():
                     chunk = json.loads(event["chunk"]["bytes"])
 
                     if chunk['type'] == 'message_start':
-                        #print(f"Input Tokens: {chunk['message']['usage']['input_tokens']}")
-                        pass
+                        opts = f"| temperature={opt_temperature} top_p={opt_top_p}"
+                        result_text += f"{opts}\n\n"
+                        result_area.write(result_text)
+                        #pass
 
                     elif chunk['type'] == 'message_delta':
                         #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
@@ -97,10 +102,11 @@ if prompt := st.chat_input():
                         output_token_count = invocation_metrics["outputTokenCount"]
                         latency = invocation_metrics["invocationLatency"]
                         lag = invocation_metrics["firstByteLatency"]
-                        stats = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
                         #await msg.stream_token(f"\n\n{stats}")
                         result_text += f"\n\n{stats}"
                         result_area.write(result_text)
+
                 elif event["internalServerException"]:
                     result_area.write(event["internalServerException"])
                 elif event["modelStreamErrorException"]:
@@ -117,7 +123,8 @@ if prompt := st.chat_input():
                     result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
-            st.session_state.messages.append({"role": "assistant", "content": result_text})
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "assistant", "content": result_text})
         
     except ClientError as err:
         message = err.response["Error"]["Message"]
