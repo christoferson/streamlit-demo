@@ -2,8 +2,14 @@ import streamlit as st
 import boto3
 import settings
 import json
+import logging
+
+from botocore.exceptions import ClientError
 
 AWS_REGION = settings.AWS_REGION
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 with st.sidebar:
     openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
@@ -48,47 +54,76 @@ if prompt := st.chat_input():
         "messages": st.session_state.messages
     }
     json.dumps(request, indent=3)
-    bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-    response = bedrock_runtime.invoke_model_with_response_stream(modelId = bedrock_model_id, body = json.dumps(request))
 
-    #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-    with st.chat_message("assistant"):
-        result_area = st.empty()
-        result_text = ""
-        stream = response["body"]
-        for event in stream:
-                chunk = json.loads(event["chunk"]["bytes"])
+    try:
+        bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+        response = bedrock_runtime.invoke_model_with_response_stream(
+            modelId = bedrock_model_id, 
+            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+            accept = "application/json",
+            body = json.dumps(request))
 
-                if chunk['type'] == 'message_start':
-                    #print(f"Input Tokens: {chunk['message']['usage']['input_tokens']}")
-                    pass
+        #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+        with st.chat_message("assistant"):
+            result_area = st.empty()
+            result_text = ""
+            stream = response["body"]
+            for event in stream:
 
-                elif chunk['type'] == 'message_delta':
-                    #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
-                    #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
-                    #print(f"Output tokens: {chunk['usage']['output_tokens']}")
-                    pass
+                if event["chunk"]:
 
-                elif chunk['type'] == 'content_block_delta':
-                    if chunk['delta']['type'] == 'text_delta':
-                        text = chunk['delta']['text']
-                        #await msg.stream_token(f"{text}")
-                        result_text += f"{text}"
+                    chunk = json.loads(event["chunk"]["bytes"])
+
+                    if chunk['type'] == 'message_start':
+                        #print(f"Input Tokens: {chunk['message']['usage']['input_tokens']}")
+                        pass
+
+                    elif chunk['type'] == 'message_delta':
+                        #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
+                        #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
+                        #print(f"Output tokens: {chunk['usage']['output_tokens']}")
+                        pass
+
+                    elif chunk['type'] == 'content_block_delta':
+                        if chunk['delta']['type'] == 'text_delta':
+                            text = chunk['delta']['text']
+                            #await msg.stream_token(f"{text}")
+                            result_text += f"{text}"
+                            result_area.write(result_text)
+
+                    elif chunk['type'] == 'message_stop':
+                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                        input_token_count = invocation_metrics["inputTokenCount"]
+                        output_token_count = invocation_metrics["outputTokenCount"]
+                        latency = invocation_metrics["invocationLatency"]
+                        lag = invocation_metrics["firstByteLatency"]
+                        stats = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        #await msg.stream_token(f"\n\n{stats}")
+                        result_text += f"\n\n{stats}"
                         result_area.write(result_text)
-
-                elif chunk['type'] == 'message_stop':
-                    invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                    input_token_count = invocation_metrics["inputTokenCount"]
-                    output_token_count = invocation_metrics["outputTokenCount"]
-                    latency = invocation_metrics["invocationLatency"]
-                    lag = invocation_metrics["firstByteLatency"]
-                    stats = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                    #await msg.stream_token(f"\n\n{stats}")
-                    result_text += f"\n\n{stats}"
+                elif event["internalServerException"]:
+                    result_area.write(event["internalServerException"])
+                elif event["modelStreamErrorException"]:
+                    result_area.write(event["modelStreamErrorException"])
+                elif event["modelTimeoutException"]:
+                    result_area.write(event["modelTimeoutException"])
+                elif event["throttlingException"]:
+                    result_area.write(event["throttlingException"])
+                elif event["validationException"]:
+                    exception = event["validationException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                else:
+                    result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
-        st.session_state.messages.append({"role": "assistant", "content": result_text})
+            st.session_state.messages.append({"role": "assistant", "content": result_text})
         
+    except ClientError as err:
+        message = err.response["Error"]["Message"]
+        logger.error("A client error occurred: %s", message)
+        print("A client error occured: " + format(message))
+        st.chat_message("system").write(message)
     #response = client.chat.completions.create(model="gpt-3.5-turbo", messages=st.session_state.messages)
     #msg = "response.choices[0].message.content"
     
