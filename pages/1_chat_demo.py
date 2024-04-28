@@ -8,11 +8,6 @@ AWS_REGION = settings.AWS_REGION
 
 bedrock = boto3.client("bedrock", region_name=AWS_REGION)
 
-response = bedrock.list_foundation_models(
-    byOutputModality="TEXT"
-)
-
-
 prompt = st.chat_input(f"Say something AWS_REGION={settings.AWS_REGION}")
 if prompt:
     st.write(f"User has sent the following prompt: {prompt}")
@@ -21,6 +16,7 @@ if prompt:
         st.write(f"Input: {prompt}")
 
     model_ids = []
+    response = bedrock.list_foundation_models(byOutputModality="TEXT")
     for item in response["modelSummaries"]:
         model_ids.append(item['modelId'])
         print(item['modelId'])

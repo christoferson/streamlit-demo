@@ -7,6 +7,7 @@ AWS_REGION = settings.AWS_REGION
 
 with st.sidebar:
     openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
+    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.1, value=0.1, step=0.1, key="temperature")
     "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
     "[View the source code](https://github.com/streamlit/llm-examples/blob/main/Chatbot.py)"
     "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
@@ -17,8 +18,8 @@ st.title("💬 Chatbot 3")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "user", "content": "Hello there."},
-        {"role": "assistant", "content": "How can I help you?"}
+        #{"role": "user", "content": "Hello there."},
+        #{"role": "assistant", "content": "How can I help you?"}
     ]
 
 for msg in st.session_state.messages:
@@ -39,7 +40,7 @@ if prompt := st.chat_input():
 
     request = {
         "anthropic_version": "bedrock-2023-05-31",
-        "temperature": 1,
+        "temperature": opt_temperature,
         "top_p": 0.5,
         "top_k": 200,
         "max_tokens": 2048,
@@ -85,6 +86,7 @@ if prompt := st.chat_input():
                     #await msg.stream_token(f"\n\n{stats}")
                     result_text += f"\n\n{stats}"
                     result_area.write(result_text)
+
         st.session_state.messages.append({"role": "assistant", "content": result_text})
         
     #response = client.chat.completions.create(model="gpt-3.5-turbo", messages=st.session_state.messages)
