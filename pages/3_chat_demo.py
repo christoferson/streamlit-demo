@@ -12,12 +12,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 with st.sidebar:
-    openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=5.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
-    "[View the source code](https://github.com/streamlit/llm-examples/blob/main/Chatbot.py)"
-    "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
@@ -33,11 +29,7 @@ for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 if prompt := st.chat_input():
-    #if not openai_api_key:
-    #    st.info("Please add your OpenAI API key to continue.")
-    #    st.stop()
 
-    #client = OpenAI(api_key=openai_api_key)
     message_history = st.session_state.messages.copy()
     message_history.append({"role": "user", "content": prompt})
     #st.session_state.messages.append({"role": "user", "content": prompt})
@@ -131,7 +123,3 @@ if prompt := st.chat_input():
         logger.error("A client error occurred: %s", message)
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
-    #response = client.chat.completions.create(model="gpt-3.5-turbo", messages=st.session_state.messages)
-    #msg = "response.choices[0].message.content"
-    
-    #st.chat_message("assistant").write(msg)
