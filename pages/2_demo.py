@@ -21,7 +21,7 @@ with st.sidebar:
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot 3")
+st.title("💬 Chatbot 2")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
