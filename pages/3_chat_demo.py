@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 with st.sidebar:
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=5.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
@@ -43,7 +44,7 @@ if prompt := st.chat_input():
         "anthropic_version": "bedrock-2023-05-31",
         "temperature": opt_temperature,
         "top_p": opt_top_p,
-        "top_k": 200,
+        "top_k": opt_top_k,
         "max_tokens": 2048,
         "system": "You are a helpful assistant.",
         "messages": message_history #st.session_state.messages
@@ -70,7 +71,7 @@ if prompt := st.chat_input():
                     chunk = json.loads(event["chunk"]["bytes"])
 
                     if chunk['type'] == 'message_start':
-                        opts = f"| temperature={opt_temperature} top_p={opt_top_p}"
+                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k}"
                         result_text += f"{opts}\n\n"
                         result_area.write(result_text)
                         #pass
