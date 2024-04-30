@@ -2,6 +2,14 @@ import streamlit as st
 import os
 import boto3
 import settings
+import cmn_auth
+
+###### AUTH START #####
+
+if not cmn_auth.check_password():
+   st.stop()
+
+######  AUTH END #####
 
 #AWS_REGION = os.environ["AWS_REGION"]
 AWS_REGION = settings.AWS_REGION

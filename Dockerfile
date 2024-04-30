@@ -5,7 +5,7 @@ RUN useradd -m bedrock && chown -R bedrock /app
 USER bedrock
 ENV PATH="/home/bedrock/.local/bin:${PATH}"
 
-COPY --chown=bedrock:bedrock app.py settings.py .env /app/
+COPY --chown=bedrock:bedrock app.py settings.py cmn_auth.py .env /app/
 COPY --chown=bedrock:bedrock requirements.txt /app/
 COPY --chown=bedrock:bedrock pages /app/pages
 COPY --chown=bedrock:bedrock .streamlit /app/.streamlit

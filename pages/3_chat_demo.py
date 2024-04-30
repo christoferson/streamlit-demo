@@ -3,6 +3,7 @@ import boto3
 import settings
 import json
 import logging
+import cmn_auth
 
 from botocore.exceptions import ClientError
 
@@ -10,6 +11,13 @@ AWS_REGION = settings.AWS_REGION
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+###### AUTH START #####
+
+if not cmn_auth.check_password():
+   st.stop()
+
+######  AUTH END #####
 
 with st.sidebar:
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
