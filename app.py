@@ -1,37 +1,46 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
+import hmac
+
+###### AUTH START #####
+
+def check_password():
+   """Returns `True` if the user had a correct password."""
+
+   def login_form():
+       """Form with widgets to collect user information"""
+       with st.form("Credentials"):
+           st.text_input("Username", key="username")
+           st.text_input("Password", type="password", key="password")
+           st.form_submit_button("Log in", on_click=password_entered)
+
+   def password_entered():
+       """Checks whether a password entered by the user is correct."""
+       if st.session_state["username"] in st.secrets[
+           "passwords"
+       ] and hmac.compare_digest(
+           st.session_state["password"],
+           st.secrets.passwords[st.session_state["username"]],
+       ):
+           st.session_state["password_correct"] = True
+           del st.session_state["password"]  # Don't store the username or password.
+           del st.session_state["username"]
+       else:
+           st.session_state["password_correct"] = False
+
+   # Return True if the username + password is validated.
+   if st.session_state.get("password_correct", False):
+       return True
+
+   # Show inputs for username + password.
+   login_form()
+   if "password_correct" in st.session_state:
+       st.error("😕 User not known or password incorrect")
+   return False
+
+
+if not check_password():
+   st.stop()
+
+######  AUTH END #####
 
 st.write("Hello world")
-
-df = pd.DataFrame({
-  'first column': [1, 2, 3, 4],
-  'second column': [10, 20, 30, 40]
-})
-
-df
-
-st.write("Here's our first attempt at using data to create a table:")
-st.write(pd.DataFrame({
-    'first column': [1, 2, 3, 4],
-    'second column': [10, 20, 30, 40]
-}))
-
-
-dataframe = np.random.randn(10, 20)
-st.dataframe(dataframe)
-
-
-dataframe = pd.DataFrame(
-    np.random.randn(10, 20),
-    columns=('col %d' % i for i in range(20)))
-
-st.dataframe(dataframe.style.highlight_max(axis=0))
-
-
-dataframe = pd.DataFrame(
-    np.random.randn(10, 20),
-    columns=('col %d' % i for i in range(20)))
-st.table(dataframe)
-
-

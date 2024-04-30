@@ -8,6 +8,8 @@ AWS_REGION = settings.AWS_REGION
 
 bedrock = boto3.client("bedrock", region_name=AWS_REGION)
 
+st.title("💬 Chatbot 1")
+
 prompt = st.chat_input(f"Say something AWS_REGION={settings.AWS_REGION}")
 if prompt:
     st.write(f"User has sent the following prompt: {prompt}")
