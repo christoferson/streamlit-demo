@@ -24,6 +24,7 @@ with st.sidebar:
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
+    opt_system_msg = st.text_area(label="System Message", value="You are very powerful assistant. You are multilingual, so adapt to the language of your users.", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
@@ -55,7 +56,7 @@ if prompt := st.chat_input():
         "top_p": opt_top_p,
         "top_k": opt_top_k,
         "max_tokens": opt_max_tokens,
-        "system": "You are a helpful assistant.",
+        "system": opt_system_msg,
         "messages": message_history #st.session_state.messages
     }
     json.dumps(request, indent=3)
