@@ -2,11 +2,20 @@ import streamlit as st
 import cmn_auth
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 
+import jwt
+from typing import Any, Dict
+import json
+
 ######
+
+def _decode_access_token(access_token: str) -> Dict[str, Any]:
+    decoded = jwt.decode(access_token, options={"verify_signature": False})
+    return decoded
 
 def process_aws_oidc_token():
    
    identity = "unknown"
+   access_token = "oidc_data"
    headers = _get_websocket_headers()
    if headers:
       if "x-amzn-oidc-identity" in headers:
@@ -15,11 +24,16 @@ def process_aws_oidc_token():
          #data = headers["x-amzn-oidc-data"]
       if "X-Amzn-Oidc-Identity" in headers:
          identity = headers["X-Amzn-Oidc-Identity"]
-   
-   return identity
+
+      if "X-Amzn-Oidc-Accesstoken" in headers:
+         access_token =  headers["X-Amzn-Oidc-Accesstoken"]
+         access_token_claim = _decode_access_token(access_token=access_token)
+         access_token = json.dumps(access_token_claim)
+
+   return access_token
 
 session_identity = process_aws_oidc_token()
-st.write('Welcome: ', session_identity)
+st.write(f"Welcome: {session_identity}")
 
 
 ####
