@@ -19,7 +19,13 @@ if not cmn_auth.check_password():
 
 ######  AUTH END #####
 
+opt_model_id_list = [
+    "anthropic.claude-3-sonnet-20240229-v1:0",
+    "anthropic.claude-3-haiku-20240307-v1:0"
+]
+
 with st.sidebar:
+    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
@@ -62,9 +68,9 @@ if prompt := st.chat_input():
     json.dumps(request, indent=3)
 
     try:
-        bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
         response = bedrock_runtime.invoke_model_with_response_stream(
-            modelId = bedrock_model_id, 
+            modelId = opt_model_id, #bedrock_model_id, 
             contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
             accept = "application/json",
             body = json.dumps(request))
@@ -72,6 +78,7 @@ if prompt := st.chat_input():
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
         result_text = ""
         with st.chat_message("assistant"):
+            result_container = st.container(border=True)
             result_area = st.empty()
             stream = response["body"]
             for event in stream:
@@ -82,8 +89,9 @@ if prompt := st.chat_input():
 
                     if chunk['type'] == 'message_start':
                         opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        result_text += f"{opts}\n\n"
-                        result_area.write(result_text)
+                        #result_text += f"{opts}\n\n"
+                        #result_area.write(result_text)
+                        result_container.write(opts)
                         #pass
 
                     elif chunk['type'] == 'message_delta':
@@ -107,17 +115,26 @@ if prompt := st.chat_input():
                         lag = invocation_metrics["firstByteLatency"]
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
                         #await msg.stream_token(f"\n\n{stats}")
-                        result_text += f"\n\n{stats}"
-                        result_area.write(result_text)
+                        #result_text += f"\n\n{stats}"
+                        #result_area.write(result_text)
+                        result_container.write(stats)
 
                 elif event["internalServerException"]:
-                    result_area.write(event["internalServerException"])
+                    exception = event["internalServerException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
                 elif event["modelStreamErrorException"]:
-                    result_area.write(event["modelStreamErrorException"])
+                    exception = event["modelStreamErrorException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
                 elif event["modelTimeoutException"]:
-                    result_area.write(event["modelTimeoutException"])
+                    exception = event["modelTimeoutException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
                 elif event["throttlingException"]:
-                    result_area.write(event["throttlingException"])
+                    exception = event["throttlingException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
                 elif event["validationException"]:
                     exception = event["validationException"]
                     result_text += f"\n\{exception}"
