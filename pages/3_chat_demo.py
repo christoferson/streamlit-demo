@@ -30,11 +30,12 @@ with st.sidebar:
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value="You are very powerful assistant. You are multilingual, so adapt to the language of your users.", key="system_msg")
+    opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
 st.title("💬 Chatbot 3")
+st.write("Ask LLM Questions")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
