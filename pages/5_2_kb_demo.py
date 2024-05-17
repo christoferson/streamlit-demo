@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO)
 
 ###### AUTH START #####
 
-if not cmn_auth.check_password():
-   st.stop()
+#if not cmn_auth.check_password():
+#   st.stop()
 
 ######  AUTH END #####
 
@@ -32,6 +32,7 @@ print(opt_bedrock_kb_list)
 
 with st.sidebar:
     opt_kb_id = st.selectbox(label="Knowledge Base ID", options=opt_bedrock_kb_list, index = 0, key="kb_id")
+    opt_kb_doc_count = st.slider(label="Document Count", min_value=1, max_value=24, value=3, step=1, key="kb_doc_count")
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
@@ -42,7 +43,8 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot - Knowledge Base")
+st.title("💬 Chatbot - Knowledge Base 5-3")
+st.markdown("Vector Search then LLM Query")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
@@ -50,8 +52,18 @@ if "messages" not in st.session_state:
         #{"role": "assistant", "content": "How can I help you?"}
     ]
 
+if "invocation_metrics" not in st.session_state:
+    st.session_state["invocation_metrics"] = []
+
+idx = 0
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    if idx % 2 != 0:
+        chat_message = st.chat_message(msg["role"])
+        chat_message.write(msg["content"])
+        chat_message.markdown(f""":blue[{st.session_state.invocation_metrics[idx]}]""")
+    else:
+        st.chat_message(msg["role"]).write(msg["content"])
+    idx += 1
 
 if user_prompt := st.chat_input():
 
@@ -60,15 +72,13 @@ if user_prompt := st.chat_input():
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(user_prompt)
 
-    #user_message =  {"role": "user", "content": f"{prompt}"}
-    #messages = [st.session_state.messages]
-    print(f"messages={st.session_state.messages}")
-
+    #print(f"messages={st.session_state.messages}")
+    reference_chunk_list = []
+    reference_chunk_list_text = "" #"  \n\n  \n\n  Sources:  \n\n  "
     try:
 
         knowledge_base_id = opt_kb_id.split(" ", 1)[0]
-        #knowledge_base_id = opt_kb_id
-        kb_retrieve_document_count = 3
+        kb_retrieve_document_count = opt_kb_doc_count
 
         prompt = f"""\n\nHuman: {user_prompt[0:900]}
         Assistant:
@@ -87,25 +97,20 @@ if user_prompt := st.chat_input():
         )
 
         context_info = ""
-        #reference_elements = []
         for i, retrievalResult in enumerate(response['retrievalResults']):
             uri = retrievalResult['location']['s3Location']['uri']
             text = retrievalResult['content']['text']
             excerpt = text[0:75]
             score = retrievalResult['score']
             print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
-            #await msg.stream_token(f"\n{i} RetrievalResult: {score} {uri} {excerpt}\n")
             context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
-            #await step.stream_token(f"\n[{i+1}] score={score} uri={uri} len={len(text)} text={excerpt}\n")
-            #await step.stream_token(f"\n[{i+1}] score={score} uri={uri} len={len(text)}\n")
-            #reference_elements.append(cl.Text(name=f"[{i+1}] {uri}", content=text, display="inline"))
-        
-        #await step.stream_token(f"\n")
-        #step.elements = reference_elements
+            uri_name = uri.split('/')[-1]
+            reference_chunk_list.append(f"[{i}] {score} {uri_name}")
+            reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
 
     except Exception as e:
         logging.error(traceback.format_exc())
-        #await msg.stream_token(f"{e}")
+        st.chat_message("system").write(e)
 
     #####
     
@@ -118,7 +123,10 @@ if user_prompt := st.chat_input():
     <context>{context_info}
     </context>
     <instructions>
-    - Do not reformat, or convert any numeric values. Inserting commas is allowed for readability. - If the unit of measure of the question does not match that of the source document, convert the input to the same unit of measure as the source first before deciding. - When encountering geographic locations in user questions, first establish the administrative division specified in the source document. If the input location differs from this specified division (e.g., the source document uses prefectures or provinces while the user mentions cities), determine the corresponding administrative division (e.g., prefecture or province) where the mentioned city is situated. Use this determined administrative division to answer the question in accordance with the criteria outlined in the source document.  - Present source data in tabular form as markdown.
+    - Do not reformat, or convert any numeric values. Inserting commas is allowed for readability. 
+    - If the unit of measure of the question does not match that of the source document, convert the input to the same unit of measure as the source first before deciding. 
+    - When encountering geographic locations in user questions, first establish the administrative division specified in the source document. If the input location differs from this specified division (e.g., the source document uses prefectures or provinces while the user mentions cities), determine the corresponding administrative division (e.g., prefecture or province) where the mentioned city is situated. Use this determined administrative division to answer the question in accordance with the criteria outlined in the source document.  
+    - When the source information is a table data, display the table data as markdown. Otherwise, do not reformat the source data.
     </instructions>
     <question>{user_prompt}</question>
     """
@@ -148,9 +156,11 @@ if user_prompt := st.chat_input():
 
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
         result_text = ""
+        invocation_metrics = ""
         with st.chat_message("assistant"):
-            result_container = st.container(border=True)
             result_area = st.empty()
+            sources_area = st.empty()
+            result_container = st.container(border=True)
             stream = response["body"]
             for event in stream:
                 
@@ -160,10 +170,7 @@ if user_prompt := st.chat_input():
 
                     if chunk['type'] == 'message_start':
                         opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        #result_text += f"{opts}\n\n"
-                        #result_area.write(result_text)
-                        result_container.write(opts)
-                        #pass
+                        #result_container.write(opts)
 
                     elif chunk['type'] == 'message_delta':
                         #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
@@ -188,7 +195,28 @@ if user_prompt := st.chat_input():
                         #await msg.stream_token(f"\n\n{stats}")
                         #result_text += f"\n\n{stats}"
                         #result_area.write(result_text)
-                        result_container.write(stats)
+                        #result_container.write(stats)
+                        invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        #result_container.markdown(f""":blue[{invocation_metrics}]""")
+                        #result_area.markdown(f"{invocation_metrics} {result_text} ")
+                        result_text_final = f"""{result_text}   \n\n\n
+                        {reference_chunk_list_text}
+                        """
+                        #result_text += f"{reference_chunk_list_text}"
+                        #result_area.write(f"{result_text_final}")
+                        #result_container.markdown()
+                        result_area.write(f"{result_text} \n\n  ")
+                        #result_container.markdown(f"""{reference_chunk_list_text}""")
+                        #with st.expander("Sources"):
+                            #st.write(f"{reference_chunk_list_text}")
+                        #    for idx, reference_chunk in reference_chunk_list:
+                        #        st.write(f"{reference_chunk}")
+                        sources_area.markdown("  \n\n")
+                        idx = 1
+                        for reference_chunk in reference_chunk_list:
+                            with st.expander(f"source-{idx}"):
+                                st.write(f"{reference_chunk}")
+                            idx += 1
 
                 elif event["internalServerException"]:
                     exception = event["internalServerException"]
@@ -214,11 +242,17 @@ if user_prompt := st.chat_input():
                     result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
+        
+
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
+        st.session_state.invocation_metrics.append("")
+        st.session_state.invocation_metrics.append(invocation_metrics)
         
     except ClientError as err:
         message = err.response["Error"]["Message"]
         logger.error("A client error occurred: %s", message)
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
+
+
