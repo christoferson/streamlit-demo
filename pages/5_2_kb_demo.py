@@ -22,6 +22,8 @@ logging.basicConfig(level=logging.INFO)
 
 ######  AUTH END #####
 
+
+
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
@@ -31,6 +33,7 @@ opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases()
 print(opt_bedrock_kb_list)
 
 with st.sidebar:
+    st.markdown(":blue[Settings]")
     opt_kb_id = st.selectbox(label="Knowledge Base ID", options=opt_bedrock_kb_list, index = 0, key="kb_id")
     opt_kb_doc_count = st.slider(label="Document Count", min_value=1, max_value=24, value=3, step=1, key="kb_doc_count")
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
@@ -74,6 +77,7 @@ if user_prompt := st.chat_input():
 
     #print(f"messages={st.session_state.messages}")
     reference_chunk_list = []
+    reference_chunk_text_list = []
     reference_chunk_list_text = "" #"  \n\n  \n\n  Sources:  \n\n  "
     try:
 
@@ -105,7 +109,8 @@ if user_prompt := st.chat_input():
             print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
             context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
             uri_name = uri.split('/')[-1]
-            reference_chunk_list.append(f"[{i}] {score} {uri_name}")
+            reference_chunk_list.append(f"{score} {uri_name}")
+            reference_chunk_text_list.append(text)
             reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
 
     except Exception as e:
@@ -214,8 +219,8 @@ if user_prompt := st.chat_input():
                         sources_area.markdown("  \n\n")
                         idx = 1
                         for reference_chunk in reference_chunk_list:
-                            with st.expander(f"source-{idx}"):
-                                st.write(f"{reference_chunk}")
+                            with st.expander(f"""[{idx}] :green[{reference_chunk}]"""):
+                                st.markdown(f""":gray[{reference_chunk_text_list[idx-1]}]""")
                             idx += 1
 
                 elif event["internalServerException"]:
