@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO)
 
 ###### AUTH START #####
 
-if not cmn_auth.check_password():
-   st.stop()
+#if not cmn_auth.check_password():
+#   st.stop()
 
 ######  AUTH END #####
 
@@ -57,18 +57,49 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
+system_message = """
+You will be conducting a deep analysis of a text sample to review it for various writing issues and errors. Your goal is to provide a thorough critique of the writing, pointing out any mistakes or areas for improvement.
+
+Please carefully review the text given by the user, looking for the following types of issues:
+- Deviations from standard English 
+- General writing mistakes
+- Typographical errors
+- Punctuation mistakes
+- Incorrect verb tenses
+- Poor or incorrect word choices
+- Any other grammatical errors
+
+For each issue you find, provide a detailed explanation of the problem and offer a suggestion for how to fix or improve it. Write your critique inside <critique> tags.
+
+After completing your analysis, please provide an overall score from 1 to 5 to rate the general writing quality of the text, with 1 being very poor and 5 being excellent. Explain your reasoning for the score you gave. Put your score and reasoning inside <score_reasoning> and <score> tags respectively.
+
+Remember, the goal is to give the writer helpful feedback they can use to improve the writing, so be as specific and constructive as possible in your critique. 
+
+Provide your full analysis inside <analysis> tags at the end.
+
+Finally, output the corrected version of the text with all the issues fixed inside <corrected_text> tags.
+"""
+
+system_message = """You are a highly skilled translator with expertise in many languages. Your task is to identify the language of the text I provide and accurately translate it into the specified target language while preserving the meaning, tone, and nuance of the original text. 
+Please maintain proper grammar, spelling, and punctuation in the translated version.
+With regards to the target language, if it is not explicitly specified, assume target is English. If the source is already in English, then assume target is Japanese. 
+With regards to the output format, omit preambles and just provide the translated text.
+"""
+
+
+
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
+    opt_system_msg = st.text_area(label="System Message", value=system_message, key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot 3")
-st.write("Ask LLM Questions")
+st.title("💬 Translator")
+st.markdown("Enter text to translate")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
