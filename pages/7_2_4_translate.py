@@ -93,10 +93,19 @@ if "translate_input" not in st.session_state:
 if "translate_result" not in st.session_state:
     st.session_state["translate_result"] = "Default text"
 
+def write_translate_result_if_present():
+    text = st.session_state["translate_result"]
+    result_container = col2_container.container()
+    result_area = result_container.empty()
+    result_area.write(text)
+    col1, col2, col3 = result_container.columns([1,1,15])
+    with col1:
+        st.button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
 
 def on_text_area_translate_input_changed():
     #st.session_state["translate_input"] = "Default text"
-    print(st.session_state["translate_input"])
+    #print(st.session_state["translate_input"])
+    write_translate_result_if_present()
 
 
 
@@ -117,6 +126,11 @@ col1.text_area(
         height = 500,
     )
 
+def on_button_copy_clicked():
+    text = st.session_state["translate_result"]
+    pyperclip.copy(text)
+    write_translate_result_if_present()
+
 def on_button_clear_clicked():
     st.session_state["translate_input"] = ""
     result_area = col2_container.empty()
@@ -129,10 +143,15 @@ def on_button_clicked():
         result_area.markdown(":red[Enter Source Text to Translate]")
         return
 
-    result_area = col2_container.empty()
+    #result_area = col2_container.empty()
+    result_container = col2_container.container()
+    result_area = result_container.empty()
+    
+    #with col2:
     result_area.write("...")
+
+
     prompt = st.session_state["translate_input"]
-        #st.session_state.translate_result = "Default text" * 5
 
     message_history = []
     message_history.append({"role": "user", "content": prompt})
@@ -190,6 +209,9 @@ def on_button_clicked():
                     #result_container.write(stats)
                     st.session_state["translate_result"] = result_text
                     result_area.write(result_text)
+                    col1, col2, col3 = result_container.columns([1,1,15])
+                    with col1:
+                        st.button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
 
             elif event["internalServerException"]:
                 exception = event["internalServerException"]
@@ -227,7 +249,7 @@ def on_button_clicked():
 
 button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
 button_panel[8].button("Translate", on_click=on_button_clicked)
-button_panel[7].button("Clear Text", on_click=on_button_clear_clicked)
+button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked)
 
 
 
