@@ -117,10 +117,18 @@ col1.text_area(
         height = 500,
     )
 
+def on_button_clear_clicked():
+    st.session_state["translate_input"] = ""
+    result_area = col2_container.empty()
 
 def on_button_clicked():
     #st.session_state["translate_input"] = "Default text"
-    print(st.session_state["translate_input"])
+    #print(st.session_state["translate_input"])
+    if st.session_state["translate_input"] == "":
+        result_area = col2_container.empty()
+        result_area.markdown(":red[Enter Source Text to Translate]")
+        return
+
     result_area = col2_container.empty()
     result_area.write("...")
     prompt = st.session_state["translate_input"]
@@ -217,9 +225,9 @@ def on_button_clicked():
         st.chat_message("system").write(message)
 
 
-button_panel = col1.columns(1)
-button_panel[0].button("Translate", on_click=on_button_clicked)
-
+button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
+button_panel[8].button("Translate", on_click=on_button_clicked)
+button_panel[7].button("Clear Text", on_click=on_button_clear_clicked)
 
 
 
