@@ -1,6 +1,6 @@
 import streamlit as st
 import boto3
-import settings
+import cmn_settings
 import json
 import logging
 import cmn_auth
@@ -8,7 +8,7 @@ import pyperclip
 
 from botocore.exceptions import ClientError
 
-AWS_REGION = settings.AWS_REGION
+AWS_REGION = cmn_settings.AWS_REGION
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -88,13 +88,7 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
 if "translate_input" not in st.session_state:
-    st.session_state["translate_input"] = """
-        "It was the best of times, it was the worst of times, it was the age of "
-        "wisdom, it was the age of foolishness, it was the epoch of belief, it "
-        "was the epoch of incredulity, it was the season of Light, it was the "
-        "season of Darkness, it was the spring of hope, it was the winter of "
-        "despair, (...)"
-    """
+    st.session_state["translate_input"] = """It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness, it was the spring of hope, it was the winter of despair."""
 
 if "translate_result" not in st.session_state:
     st.session_state["translate_result"] = "Default text"
