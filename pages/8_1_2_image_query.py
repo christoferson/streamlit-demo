@@ -26,8 +26,8 @@ logging.basicConfig(level=logging.INFO)
 st.set_page_config(
     page_title="Image Query",
     page_icon="🧊",
-    layout="centered", # "centered" or "wide"
-    initial_sidebar_state="auto", #"auto", "expanded", or "collapsed"
+    layout="wide", # "centered" or "wide"
+    initial_sidebar_state="collapsed", #"auto", "expanded", or "collapsed"
     menu_items={
         'Get Help': None,
         'Report a bug': None,
@@ -94,165 +94,182 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 st.title("💬 Image Query 1")
 st.write("Ask LLM Questions")
 
-uploaded_file  = st.file_uploader(
-    "The supported file types are PNG JPEG",
-    type=["PNG", "JPEG"],
-    accept_multiple_files=False,
-)
 
-uploaded_file_name = None
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    uploaded_file_name = uploaded_file.name
-    uploaded_file_type = uploaded_file.type
-    uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-    st.image(
-        image, caption='upload images',
-        use_column_width=True
+col1, col2 = st.columns([2, 1])
+
+with col2:
+
+    uploaded_file  = st.file_uploader(
+        "",
+        type=["PNG", "JPEG"],
+        accept_multiple_files=False,
+        label_visibility="collapsed",
     )
+
+    uploaded_file_name = None
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        uploaded_file_name = uploaded_file.name
+        uploaded_file_type = uploaded_file.type
+        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        st.image(
+            image, caption='upload images',
+            use_column_width=True
+        )
+
 ######
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [
-        #{"role": "user", "content": "Hello there."},
-        #{"role": "assistant", "content": "How can I help you?"}
-    ]
 
-idx = 1
-for msg in st.session_state.messages:
-    idx = idx + 1
-    content = msg["content"]
-    with st.chat_message(msg["role"]):
-        st.write(content)
-        if "assistant" == msg["role"]:
-            #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
-            #with assistant_cmd_panel_col2:
-            st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
+with col1:
+
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = []
+
+    idx = 1
+    for msg in st.session_state.messages:
+        idx = idx + 1
+        content = msg["content"]
+        with st.chat_message(msg["role"]):
+            st.write(content)
+            if "assistant" == msg["role"]:
+                #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
+                #with assistant_cmd_panel_col2:
+                #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
+                pass
 
 
-if prompt := st.chat_input():
+    if prompt := st.chat_input():
 
-    message_history = st.session_state.messages.copy()
-    content =  [
-                    {
-                        "type": "text",
-                        "text": f"{prompt}"
-                    }
-                ]
+        message_history = st.session_state.messages.copy()
+        content =  [
+                        {
+                            "type": "text",
+                            "text": f"{prompt}"
+                        }
+                    ]
 
-    if uploaded_file_name:
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": uploaded_file_type,
-                    "data": uploaded_file_base64,
-                },
-            }
-        )
-    message_history.append({"role": "user", "content": content})
-    #st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
+        if uploaded_file_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_type,
+                        "data": uploaded_file_base64,
+                    },
+                }
+            )
+        message_history.append({"role": "user", "content": content})
+        #st.session_state.messages.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
 
-    #user_message =  {"role": "user", "content": f"{prompt}"}
-    #messages = [st.session_state.messages]
-    print(f"messages={st.session_state.messages}")
+        #user_message =  {"role": "user", "content": f"{prompt}"}
+        #messages = [st.session_state.messages]
+        print(f"messages={st.session_state.messages}")
 
-    request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "temperature": opt_temperature,
-        "top_p": opt_top_p,
-        "top_k": opt_top_k,
-        "max_tokens": opt_max_tokens,
-        "system": opt_system_msg,
-        "messages": message_history #st.session_state.messages
-    }
-    json.dumps(request, indent=3)
+        request = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "temperature": opt_temperature,
+            "top_p": opt_top_p,
+            "top_k": opt_top_k,
+            "max_tokens": opt_max_tokens,
+            "system": opt_system_msg,
+            "messages": message_history #st.session_state.messages
+        }
+        json.dumps(request, indent=3)
 
-    try:
-        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-        response = bedrock_runtime.invoke_model_with_response_stream(
-            modelId = opt_model_id, #bedrock_model_id, 
-            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-            accept = "application/json",
-            body = json.dumps(request))
+        try:
+            #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+            response = bedrock_runtime.invoke_model_with_response_stream(
+                modelId = opt_model_id, #bedrock_model_id, 
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request))
 
-        #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-        result_text = ""
-        with st.chat_message("assistant"):
-            result_container = st.container(border=True)
-            result_area = st.empty()
-            stream = response["body"]
-            for event in stream:
+            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+            result_text = ""
+            with st.chat_message("assistant"):
+                result_container = st.container(border=True)
+                result_area = st.empty()
+                stream = response["body"]
+                for event in stream:
+                    
+                    if event["chunk"]:
+
+                        chunk = json.loads(event["chunk"]["bytes"])
+
+                        if chunk['type'] == 'message_start':
+                            opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
+                            #result_text += f"{opts}\n\n"
+                            #result_area.write(result_text)
+                            #result_container.write(opts)
+                            #pass
+
+                        elif chunk['type'] == 'message_delta':
+                            #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
+                            #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
+                            #print(f"Output tokens: {chunk['usage']['output_tokens']}")
+                            pass
+
+                        elif chunk['type'] == 'content_block_delta':
+                            if chunk['delta']['type'] == 'text_delta':
+                                text = chunk['delta']['text']
+                                #await msg.stream_token(f"{text}")
+                                result_text += f"{text}"
+                                result_area.write(result_text)
+
+                        elif chunk['type'] == 'message_stop':
+                            invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                            input_token_count = invocation_metrics["inputTokenCount"]
+                            output_token_count = invocation_metrics["outputTokenCount"]
+                            latency = invocation_metrics["invocationLatency"]
+                            lag = invocation_metrics["firstByteLatency"]
+                            stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                            #result_container.write(stats)
+
+                            invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                            #result_container.markdown(f""":blue[{invocation_metrics}]""")
+                            #result_area.markdown(f"{invocation_metrics} {result_text} ")
+                            result_text_final = f"""{result_text}  \n\n:blue[{invocation_metrics}]"""
+                            #result_text += f"{reference_chunk_list_text}"
+                            #result_area.write(f"{result_text_final}")
+                            #result_container.markdown()
+                            result_area.write(f"{result_text_final}")
+
+                    elif event["internalServerException"]:
+                        exception = event["internalServerException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    elif event["modelStreamErrorException"]:
+                        exception = event["modelStreamErrorException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    elif event["modelTimeoutException"]:
+                        exception = event["modelTimeoutException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    elif event["throttlingException"]:
+                        exception = event["throttlingException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    elif event["validationException"]:
+                        exception = event["validationException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    else:
+                        result_text += f"\n\nUnknown Token"
+                        result_area.write(result_text)
+
+                #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
                 
-                if event["chunk"]:
 
-                    chunk = json.loads(event["chunk"]["bytes"])
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.messages.append({"role": "assistant", "content": result_text})
 
-                    if chunk['type'] == 'message_start':
-                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        #result_text += f"{opts}\n\n"
-                        #result_area.write(result_text)
-                        result_container.write(opts)
-                        #pass
-
-                    elif chunk['type'] == 'message_delta':
-                        #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
-                        #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
-                        #print(f"Output tokens: {chunk['usage']['output_tokens']}")
-                        pass
-
-                    elif chunk['type'] == 'content_block_delta':
-                        if chunk['delta']['type'] == 'text_delta':
-                            text = chunk['delta']['text']
-                            #await msg.stream_token(f"{text}")
-                            result_text += f"{text}"
-                            result_area.write(result_text)
-
-                    elif chunk['type'] == 'message_stop':
-                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                        input_token_count = invocation_metrics["inputTokenCount"]
-                        output_token_count = invocation_metrics["outputTokenCount"]
-                        latency = invocation_metrics["invocationLatency"]
-                        lag = invocation_metrics["firstByteLatency"]
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
-
-                elif event["internalServerException"]:
-                    exception = event["internalServerException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif event["modelStreamErrorException"]:
-                    exception = event["modelStreamErrorException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif event["modelTimeoutException"]:
-                    exception = event["modelTimeoutException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif event["throttlingException"]:
-                    exception = event["throttlingException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif event["validationException"]:
-                    exception = event["validationException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                else:
-                    result_text += f"\n\nUnknown Token"
-                    result_area.write(result_text)
-
-            st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
             
-
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.session_state.messages.append({"role": "assistant", "content": result_text})
-
-        
-        
-    except ClientError as err:
-        message = err.response["Error"]["Message"]
-        logger.error("A client error occurred: %s", message)
-        print("A client error occured: " + format(message))
-        st.chat_message("system").write(message)
+            
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
+            st.chat_message("system").write(message)
