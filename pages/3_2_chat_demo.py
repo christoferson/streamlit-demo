@@ -1,6 +1,6 @@
 import streamlit as st
 import boto3
-import settings
+import cmn_settings
 import json
 import logging
 import cmn_auth
@@ -8,15 +8,15 @@ import pyperclip
 
 from botocore.exceptions import ClientError
 
-AWS_REGION = settings.AWS_REGION
+AWS_REGION = cmn_settings.AWS_REGION
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 ###### AUTH START #####
 
-if not cmn_auth.check_password():
-   st.stop()
+#if not cmn_auth.check_password():
+#   st.stop()
 
 ######  AUTH END #####
 
