@@ -34,6 +34,8 @@ st.set_page_config(
     }
 )
 
+st.logo(icon_image="images/logo.png", image="images/logo_text.png")
+
 st.markdown(
     """
     <style>
@@ -100,6 +102,7 @@ def on_button_copy_clicked():
     pyperclip.copy(translate_result)
 
 
+
 st.title("💬 Translate v 7.2.6")
 st.markdown("Enter text to translate")
 
@@ -111,11 +114,11 @@ result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_area.markdown(st.session_state["translate_result"])
-result_columns = result_container.columns([5,5,5])
+result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_columns[0].button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
-
-
+    result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked)
+    result_columns[1].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv')
+        
 def on_text_area_translate_input_changed():
     pass
 
@@ -199,7 +202,7 @@ def on_button_translate_clicked():
                     latency = invocation_metrics["invocationLatency"]
                     lag = invocation_metrics["firstByteLatency"]
                     stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                    result_area.write(result_text)                    
+                    result_area.markdown(result_text)                    
                     st.session_state["translate_result"] = result_text
                     
 
@@ -237,5 +240,3 @@ def on_button_translate_clicked():
 button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
 button_panel[8].button("Translate", on_click=on_button_translate_clicked)
 button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked)
-        
-    
