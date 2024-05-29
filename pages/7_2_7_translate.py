@@ -102,10 +102,20 @@ def on_button_copy_clicked():
         return
     pyperclip.copy(translate_result)
 
+def on_recite_button_clicked(text):
+    languages = cmn_st_audio.detect_dominant_language(text)
+    language = languages[0]["LanguageCode"] #ja
+    st.session_state['result_text_language'] = language
+
+    audio_binary = cmn_st_audio.synthesize_speech(text, language)
+    if audio_binary != None:
+        st.session_state['audio_stream'] = audio_binary
+    else:
+        st.session_state['audio_stream'] = None       
 
 
-st.title("💬 Translate v 7.2.6")
-st.markdown("Enter text to translate")
+st.title("💬 Translate v 7.2.7")
+#st.markdown("Enter text to translate")
 
 col1, col2 = st.columns(2)
 
@@ -115,51 +125,59 @@ result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_area.markdown(st.session_state["translate_result"])
-    """
-    result_area.code(
-        "\n".join(
-            tw.wrap(
-                st.session_state["translate_result"],
-                width=100,
-                drop_whitespace=True, replace_whitespace=False,
-            )
-        ), language="md"
-    )
-    result_area.code(st.session_state["translate_result"])
-    """
-result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1], gap="small")
+    #"""
+    #result_area.code(
+    #    "\n".join(
+    #        tw.wrap(
+    #            st.session_state["translate_result"],
+    #            width=100,
+    #            drop_whitespace=True, replace_whitespace=False,
+    #        )
+    #    ), language="md"
+    #)
+    #result_area.code(st.session_state["translate_result"])
+    #"""
+result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked)
-    result_columns[1].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv')
-        
+    result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked, use_container_width=True)
+    result_columns[1].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=True)
+    result_columns[2].button(key="recite_button", label='Play', type='primary', on_click=on_recite_button_clicked, args=[st.session_state["translate_result"]], help="Text to Speech")
+if "audio_stream" in st.session_state and st.session_state["audio_stream"] != None:
+    audio_bytes = BytesIO(st.session_state['audio_stream'])
+    if "result_text_language" in st.session_state and st.session_state['result_text_language'] != None:
+        result_container.markdown(st.session_state['result_text_language'])
+    result_container.audio(audio_bytes, format='audio/mp3', autoplay=False)
+
+
+
 def on_text_area_translate_input_changed():
     pass
 
 
 col1.text_area(
         ":blue[Input]",
-        #value=st.session_state["translate_result"],
+        value=st.session_state["translate_input"],
         on_change=on_text_area_translate_input_changed,
         key='translate_input',
         height = 500,
+        help="Specify the Target Language or Custom Instructions at the end. e.g. <input_text> --> Formal English"
     )
 
-def recite_button_clicked(text):
-    audio_binary = cmn_st_audio.synthesize_speech(text)
-    if audio_binary != None:
-        st.session_state['audio_stream'] = audio_binary
-    else:
-        st.session_state['audio_stream'] = None       
     
 
 def on_button_clear_clicked():
     st.session_state["translate_input"] = ""
     st.session_state["translate_result"] = None
+    st.session_state['result_text_language'] = None
+    st.session_state['audio_stream'] = None
 
 def on_button_translate_clicked():
     if "translate_input" not in  st.session_state or st.session_state["translate_input"] == "":
         st.session_state["translate_result"] = ":red[Enter Source Text to Translate]"
         return
+
+    st.session_state['result_text_language'] = None
+    st.session_state['audio_stream'] = None
 
     result_area.write("...")
 
@@ -251,7 +269,7 @@ def on_button_translate_clicked():
 
 
 button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
-button_panel[8].button("Translate", on_click=on_button_translate_clicked)
-button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked)
+button_panel[8].button("Translate", on_click=on_button_translate_clicked, use_container_width=True)
+button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked, use_container_width=True)
 
 
