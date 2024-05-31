@@ -8,6 +8,8 @@ import cmn_auth
 import pyperclip
 from io import BytesIO
 import textwrap as tw
+#from streamlit_extras.stylable_container import stylable_container
+#import streamlit.components.v1 as components
 
 from botocore.exceptions import ClientError
 
@@ -59,6 +61,64 @@ st.markdown(
         box-shadow: none !important;
         color: black !important;
     }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Style for Code Block
+st.markdown(
+    """
+    <style>
+    div.stCodeBlock {
+        background-color: transparent;
+    }
+    div.stCodeBlock > pre {
+        background-color: transparent;
+    }
+    code.language-wiki {
+        font-size: 16px;
+        font-family: "Source Sans Pro", sans-serif;
+        line-height: 1.6;
+        max-width: 100%;
+        display: inline-block;
+        word-wrap: break-word;
+        word-break: break-all;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        color: blue;
+        background-color: transparent;
+    }
+    code.language-wiki > span {
+        font-size: 16px;;
+        font-family: "Source Sans Pro", sans-serif;
+        line-height: 1.6;
+        max-width: 100%;
+        display: inline-block;
+        word-wrap: break-word;
+        word-break: break-all;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        color: blue;
+        background-color: transparent;
+    }
+
+    code.language-markdown {
+        font-size: 16px;
+        font-family: "Source Sans Pro", sans-serif;
+        line-height: 1.6;
+        max-width: 100%;
+        display: inline-block;
+        word-wrap: break-word;
+        word-break: break-all;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        color: orange;
+        background-color: transparent;
+    }
+
+    
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -124,19 +184,19 @@ col2_container.caption(":blue[Result]")
 result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_area.markdown(st.session_state["translate_result"])
-    #"""
-    #result_area.code(
-    #    "\n".join(
-    #        tw.wrap(
-    #            st.session_state["translate_result"],
-    #            width=100,
-    #            drop_whitespace=True, replace_whitespace=False,
-    #        )
-    #    ), language="md"
-    #)
-    #result_area.code(st.session_state["translate_result"])
-    #"""
+    result_display_columns = result_container.slider("columns", value=55, min_value=50, max_value=80, step=1, label_visibility="collapsed")
+    result_text = st.session_state["translate_result"]
+    result_text_wrapped = "\n".join(
+        tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
+    )
+    result_area.markdown(result_text)
+    result_container.code(result_text_wrapped, language="markdown")
+    markdown_display = result_container.checkbox("Markdown", value=True)
+    if markdown_display:
+        result_container.markdown(result_text)
+    else:
+        result_container.code(result_text, language="wiki")
+
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked, use_container_width=True)
@@ -156,7 +216,7 @@ def on_text_area_translate_input_changed():
 
 col1.text_area(
         ":blue[Input]",
-        value=st.session_state["translate_input"],
+        #value=st.session_state["translate_input"],
         on_change=on_text_area_translate_input_changed,
         key='translate_input',
         height = 500,
@@ -233,7 +293,7 @@ def on_button_translate_clicked():
                     latency = invocation_metrics["invocationLatency"]
                     lag = invocation_metrics["firstByteLatency"]
                     stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                    result_area.markdown(result_text)                    
+                    result_area.markdown(result_text)
                     st.session_state["translate_result"] = result_text
                     
 
