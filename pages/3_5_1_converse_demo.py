@@ -37,7 +37,7 @@ polly = boto3.client("polly", region_name=AWS_REGION)
 ####################################################################################
 
 st.set_page_config(
-    page_title="Knowledge Base",
+    page_title="Converse",
     page_icon="🧊",
     layout="centered", # "centered" or "wide"
     initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
@@ -167,7 +167,7 @@ with st.sidebar:
 
 
 
-st.title("💬 Chatbot 3-4")
+st.title("💬 Converse 3-5-1")
 st.write("Ask LLM Questions")
 
 if "messages" not in st.session_state:
