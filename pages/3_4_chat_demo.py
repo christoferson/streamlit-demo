@@ -163,11 +163,11 @@ with st.sidebar:
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
+    opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
 
 
 
-st.title("💬 Chatbot 3")
+st.title("💬 Chatbot 3-4")
 st.write("Ask LLM Questions")
 
 if "messages" not in st.session_state:
@@ -196,99 +196,82 @@ if prompt := st.chat_input():
     st.session_state["audio_stream"] = ""
 
     message_history = st.session_state.messages.copy()
-    message_history.append({"role": "user", "content": prompt})
+    message_history.append({"role": "user", "content": [{ "text": prompt }]})
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
     #user_message =  {"role": "user", "content": f"{prompt}"}
     #messages = [st.session_state.messages]
     #print(f"messages={st.session_state.messages}")
-
-    request = {
-        "anthropic_version": "bedrock-2023-05-31",
+    system_prompts = [{"text" : opt_system_msg}]
+    
+    inference_config = {
         "temperature": opt_temperature,
-        "top_p": opt_top_p,
-        "top_k": opt_top_k,
-        "max_tokens": opt_max_tokens,
-        "system": opt_system_msg,
-        "messages": message_history #st.session_state.messages
+        "maxTokens": opt_max_tokens,
+        "topP": opt_top_p,
     }
-    json.dumps(request, indent=3)
+    additional_model_fields = {"top_k": opt_top_k}
+    print(json.dumps(inference_config, indent=3))
+    print(json.dumps(system_prompts, indent=3))
 
     try:
-        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-        response = bedrock_runtime.invoke_model_with_response_stream(
-            modelId = opt_model_id, #bedrock_model_id, 
-            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-            accept = "application/json",
-            body = json.dumps(request))
+        
+        response = bedrock_runtime.converse_stream(
+            modelId=opt_model_id,
+            messages=message_history,
+            system=system_prompts,
+            inferenceConfig=inference_config,
+            additionalModelRequestFields=additional_model_fields
+        )
 
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
         result_text = ""
         with st.chat_message("assistant"):
             result_container = st.container(border=True)
             result_area = st.empty()
-            stream = response["body"]
+            stream = response.get('stream')
             for event in stream:
                 
-                if event["chunk"]:
+                if 'messageStart' in event:
+                    opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                    result_container.write(opts)                    
 
-                    chunk = json.loads(event["chunk"]["bytes"])
+                if 'contentBlockDelta' in event:
+                    text = event['contentBlockDelta']['delta']['text']
+                    result_text += f"{text}"
+                    result_area.write(result_text)
 
-                    if chunk['type'] == 'message_start':
-                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        #result_text += f"{opts}\n\n"
-                        #result_area.write(result_text)
-                        result_container.write(opts)
-                        #pass
+                if 'messageStop' in event:
+                    #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                    #print(f"\nStop reason: {event['messageStop']['stopReason']}")
+                    pass
 
-                    elif chunk['type'] == 'message_delta':
-                        #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
-                        #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
-                        #print(f"Output tokens: {chunk['usage']['output_tokens']}")
-                        pass
+                if 'metadata' in event:
+                    metadata = event['metadata']
+                    if 'usage' in metadata:
+                        input_token_count = metadata['usage']['inputTokens']
+                        output_token_count = metadata['usage']['outputTokens']
+                        total_token_count = metadata['usage']['totalTokens']
+                    if 'metrics' in event['metadata']:
+                        latency = metadata['metrics']['latencyMs']
+                    stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency}"
+                    result_container.write(stats)
 
-                    elif chunk['type'] == 'content_block_delta':
-                        if chunk['delta']['type'] == 'text_delta':
-                            text = chunk['delta']['text']
-                            #await msg.stream_token(f"{text}")
-                            result_text += f"{text}"
-                            result_area.write(result_text)
-
-                    elif chunk['type'] == 'message_stop':
-                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                        input_token_count = invocation_metrics["inputTokenCount"]
-                        output_token_count = invocation_metrics["outputTokenCount"]
-                        latency = invocation_metrics["invocationLatency"]
-                        lag = invocation_metrics["firstByteLatency"]
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        #await msg.stream_token(f"\n\n{stats}")
-                        #result_text += f"\n\n{stats}"
-                        #result_area.write(result_text)
-                        result_container.write(stats)
-
-                elif event["internalServerException"]:
+                if "internalServerException" in event:
                     exception = event["internalServerException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["modelStreamErrorException"]:
+                if "modelStreamErrorException" in event:
                     exception = event["modelStreamErrorException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["modelTimeoutException"]:
-                    exception = event["modelTimeoutException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif event["throttlingException"]:
+                if "throttlingException" in event:
                     exception = event["throttlingException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["validationException"]:
+                if "validationException" in event:
                     exception = event["validationException"]
                     result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                else:
-                    result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
             col1, col2, col3 = st.columns([1,1,5])
