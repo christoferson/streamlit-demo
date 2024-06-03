@@ -156,7 +156,11 @@ def recite_button_clicked(text):
 
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    #"anthropic.claude-3-opus-20240229-v1:0",
+    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
+    "cohere.command-r-plus-v1:0",
+    #"mistral.mistral-large-2402-v1:0",
 ]
 
 with st.sidebar:
@@ -211,6 +215,8 @@ if prompt := st.chat_input():
         "topP": opt_top_p,
     }
     additional_model_fields = {"top_k": opt_top_k}
+    if opt_model_id.startswith("cohere"):
+        additional_model_fields = None
     #print(json.dumps(inference_config, indent=3))
     #print(json.dumps(system_prompts, indent=3))
 
