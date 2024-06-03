@@ -22,6 +22,8 @@ AWS_REGION = cmn_settings.AWS_REGION
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime/client/converse_stream.html
+
 ###### AUTH START #####
 
 #if not cmn_auth.check_password():
@@ -182,8 +184,9 @@ if "messages" not in st.session_state:
 idx = 1
 for msg in st.session_state.messages:
     idx = idx + 1
-    content = msg["content"]
+    contents = msg["content"]
     with st.chat_message(msg["role"]):
+        content = contents[0]["text"]
         st.write(content)
         if "assistant" == msg["role"]:
             #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
@@ -196,13 +199,10 @@ if prompt := st.chat_input():
     st.session_state["audio_stream"] = ""
 
     message_history = st.session_state.messages.copy()
-    message_history.append({"role": "user", "content": [{ "text": prompt }]})
-    #st.session_state.messages.append({"role": "user", "content": prompt})
+    message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
+    message_history.append(message_user_latest)
     st.chat_message("user").write(prompt)
 
-    #user_message =  {"role": "user", "content": f"{prompt}"}
-    #messages = [st.session_state.messages]
-    #print(f"messages={st.session_state.messages}")
     system_prompts = [{"text" : opt_system_msg}]
     
     inference_config = {
@@ -211,8 +211,8 @@ if prompt := st.chat_input():
         "topP": opt_top_p,
     }
     additional_model_fields = {"top_k": opt_top_k}
-    print(json.dumps(inference_config, indent=3))
-    print(json.dumps(system_prompts, indent=3))
+    #print(json.dumps(inference_config, indent=3))
+    #print(json.dumps(system_prompts, indent=3))
 
     try:
         
@@ -243,8 +243,15 @@ if prompt := st.chat_input():
 
                 if 'messageStop' in event:
                     #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                    #print(f"\nStop reason: {event['messageStop']['stopReason']}")
-                    pass
+                    stop_reason = event['messageStop']['stopReason']
+                    if stop_reason == 'end_turn':
+                        pass
+                    else:
+                        stop_reason_display = stop_reason
+                        if stop_reason == 'max_tokens':
+                            stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                        result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                        result_area.write(result_text_error)
 
                 if 'metadata' in event:
                     metadata = event['metadata']
@@ -254,7 +261,7 @@ if prompt := st.chat_input():
                         total_token_count = metadata['usage']['totalTokens']
                     if 'metrics' in event['metadata']:
                         latency = metadata['metrics']['latencyMs']
-                    stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency}"
+                    stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
                     result_container.write(stats)
 
                 if "internalServerException" in event:
@@ -283,9 +290,10 @@ if prompt := st.chat_input():
                     st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
             with col3:
                 st.markdown('3')
-            
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.session_state.messages.append({"role": "assistant", "content": result_text})
+        
+        message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+        st.session_state.messages.append(message_user_latest)
+        st.session_state.messages.append(message_assistant_latest)
 
     except ClientError as err:
         message = err.response["Error"]["Message"]
