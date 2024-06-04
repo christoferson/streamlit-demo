@@ -25,3 +25,24 @@ def list_knowledge_bases() -> List[str]:
         kb_id_list = ["EMPTY EMPTY"]
     
     return kb_id_list
+
+def list_knowledge_bases_with_options(kb_filter_list:List[str]) -> List[str]:
+
+    response = bedrock_agent.list_knowledge_bases(maxResults=20) #response = bedrock_agent.list_knowledge_bases(maxResults = 5)
+
+    kb_id_list = []
+    for i, knowledgeBaseSummary in enumerate(response['knowledgeBaseSummaries']):
+        kb_id = knowledgeBaseSummary['knowledgeBaseId']
+        kb_name = knowledgeBaseSummary['name']
+        description = knowledgeBaseSummary['description']
+        status = knowledgeBaseSummary['status']
+        updatedAt = knowledgeBaseSummary['updatedAt']
+        #print(f"{i} RetrievalResult: {kb_id} {name} {description} {status} {updatedAt}")
+        res = [kb_filter for kb_filter in kb_filter_list if(kb_filter in kb_name)]
+        if res:
+            kb_id_list.append(f"{kb_id} {kb_name}")
+    
+    if not kb_id_list:
+        kb_id_list = ["EMPTY EMPTY"]
+    
+    return kb_id_list
