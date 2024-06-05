@@ -5,6 +5,9 @@ import json
 import logging
 import cmn_auth
 import pyperclip
+import io
+import base64
+from PIL import Image
 
 from botocore.exceptions import ClientError
 
@@ -20,6 +23,17 @@ logging.basicConfig(level=logging.INFO)
 
 ######  AUTH END #####
 
+st.set_page_config(
+    page_title="Image Query",
+    page_icon="🧊",
+    layout="centered", # "centered" or "wide"
+    initial_sidebar_state="auto", #"auto", "expanded", or "collapsed"
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
 
 st.markdown(
     """
@@ -52,6 +66,16 @@ def copy_button_clicked(text):
     pyperclip.copy(text)
     #st.session_state.button = not st.session_state.button
 
+def image_to_base64(image,mime_type:str):
+    buffer = io.BytesIO()
+    image.save(buffer, format=mime_type)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+mime_mapping = {
+        "image/png": "PNG",
+        "image/jpeg": "JPEG"
+    }
+
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
@@ -67,8 +91,26 @@ with st.sidebar:
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot 3")
+st.title("💬 Image Query 1")
 st.write("Ask LLM Questions")
+
+uploaded_file  = st.file_uploader(
+    "The supported file types are PNG JPEG",
+    type=["PNG", "JPEG"],
+    accept_multiple_files=False,
+)
+
+uploaded_file_name = None
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    uploaded_file_name = uploaded_file.name
+    uploaded_file_type = uploaded_file.type
+    uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+    st.image(
+        image, caption='upload images',
+        use_column_width=True
+    )
+######
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
@@ -91,7 +133,25 @@ for msg in st.session_state.messages:
 if prompt := st.chat_input():
 
     message_history = st.session_state.messages.copy()
-    message_history.append({"role": "user", "content": prompt})
+    content =  [
+                    {
+                        "type": "text",
+                        "text": f"{prompt}"
+                    }
+                ]
+
+    if uploaded_file_name:
+        content.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": uploaded_file_type,
+                    "data": uploaded_file_base64,
+                },
+            }
+        )
+    message_history.append({"role": "user", "content": content})
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
@@ -134,8 +194,8 @@ if prompt := st.chat_input():
                         opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
                         #result_text += f"{opts}\n\n"
                         #result_area.write(result_text)
-                        result_container.write(opts)
-                        #pass
+                        #result_container.write(opts)
+                        pass
 
                     elif chunk['type'] == 'message_delta':
                         #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
@@ -157,10 +217,10 @@ if prompt := st.chat_input():
                         latency = invocation_metrics["invocationLatency"]
                         lag = invocation_metrics["firstByteLatency"]
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        #await msg.stream_token(f"\n\n{stats}")
-                        #result_text += f"\n\n{stats}"
-                        #result_area.write(result_text)
-                        result_container.write(stats)
+                        #result_container.write(stats)
+                        invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        result_text_final = f"""{result_text}  \n\n:blue[{invocation_metrics}]"""
+                        result_area.write(f"{result_text_final}")
 
                 elif event["internalServerException"]:
                     exception = event["internalServerException"]
