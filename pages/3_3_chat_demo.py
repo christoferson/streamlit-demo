@@ -36,6 +36,20 @@ polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
 
+st.set_page_config(
+    page_title="Knowledge Base",
+    page_icon="🧊",
+    layout="centered", # "centered" or "wide"
+    initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
+
+st.logo(icon_image="images/logo.png", image="images/logo_text.png")
+
 st.markdown(
     """
     <style>
@@ -63,6 +77,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Play Audio Button stAudio
+st.markdown(
+    """
+    <style>
+    #.stAudio {
+    #    max-width: 70px;
+    #    max-height: 50px;
+    #}
+    #audio::-webkit-media-controls-time-remaining-display,
+    #audio::-webkit-media-controls-current-time-display {
+    #    max-width: 50%;
+    #    max-height: 20px;
+    #}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 def copy_button_clicked(text):
     pyperclip.copy(text)
     #st.session_state.button = not st.session_state.button
@@ -70,8 +103,7 @@ def copy_button_clicked(text):
 def recite_button_clicked(text):
     try:
         # Request speech synthesis
-        response = polly.synthesize_speech(Text=text, OutputFormat="mp3",
-                                            VoiceId="Joanna")
+        response = polly.synthesize_speech(Text=text, OutputFormat="mp3", VoiceId="Joanna")
     except (BotoCoreError, ClientError) as error:
         print(error)
         return
@@ -83,7 +115,6 @@ def recite_button_clicked(text):
         # at the end of the with statement's scope.
             with closing(response["AudioStream"]) as stream:
                 output = os.path.join(gettempdir(), "speech.mp3")
-                print("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
                 try:
                     # Open a file for writing the output as a binary stream
                     sound = stream.read()
@@ -260,15 +291,15 @@ if prompt := st.chat_input():
                     result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
-            col1, col2, col3 = st.columns([1,1,15])
+            col1, col2, col3 = st.columns([1,1,5])
 
             with col1:
                 st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
             with col2:
-                if st.session_state["audio_stream"] == "":
+                if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
                     st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-            #with col3:
-            #    st.button('3')
+            with col3:
+                st.markdown('3')
             
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
@@ -279,6 +310,6 @@ if prompt := st.chat_input():
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
 
-if st.session_state["audio_stream"] != "":
+if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])
     st.audio(audio_bytes, format='audio/mp3', autoplay=False)
