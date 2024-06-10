@@ -153,14 +153,21 @@ def recite_button_clicked(text):
         #sys.exit(-1)
         return
        
-
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
     #"anthropic.claude-3-opus-20240229-v1:0",
     "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
     "cohere.command-r-plus-v1:0",
-    #"mistral.mistral-large-2402-v1:0",
+    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
+    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
+    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
+    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
+    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
+    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
+    "mistral.mistral-small-2402-v1:0", # Mistral Small
+    "mistral.mistral-large-2402-v1:0", # Mistral Large
 ]
 
 with st.sidebar:
@@ -214,9 +221,16 @@ if prompt := st.chat_input():
         "maxTokens": opt_max_tokens,
         "topP": opt_top_p,
     }
+
     additional_model_fields = {"top_k": opt_top_k}
     if opt_model_id.startswith("cohere"):
         additional_model_fields = None
+    if opt_model_id.startswith("meta"):
+        additional_model_fields = None
+    if opt_model_id.startswith("mistral"):
+        additional_model_fields = None
+
+
     #print(json.dumps(inference_config, indent=3))
     #print(json.dumps(system_prompts, indent=3))
 
