@@ -74,6 +74,8 @@ bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_RE
 st.title("💬 Chatbot - Knowledge Base 2-2-2")
 st.markdown("Vector Search then LLM Query")
 
+
+
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
         #{"role": "user", "content": "Hello there."},
@@ -92,6 +94,19 @@ for msg in st.session_state.messages:
     else:
         st.chat_message(msg["role"]).write(msg["content"])
     idx += 1
+
+
+#########################################
+document_category = "ALL"
+if "hr-titan" in opt_kb_id:
+    document_category = st.selectbox("Category", ("FAQ", "Attendance", "Trips", "Wage"))
+elif "legal-titan" in opt_kb_id:
+    document_category = st.selectbox("Category", ("FAQ", "Contact"))
+elif "concur-titan" in opt_kb_id: #GA
+    document_category = st.selectbox("Category", ("FAQ", "Concur"))
+#########################################
+
+#st.chat_message("system").write(f"Category: {document_category}")
 
 if user_prompt := st.chat_input():
 
