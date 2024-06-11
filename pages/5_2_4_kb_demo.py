@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 
 st.set_page_config(
     page_title="Knowledge Base",
-    page_icon="🧊",
+    page_icon="📓",
     layout="centered", # "centered" or "wide"
     initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
     menu_items={
@@ -99,11 +99,11 @@ for msg in st.session_state.messages:
 #########################################
 document_category = "ALL"
 if "hr-titan" in opt_kb_id:
-    document_category = st.selectbox("Category", ("FAQ", "Attendance", "Trips", "Wage"))
+    document_category = st.selectbox(":blue[**Category (Human Resources)**]", ("FAQ", "Attendance", "Trips", "Wage"))
 elif "legal-titan" in opt_kb_id:
-    document_category = st.selectbox("Category", ("FAQ", "Contact"))
+    document_category = st.selectbox(":blue[**Category (Legal)**]", ("FAQ", "Contact"))
 elif "concur-titan" in opt_kb_id: #GA
-    document_category = st.selectbox("Category", ("FAQ", "Concur"))
+    document_category = st.selectbox(":blue[**Category (General Affairs)**]", ("FAQ", "Concur"))
 #########################################
 
 #st.chat_message("system").write(f"Category: {document_category}")
@@ -263,23 +263,23 @@ if user_prompt := st.chat_input():
                                 st.markdown(f""":gray[{reference_chunk_text_list[idx-1]}]""")
                             idx += 1
 
-                elif event["internalServerException"]:
+                elif "internalServerException" in event:
                     exception = event["internalServerException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["modelStreamErrorException"]:
+                elif "modelStreamErrorException" in event:
                     exception = event["modelStreamErrorException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["modelTimeoutException"]:
+                elif "modelTimeoutException" in event:
                     exception = event["modelTimeoutException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["throttlingException"]:
+                elif "throttlingException" in event:
                     exception = event["throttlingException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
-                elif event["validationException"]:
+                elif "validationException" in event:
                     exception = event["validationException"]
                     result_text += f"\n\{exception}"
                     result_area.write(result_text)
@@ -287,7 +287,7 @@ if user_prompt := st.chat_input():
                     result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
 
-        
+
 
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
