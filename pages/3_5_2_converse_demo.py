@@ -180,11 +180,11 @@ with st.sidebar:
 
 
 
-st.title("💬 Converse 3-5-1")
+st.title("💬 Converse 3-5-2")
 st.write("Ask LLM Questions")
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [
+if "menu_converse_messages" not in st.session_state:
+    st.session_state["menu_converse_messages"] = [
         #{"role": "user", "content": "Hello there."},
         #{"role": "assistant", "content": "How can I help you?"}
     ]
@@ -193,7 +193,7 @@ if "messages" not in st.session_state:
 #    st.session_state["audio_stream"] = ""
 
 idx = 1
-for msg in st.session_state.messages:
+for msg in st.session_state.menu_converse_messages:
     idx = idx + 1
     contents = msg["content"]
     with st.chat_message(msg["role"]):
@@ -209,7 +209,7 @@ if prompt := st.chat_input():
     
     st.session_state["audio_stream"] = ""
 
-    message_history = st.session_state.messages.copy()
+    message_history = st.session_state.menu_converse_messages.copy()
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
     message_history.append(message_user_latest)
     st.chat_message("user").write(prompt)
@@ -253,8 +253,9 @@ if prompt := st.chat_input():
             for event in stream:
                 
                 if 'messageStart' in event:
-                    opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                    result_container.write(opts)                    
+                    #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                    #result_container.write(opts)                    
+                    pass
 
                 if 'contentBlockDelta' in event:
                     text = event['contentBlockDelta']['delta']['text']
@@ -312,8 +313,8 @@ if prompt := st.chat_input():
                 st.markdown('3')
         
         message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
-        st.session_state.messages.append(message_user_latest)
-        st.session_state.messages.append(message_assistant_latest)
+        st.session_state.menu_converse_messages.append(message_user_latest)
+        st.session_state.menu_converse_messages.append(message_assistant_latest)
 
     except ClientError as err:
         message = err.response["Error"]["Message"]
