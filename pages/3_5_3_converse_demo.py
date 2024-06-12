@@ -4,7 +4,6 @@ import cmn_settings
 import json
 import logging
 import cmn_auth
-import pyperclip
 import os
 from io import BytesIO
 import sys
@@ -18,6 +17,7 @@ from pydub.playback import play
 from botocore.exceptions import BotoCoreError, ClientError
 
 AWS_REGION = cmn_settings.AWS_REGION
+MAX_MESSAGES = 100 * 2
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -98,9 +98,6 @@ st.markdown(
 )
 
 
-def copy_button_clicked(text):
-    pyperclip.copy(text)
-    #st.session_state.button = not st.session_state.button
 
 def recite_button_clicked(text):
     try:
@@ -192,6 +189,8 @@ if "menu_converse_messages" not in st.session_state:
 #if "audio_stream" not in st.session_state:
 #    st.session_state["audio_stream"] = ""
 
+st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+
 idx = 1
 for msg in st.session_state.menu_converse_messages:
     idx = idx + 1
@@ -202,10 +201,27 @@ for msg in st.session_state.menu_converse_messages:
         if "assistant" == msg["role"]:
             #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
             #with assistant_cmd_panel_col2:
-            st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
+            #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
+            pass
 
+uploaded_file = st.file_uploader(
+        "Attach Image",
+        type=["PNG", "JPEG"],
+        accept_multiple_files=False,
+        label_visibility="collapsed",
+    )
 
-if prompt := st.chat_input():
+prompt = st.chat_input()
+
+if uploaded_file:
+    #image_bytes = uploaded_file.getvalue()
+    #image_bytesio = get_bytesio_from_bytes(new_image_bytes)
+    #image_base64 = get_base64_from_bytes(new_image_bytes)
+    #new_image_message = ChatMessage('user', 'image', text=image_base64, bytesio=image_bytesio)
+    #message_history.append(new_image_message)
+    print("File Uploaded")
+
+if prompt:
     
     st.session_state["audio_stream"] = ""
 
@@ -305,16 +321,28 @@ if prompt := st.chat_input():
             col1, col2, col3 = st.columns([1,1,5])
 
             with col1:
-                st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
+                #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
+                pass
             with col2:
                 if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
                     st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
             with col3:
-                st.markdown('3')
+                #st.markdown('3')
+                pass
         
         message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+
+
         st.session_state.menu_converse_messages.append(message_user_latest)
         st.session_state.menu_converse_messages.append(message_assistant_latest)
+
+        
+        # Trim message History
+        menu_converse_messages = st.session_state.menu_converse_messages
+        menu_converse_messages_len = len(menu_converse_messages)
+        if menu_converse_messages_len > MAX_MESSAGES:
+            del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
+        print(f"menu_converse_messages_len={menu_converse_messages_len}")
 
     except ClientError as err:
         message = err.response["Error"]["Message"]
