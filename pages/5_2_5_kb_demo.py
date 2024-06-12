@@ -91,6 +91,18 @@ for msg in st.session_state.messages:
         chat_message = st.chat_message(msg["role"])
         chat_message.write(msg["content"])
         chat_message.markdown(f""":blue[{st.session_state.invocation_metrics[idx]}]""")
+
+        # This is to display the reference chunks
+        #st.markdown(f"menu_kb_reference_chunk_list: {st.session_state['menu_kb_reference_chunk_list']}")
+        if "menu_kb_reference_chunk_list" in st.session_state and st.session_state["menu_kb_reference_chunk_list"] != None:
+            show_references = chat_message.checkbox("Show References", value=False, key=f"show_references_{idx}")
+            if show_references:
+                reference_chunk_idx = 1
+                for reference_chunk in st.session_state["menu_kb_reference_chunk_list"]:
+                    with chat_message.expander(f"""[{reference_chunk_idx}] :blue[{reference_chunk}]"""):
+                        #st.markdown(f""":gray[{reference_chunk_text_list[idx-1]}]""")
+                        st.markdown(f""":gray[temp]""")
+                    reference_chunk_idx += 1
     else:
         st.chat_message(msg["role"]).write(msg["content"])
     idx += 1
@@ -113,6 +125,7 @@ if user_prompt := st.chat_input():
     message_history = st.session_state.messages.copy()
     message_history.append({"role": "user", "content": user_prompt})
     #st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state["menu_kb_reference_chunk_list"] = None
     st.chat_message("user").write(user_prompt)
 
     #print(f"messages={st.session_state.messages}")
@@ -262,6 +275,7 @@ if user_prompt := st.chat_input():
                             with st.expander(f"""[{idx}] :green[{reference_chunk}]"""):
                                 st.markdown(f""":gray[{reference_chunk_text_list[idx-1]}]""")
                             idx += 1
+                        st.session_state["menu_kb_reference_chunk_list"] = reference_chunk_list
 
                 elif "internalServerException" in event:
                     exception = event["internalServerException"]
@@ -286,18 +300,20 @@ if user_prompt := st.chat_input():
                 else:
                     result_text += f"\n\nUnknown Token"
                     result_area.write(result_text)
+        
 
-
-
+        ####
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
-        st.session_state.invocation_metrics.append("")
-        st.session_state.invocation_metrics.append(invocation_metrics)
+        st.session_state.invocation_metrics.append("") # No Metrics for User Query
+        st.session_state.invocation_metrics.append(invocation_metrics) # Metric for AI Response
+
         
     except ClientError as err:
         message = err.response["Error"]["Message"]
         logger.error("A client error occurred: %s", message)
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
+
 
 
