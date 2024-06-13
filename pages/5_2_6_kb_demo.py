@@ -55,6 +55,63 @@ def knowledge_base_format_func(text):
     else:
         return text
 
+class MetadataCondition:
+    def __init__(self, operator, key, value):
+        self.operator = operator
+        self.key = key
+        self.value = value
+
+def medatata_create_filter_condition(application_options):
+
+    filter = None
+
+    #metadata_year = application_options.get("metadata_year")
+    metadata_category = application_options.get("metadata_category")
+
+    conditions:list[MetadataCondition] = []
+
+    #filter_bucket_path_prefix = f"s3://{AWS_KB_BUCKET}/"
+    #if metadata_year != "ALL":
+    #    filter_bucket_path_prefix += f"{metadata_year}/"
+    #    #conditions.append(MetadataCondition("startsWith", "x-amz-bedrock-kb-source-uri", filter_bucket_path_prefix))
+    #    conditions.append(MetadataCondition("stringContains", "x-amz-bedrock-kb-source-uri", f"/{metadata_year}/"))
+    #else:
+    #    conditions.append(MetadataCondition("startsWith", "x-amz-bedrock-kb-source-uri", filter_bucket_path_prefix))
+
+    if metadata_category != "ALL":
+        #values = ["ALL", "FAQ", "Travel", "Wage", "Attendance"],
+        category_filter_value = metadata_category.lower()
+        conditions.append(MetadataCondition("equals", "category", category_filter_value))
+
+    if len(conditions) == 0:
+        pass
+    if len(conditions) == 1:
+        condition = conditions[0]
+        filter = {        
+            condition.operator: {
+                "key": condition.key,
+                "value": condition.value
+            }
+        }
+    else:
+        filter_conditions = []
+        for condition in conditions:
+            filter_conditions.append({
+                condition.operator: {
+                    "key": condition.key,
+                    "value": condition.value
+                }
+            })
+        
+        filter = {
+            'andAll': filter_conditions
+            #'orAll': filter_conditions
+        }
+
+    #json_str = json.dumps(filter, indent=3)
+    #print(json_str)
+
+    return filter
 
 
 with st.sidebar:
@@ -137,20 +194,37 @@ if user_prompt := st.chat_input():
         knowledge_base_id = opt_kb_id.split(" ", 1)[0]
         kb_retrieve_document_count = opt_kb_doc_count
 
+        application_options = dict (
+            #retrieve_search_type = settings["RetrieveSearchType"],
+            #metadata_year = settings["MetadataYear"],
+            metadata_category = document_category,
+
+            #option_terse = settings["Terse"],
+            #option_strict = settings["Strict"],
+            #option_source_table_markdown_display = settings["SourceTableMarkdown"],
+        )
+
         prompt = f"""\n\nHuman: {user_prompt[0:900]}
         Assistant:
         """
+
+        retrieval_configuration={
+            'vectorSearchConfiguration': {
+                'numberOfResults': kb_retrieve_document_count
+            }
+        }
+        vector_search_configuration = retrieval_configuration['vectorSearchConfiguration']
+        filters = medatata_create_filter_condition(application_options)
+        if filters != None:
+            print(json.dumps(filters, indent=2))
+            vector_search_configuration['filter'] = filters
 
         response = bedrock_agent_runtime.retrieve(
             knowledgeBaseId = knowledge_base_id,
             retrievalQuery={
                 'text': prompt,
             },
-            retrievalConfiguration={
-                'vectorSearchConfiguration': {
-                    'numberOfResults': kb_retrieve_document_count
-                }
-            }
+            retrievalConfiguration=retrieval_configuration
         )
 
         context_info = ""
