@@ -342,7 +342,7 @@ if prompt:
         menu_converse_messages_len = len(menu_converse_messages)
         if menu_converse_messages_len > MAX_MESSAGES:
             del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-        print(f"menu_converse_messages_len={menu_converse_messages_len}")
+        #print(f"menu_converse_messages_len={menu_converse_messages_len}")
 
     except ClientError as err:
         message = err.response["Error"]["Message"]
