@@ -22,6 +22,18 @@ logging.basicConfig(level=logging.INFO)
 
 ######  AUTH END #####
 
+st.set_page_config(
+    page_title="Knowledge Base",
+    page_icon="🧊",
+    layout="centered", # "centered" or "wide"
+    initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
+
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 
