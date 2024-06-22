@@ -39,12 +39,14 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 
 opt_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
 opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options(["hr-titan", "legal-titan", "concur-titan"])
 print(opt_bedrock_kb_list)
+
 def knowledge_base_format_func(text):
     if "hr-titan" in text:
         return "HR"
@@ -117,7 +119,7 @@ def medatata_create_filter_condition(application_options):
 with st.sidebar:
     st.markdown(":blue[Settings]")
     opt_kb_id = st.selectbox(label="Knowledge Base", options=opt_bedrock_kb_list, index = 0, key="kb_id", format_func=knowledge_base_format_func)
-    opt_kb_doc_count = st.slider(label="Document Count", min_value=1, max_value=24, value=5, step=1, key="kb_doc_count")
+    opt_kb_doc_count = st.slider(label="Document Count", min_value=1, max_value=24, value=10, step=1, key="kb_doc_count")
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1, key="temperature", help=cmn_constants.opt_help_temperature)
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p", help=cmn_constants.opt_help_top_p)
@@ -128,7 +130,7 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot - Knowledge Base 2-2-2")
+st.title("💬 Chatbot - Knowledge Base 2-2-6")
 st.markdown("Vector Search then LLM Query")
 
 
@@ -168,7 +170,7 @@ for msg in st.session_state.messages:
 #########################################
 document_category = "ALL"
 if "hr-titan" in opt_kb_id:
-    document_category = st.selectbox(":blue[**Category (Human Resources)**]", ("FAQ", "Attendance", "Trips", "Wage"))
+    document_category = st.selectbox(":blue[**Category (Human Resources)**]", ("FAQ", "Attendance", "Trips", "Wage", "Employment"))
 elif "legal-titan" in opt_kb_id:
     document_category = st.selectbox(":blue[**Category (Legal)**]", ("FAQ", "Contact"))
 elif "concur-titan" in opt_kb_id: #GA
@@ -189,6 +191,7 @@ if user_prompt := st.chat_input():
     reference_chunk_list = []
     reference_chunk_text_list = []
     reference_chunk_list_text = "" #"  \n\n  \n\n  Sources:  \n\n  "
+    context_info = ""
     try:
 
         knowledge_base_id = opt_kb_id.split(" ", 1)[0]
@@ -227,7 +230,7 @@ if user_prompt := st.chat_input():
             retrievalConfiguration=retrieval_configuration
         )
 
-        context_info = ""
+        
         for i, retrievalResult in enumerate(response['retrievalResults']):
             uri = retrievalResult['location']['s3Location']['uri']
             text = retrievalResult['content']['text']
