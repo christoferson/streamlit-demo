@@ -13,6 +13,9 @@ from tempfile import gettempdir
 
 from pydub import AudioSegment
 from pydub.playback import play
+from PIL import Image
+import io
+import base64
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -23,6 +26,10 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime/client/converse_stream.html
+
+# include up to 20 images. Each image's size, height, and width must be no more than 3.75 MB, 8,000 px, and 8,000 px, respectively.
+#  include up to five documents. Each document's size must be no more than 5 MB.
+# can only include images and documents if the role is user.
 
 ###### AUTH START #####
 
@@ -97,7 +104,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+def image_to_base64(image,mime_type:str):
+    buffer = io.BytesIO()
+    image.save(buffer, format=mime_type)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+mime_mapping = {
+        "image/png": "png",
+        "image/jpeg": "jpeg",
+        "image/jpg": "jpeg",
+        "image/gif": "gif",
+        "image/webp": "webp",
+    }
 
 def recite_button_clicked(text):
     try:
@@ -152,6 +170,7 @@ def recite_button_clicked(text):
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
     #"anthropic.claude-3-opus-20240229-v1:0",
@@ -177,14 +196,11 @@ with st.sidebar:
 
 
 
-st.title("💬 Converse 3-5-2")
+st.title("💬 Converse 3-5-3")
 st.write("Ask LLM Questions")
 
 if "menu_converse_messages" not in st.session_state:
-    st.session_state["menu_converse_messages"] = [
-        #{"role": "user", "content": "Hello there."},
-        #{"role": "assistant", "content": "How can I help you?"}
-    ]
+    st.session_state["menu_converse_messages"] = []
 
 #if "audio_stream" not in st.session_state:
 #    st.session_state["audio_stream"] = ""
@@ -213,13 +229,15 @@ uploaded_file = st.file_uploader(
 
 prompt = st.chat_input()
 
+uploaded_file_name = None
 if uploaded_file:
-    #image_bytes = uploaded_file.getvalue()
-    #image_bytesio = get_bytesio_from_bytes(new_image_bytes)
-    #image_base64 = get_base64_from_bytes(new_image_bytes)
-    #new_image_message = ChatMessage('user', 'image', text=image_base64, bytesio=image_bytesio)
-    #message_history.append(new_image_message)
-    print("File Uploaded")
+    uploaded_file_bytes = uploaded_file.read()
+
+    image:Image = Image.open(uploaded_file)
+    uploaded_file_name = uploaded_file.name
+    uploaded_file_type = uploaded_file.type
+    uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+    st.image(image, caption='upload images', use_column_width=True)
 
 if prompt:
     
@@ -227,6 +245,18 @@ if prompt:
 
     message_history = st.session_state.menu_converse_messages.copy()
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
+    if uploaded_file_name:
+        content = message_user_latest['content']
+        content.append(
+            {
+                "image": {
+                    "format": mime_mapping[uploaded_file_type],
+                    "source": {
+                        "bytes": uploaded_file_bytes,
+                    }
+                },
+            }
+        )
     message_history.append(message_user_latest)
     st.chat_message("user").write(prompt)
 
