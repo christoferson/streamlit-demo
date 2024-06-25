@@ -110,12 +110,20 @@ def image_to_base64(image,mime_type:str):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 mime_mapping = {
-        "image/png": "png",
-        "image/jpeg": "jpeg",
-        "image/jpg": "jpeg",
-        "image/gif": "gif",
-        "image/webp": "webp",
-    }
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/jpg": "jpeg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+
+mime_mapping_image = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/jpg": "jpeg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
 
 def recite_button_clicked(text):
     try:
@@ -230,14 +238,18 @@ uploaded_file = st.file_uploader(
 prompt = st.chat_input()
 
 uploaded_file_name = None
+uploaded_file_bytes = None
+uploaded_file_type = None
+uploaded_file_base64 = None
 if uploaded_file:
-    uploaded_file_bytes = uploaded_file.read()
+    if uploaded_file.type in mime_mapping_image:
+        uploaded_file_bytes = uploaded_file.read()
 
-    image:Image = Image.open(uploaded_file)
-    uploaded_file_name = uploaded_file.name
-    uploaded_file_type = uploaded_file.type
-    uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-    st.image(image, caption='upload images', use_column_width=True)
+        image:Image = Image.open(uploaded_file)
+        uploaded_file_name = uploaded_file.name
+        uploaded_file_type = uploaded_file.type
+        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        st.image(image, caption='upload images', use_column_width=True)
 
 if prompt:
     
@@ -247,16 +259,17 @@ if prompt:
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
     if uploaded_file_name:
         content = message_user_latest['content']
-        content.append(
-            {
-                "image": {
-                    "format": mime_mapping[uploaded_file_type],
-                    "source": {
-                        "bytes": uploaded_file_bytes,
-                    }
-                },
-            }
-        )
+        if uploaded_file_type in mime_mapping_image:
+            content.append(
+                {
+                    "image": {
+                        "format": mime_mapping[uploaded_file_type],
+                        "source": {
+                            "bytes": uploaded_file_bytes,
+                        }
+                    },
+                }
+            )
     message_history.append(message_user_latest)
     st.chat_message("user").write(prompt)
 
@@ -328,8 +341,8 @@ if prompt:
                         total_token_count = metadata['usage']['totalTokens']
                     if 'metrics' in event['metadata']:
                         latency = metadata['metrics']['latencyMs']
-                    stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
-                    result_container.write(stats)
+                    #stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                    #result_container.write(stats)
 
                 if "internalServerException" in event:
                     exception = event["internalServerException"]
