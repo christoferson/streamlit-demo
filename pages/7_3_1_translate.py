@@ -5,7 +5,6 @@ import cmn_st_audio
 import json
 import logging
 import cmn_auth
-import pyperclip
 from io import BytesIO
 import textwrap as tw
 #from streamlit_extras.stylable_container import stylable_container
@@ -155,13 +154,6 @@ if "translate_input" not in st.session_state:
 if "translate_result" not in st.session_state:
     st.session_state["translate_result"] = None
 
-def on_button_copy_clicked():
-    if "translate_result" not in st.session_state:
-        return 
-    translate_result = st.session_state["translate_result"]
-    if translate_result == None:
-        return
-    pyperclip.copy(translate_result)
 
 def on_recite_button_clicked(text):
     languages = cmn_st_audio.detect_dominant_language(text)
@@ -175,7 +167,7 @@ def on_recite_button_clicked(text):
         st.session_state['audio_stream'] = None       
 
 
-st.title("💬 Translate v 7.2.7")
+st.title("💬 Translate v 7.3.1")
 #st.markdown("Enter text to translate")
 
 col1, col2 = st.columns(2)
@@ -183,14 +175,14 @@ col1, col2 = st.columns(2)
 col2_container = col2.container()
 col2_container.caption(":blue[Result]")
 result_container = col2_container.container()
-result_area = result_container.empty()
+#result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_display_columns = result_container.slider("columns", value=45, min_value=50, max_value=80, step=1, label_visibility="collapsed")
     result_text = st.session_state["translate_result"]
     result_text_wrapped = "\n".join(
         tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
     )
-    result_area.markdown(result_text)
+    #result_area.markdown(result_text)
     result_container.code(result_text_wrapped, language="markdown")
     markdown_display = result_container.checkbox("Markdown", value=True)
     if markdown_display:
@@ -201,7 +193,7 @@ if "translate_result" in st.session_state and st.session_state["translate_result
 
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked, use_container_width=True)
+    result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', use_container_width=True)
     result_columns[1].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=True)
     result_columns[2].button(key="recite_button", label='Play', type='primary', on_click=on_recite_button_clicked, args=[st.session_state["translate_result"]], help="Text to Speech")
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != None:
@@ -225,7 +217,66 @@ col1.text_area(
         help="Specify the Target Language or Custom Instructions at the end. e.g. <input_text> --> Formal English"
     )
 
+def stream_data(stream):
+
+    try: 
+
+        for event in stream:
+            
+            if "chunk" in event:
+
+                chunk = json.loads(event["chunk"]["bytes"])
+
+                if chunk['type'] == 'message_start':
+                    #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
+                    pass
+
+                elif chunk['type'] == 'message_delta':
+                    pass
+
+                elif chunk['type'] == 'content_block_delta':
+                    if chunk['delta']['type'] == 'text_delta':
+                        text = chunk['delta']['text']
+                        yield text
+                        #result_text += f"{text}"
+                        #result_area.write(result_text)
+
+                elif chunk['type'] == 'message_stop':
+                    invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                    input_token_count = invocation_metrics["inputTokenCount"]
+                    output_token_count = invocation_metrics["outputTokenCount"]
+                    latency = invocation_metrics["invocationLatency"]
+                    lag = invocation_metrics["firstByteLatency"]
+                    #stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                    #result_area.markdown(result_text)
+                    #st.session_state["translate_result"] = result_text
+                    #yield result_text
+                    yield output_token_count
+
+
+            elif "internalServerException" in event:
+                exception = event["internalServerException"]
+                yield exception
+            elif "modelStreamErrorException" in event:
+                exception = event["modelStreamErrorException"]
+                yield exception
+            elif "modelTimeoutException" in event:
+                exception = event["modelTimeoutException"]
+                yield exception
+            elif "throttlingException" in event:
+                exception = event["throttlingException"]
+                yield exception
+            elif "validationException" in event:
+                exception = event["validationException"]
+                yield exception
+            else:
+                yield "Unknown Token"
     
+    except ClientError as err:
+        message = err.response["Error"]["Message"]
+        logger.error("A client error occurred: %s", message)
+        print("A client error occured: " + format(message))
+        yield message
 
 def on_button_clear_clicked():
     st.session_state["translate_input"] = ""
@@ -241,7 +292,7 @@ def on_button_translate_clicked():
     st.session_state['result_text_language'] = None
     st.session_state['audio_stream'] = None
 
-    result_area.write("...")
+    #result_area.write("...")
 
     prompt = st.session_state["translate_input"]
 
@@ -260,68 +311,14 @@ def on_button_translate_clicked():
     json.dumps(request, indent=3)
     
     try:
-        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
         response = bedrock_runtime.invoke_model_with_response_stream(
             modelId = opt_model_id, #bedrock_model_id, 
             contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
             accept = "application/json",
             body = json.dumps(request))
-
-        result_text = ""
+        
         stream = response["body"]
-        for event in stream:
-            
-            if event["chunk"]:
-
-                chunk = json.loads(event["chunk"]["bytes"])
-
-                if chunk['type'] == 'message_start':
-                    opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                    pass
-
-                elif chunk['type'] == 'message_delta':
-                    pass
-
-                elif chunk['type'] == 'content_block_delta':
-                    if chunk['delta']['type'] == 'text_delta':
-                        text = chunk['delta']['text']
-                        result_text += f"{text}"
-                        result_area.write(result_text)
-
-                elif chunk['type'] == 'message_stop':
-                    invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                    input_token_count = invocation_metrics["inputTokenCount"]
-                    output_token_count = invocation_metrics["outputTokenCount"]
-                    latency = invocation_metrics["invocationLatency"]
-                    lag = invocation_metrics["firstByteLatency"]
-                    stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                    result_area.markdown(result_text)
-                    st.session_state["translate_result"] = result_text
-                    
-
-            elif event["internalServerException"]:
-                exception = event["internalServerException"]
-                result_text += f"\n\{exception}"
-                result_area.write(result_text)
-            elif event["modelStreamErrorException"]:
-                exception = event["modelStreamErrorException"]
-                result_text += f"\n\{exception}"
-                result_area.write(result_text)
-            elif event["modelTimeoutException"]:
-                exception = event["modelTimeoutException"]
-                result_text += f"\n\{exception}"
-                result_area.write(result_text)
-            elif event["throttlingException"]:
-                exception = event["throttlingException"]
-                result_text += f"\n\{exception}"
-                result_area.write(result_text)
-            elif event["validationException"]:
-                exception = event["validationException"]
-                result_text += f"\n\{exception}"
-                result_area.write(result_text)
-            else:
-                result_text += f"\n\nUnknown Token"
-                result_area.write(result_text)
+        result_container.write_stream(stream_data(stream))
         
     except ClientError as err:
         message = err.response["Error"]["Message"]
