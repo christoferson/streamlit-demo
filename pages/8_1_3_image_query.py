@@ -92,7 +92,7 @@ with st.sidebar:
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
-st.title("💬 Image Query 1")
+st.title("💬 Image Query 8.1.3")
 st.write("Ask LLM Questions")
 
 
@@ -123,11 +123,11 @@ with col2:
 
 with col1:
 
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = []
+    if "menu_image_query_messages" not in st.session_state:
+        st.session_state["menu_image_query_messages"] = []
 
     idx = 1
-    for msg in st.session_state.messages:
+    for msg in st.session_state.menu_image_query_messages:
         idx = idx + 1
         content = msg["content"]
         with st.chat_message(msg["role"]):
@@ -141,7 +141,7 @@ with col1:
 
     if prompt := st.chat_input():
 
-        message_history = st.session_state.messages.copy()
+        message_history = st.session_state.menu_image_query_messages.copy()
         content =  [
                         {
                             "type": "text",
@@ -166,7 +166,7 @@ with col1:
 
         #user_message =  {"role": "user", "content": f"{prompt}"}
         #messages = [st.session_state.messages]
-        print(f"messages={st.session_state.messages}")
+        print(f"messages={st.session_state.menu_image_query_messages}")
 
         request = {
             "anthropic_version": "bedrock-2023-05-31",
@@ -237,23 +237,23 @@ with col1:
                             #result_container.markdown()
                             result_area.write(f"{result_text_final}")
 
-                    elif event["internalServerException"]:
+                    elif "internalServerException" in event:
                         exception = event["internalServerException"]
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
-                    elif event["modelStreamErrorException"]:
+                    elif "modelStreamErrorException" in event:
                         exception = event["modelStreamErrorException"]
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
-                    elif event["modelTimeoutException"]:
+                    elif "modelTimeoutException" in event:
                         exception = event["modelTimeoutException"]
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
-                    elif event["throttlingException"]:
+                    elif "throttlingException" in event:
                         exception = event["throttlingException"]
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
-                    elif event["validationException"]:
+                    elif "validationException" in event:
                         exception = event["validationException"]
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
@@ -264,8 +264,8 @@ with col1:
                 #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
                 
 
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.session_state.messages.append({"role": "assistant", "content": result_text})
+            st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
+            st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
 
             
             
