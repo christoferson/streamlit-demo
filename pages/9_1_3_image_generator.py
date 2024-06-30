@@ -104,23 +104,34 @@ opt_negative_prompt_list = [
     "underexposed", "overexposed", "bad art", "beginner", "amateur", "blurry", "draft", "grainy"
 ]
 
+opt_style_preset_help = """
+A style preset that guides the image model towards a particular style.
+"""
+
 opt_config_scale_help = """
 Determines how much the final image portrays the prompt. Use a lower number to increase randomness in the generation.
 """
 
+opt_steps_help = """
+Generation step determines how many times the image is sampled. More steps can result in a more accurate result.
+"""
+
+opt_model_id = "stability.stable-diffusion-xl-v1"
+opt_negative_prompt = opt_negative_prompt_list
+
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_style_preset = st.selectbox(label="Style Presets", options=opt_style_preset_list, index = 0, key="style_preset")
-    opt_config_scale = st.slider(label="Config Scale", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
-    opt_steps = st.slider(label="Steps", min_value=10, max_value=50, value=30, step=1, key="steps")
-    opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
+    #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
+    opt_style_preset = st.selectbox(label=":blue[Style Presets]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+    opt_config_scale = st.slider(label=":blue[Prompt Fidelity / Config Scale] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
+    opt_steps = st.slider(label=":blue[Steps]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+    #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 
 
 #st.title("💬 🖌️ 🖼️ Image Generator")
-st.title("🖼️ Image Generator")
-st.write("Text to Image")
+st.title("🖼️ Image Generator 3")
+#st.write("Text to Image")
 
 if "menu_img_gen_messages" not in st.session_state:
     st.session_state["menu_img_gen_messages"] = [
@@ -162,33 +173,36 @@ if prompt := st.chat_input():
             "style_preset": opt_style_preset,
             "samples": 1,
         }
-    json.dumps(request, indent=3)
+    #json.dumps(request, indent=3)
 
-    try:
-        response = bedrock_runtime.invoke_model(
-            modelId = opt_model_id,
-            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-            accept = "application/json",
-            body = json.dumps(request))
-        
-        response_body = json.loads(response.get("body").read())
-        response_image_base64 = response_body["artifacts"][0].get("base64")
-        response_image:Image = base64_to_image(response_image_base64)
+    with st.spinner('Generating Image...'):
 
-        #file_extension = ".png"
-        #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
-        #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
-        #response_image.save(OUTPUT_IMG_PATH)
+        try:
 
-        with st.chat_message("assistant"):
-            st.image(response_image)
+            response = bedrock_runtime.invoke_model(
+                modelId = opt_model_id,
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request))
             
-        st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-        st.session_state.menu_img_gen_messages.append({"role": "assistant", "content": response_image})
+            response_body = json.loads(response.get("body").read())
+            response_image_base64 = response_body["artifacts"][0].get("base64")
+            response_image:Image = base64_to_image(response_image_base64)
 
-    except ClientError as err:
-        message = err.response["Error"]["Message"]
-        logger.error("A client error occurred: %s", message)
-        print("A client error occured: " + format(message))
-        st.chat_message("system").write(message)
+            #file_extension = ".png"
+            #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
+            #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
+            #response_image.save(OUTPUT_IMG_PATH)
+
+            with st.chat_message("assistant"):
+                st.image(response_image)
+                
+            st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
+            st.session_state.menu_img_gen_messages.append({"role": "assistant", "content": response_image})
+
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
+            st.chat_message("system").write(message)
 
