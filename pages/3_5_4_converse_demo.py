@@ -16,6 +16,7 @@ from pydub.playback import play
 from PIL import Image
 import io
 import base64
+import uuid
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -125,6 +126,12 @@ mime_mapping_image = {
     "image/webp": "webp",
 }
 
+mime_mapping_document = {
+    "text/plain": "txt",
+}
+
+
+
 def recite_button_clicked(text):
     try:
         # Request speech synthesis
@@ -230,7 +237,7 @@ for msg in st.session_state.menu_converse_messages:
 
 uploaded_file = st.file_uploader(
         "Attach Image",
-        type=["PNG", "JPEG"],
+        type=["PNG", "JPEG", "TXT"],
         accept_multiple_files=False,
         label_visibility="collapsed",
     )
@@ -250,6 +257,12 @@ if uploaded_file:
         uploaded_file_type = uploaded_file.type
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
         st.image(image, caption='upload images', use_column_width=True)
+    elif uploaded_file.type in mime_mapping_document:
+        print(f"******{uploaded_file.type}") #text/plain
+        uploaded_file_bytes = base64.b64encode(uploaded_file.read())
+        uploaded_file_name = uploaded_file.name
+        uploaded_file_type = uploaded_file.type
+        st.markdown(uploaded_file_name.replace(".", "_"))
 
 if prompt:
     
@@ -263,7 +276,20 @@ if prompt:
             content.append(
                 {
                     "image": {
-                        "format": mime_mapping[uploaded_file_type],
+                        "format": mime_mapping_image[uploaded_file_type],
+                        "source": {
+                            "bytes": uploaded_file_bytes,
+                        }
+                    },
+                }
+            )
+        elif uploaded_file.type in mime_mapping_document:
+            uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
+            content.append(
+                {
+                    "document": {
+                        "format": mime_mapping_document[uploaded_file_type],
+                        "name": uploaded_file_name_clean,
                         "source": {
                             "bytes": uploaded_file_bytes,
                         }
@@ -271,6 +297,7 @@ if prompt:
                 }
             )
     message_history.append(message_user_latest)
+    print(f"******{message_user_latest}")
     st.chat_message("user").write(prompt)
 
     system_prompts = [{"text" : opt_system_msg}]
