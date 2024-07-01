@@ -131,6 +131,7 @@ mime_mapping_image = {
 mime_mapping_document = {
     "text/plain": "txt",
     "application/vnd.ms-excel": "csv",
+    "application/pdf": "pdf",
 }
 
 
@@ -214,8 +215,7 @@ with st.sidebar:
 
 
 
-st.title("💬 Converse 3-5-3")
-st.write("Ask LLM Questions")
+st.markdown("💬 Converse 3-5-3")
 
 if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
@@ -230,29 +230,41 @@ for msg in st.session_state.menu_converse_messages:
     idx = idx + 1
     contents = msg["content"]
     with st.chat_message(msg["role"]):
-        content = contents[0]["text"]
-        st.write(content)
+        content = contents[0]
+        content_text = content["text"]
+        document_name = None
+        if "user" == msg["role"]:
+            if len(contents) > 1:
+                content_1 = contents[1]
+                if "document" in content_1:
+                    content_1_document = content_1["document"]
+                    document_name = content_1_document["name"]
+            st.markdown(f"{content_text} \n\n:green[Document: {document_name}]")
         if "assistant" == msg["role"]:
             #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
             #with assistant_cmd_panel_col2:
             #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
-            pass
+            st.markdown(f"{content_text}")
+    
+        
 
+# #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
 uploaded_file = st.file_uploader(
         "Attach Image",
-        type=["PNG", "JPEG", "TXT", "CSV"],
+        type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
         accept_multiple_files=False,
         label_visibility="collapsed",
     )
 
 prompt = st.chat_input()
 
+uploaded_file_key = None
 uploaded_file_name = None
 uploaded_file_bytes = None
 uploaded_file_type = None
 uploaded_file_base64 = None
 if uploaded_file:
-    if uploaded_file.type in mime_mapping_image:
+    if uploaded_file.type in mime_mapping_image: #This field is only supported by Anthropic Claude 3 models.
         uploaded_file_bytes = uploaded_file.read()
 
         image:Image = Image.open(uploaded_file)
@@ -261,14 +273,22 @@ if uploaded_file:
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
         st.image(image, caption='upload images', use_column_width=True)
     elif uploaded_file.type in mime_mapping_document:
-        uploaded_file_bytes = base64.b64encode(uploaded_file.read())
+        uploaded_file_key = uploaded_file_name.replace(".", "_").replace(" ", "_")
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
-        print(f"-------{mime_mapping_document[uploaded_file_type]}")
-        if "csv" == mime_mapping_document[uploaded_file_type]:
+        bedrock_file_type = mime_mapping_document[uploaded_file_type]
+        print(f"-------{bedrock_file_type}")
+        if "csv" == bedrock_file_type:
+            uploaded_file_bytes = base64.b64encode(uploaded_file.read())
             uploaded_file.seek(0)
             uploaded_file_df = pd.read_csv(uploaded_file)
             st.write(uploaded_file_df)
+        elif "pdf" == bedrock_file_type:
+            uploaded_file_bytes = uploaded_file.read()
+            uploaded_file.seek(0)
+            st.markdown(uploaded_file_name.replace(".", "_"))
+        elif "txt" == bedrock_file_type:
+            uploaded_file_bytes = base64.b64encode(uploaded_file.read())
         else:
             st.markdown(uploaded_file_name.replace(".", "_"))
     else:
@@ -299,7 +319,7 @@ if prompt:
                 {
                     "document": {
                         "format": mime_mapping_document[uploaded_file_type],
-                        "name": uploaded_file_name_clean,
+                        "name": uploaded_file_name_clean, #uploaded_file_key
                         "source": {
                             "bytes": uploaded_file_bytes,
                         }
@@ -307,7 +327,7 @@ if prompt:
                 }
             )
     message_history.append(message_user_latest)
-    print(f"******{message_user_latest}")
+    #print(f"******{message_user_latest}")
     st.chat_message("user").write(prompt)
 
     system_prompts = [{"text" : opt_system_msg}]
@@ -316,6 +336,7 @@ if prompt:
         "temperature": opt_temperature,
         "maxTokens": opt_max_tokens,
         "topP": opt_top_p,
+        #stopSequences 
     }
 
     additional_model_fields = {"top_k": opt_top_k}
@@ -327,108 +348,114 @@ if prompt:
         additional_model_fields = None
 
 
+
     #print(json.dumps(inference_config, indent=3))
     #print(json.dumps(system_prompts, indent=3))
 
-    try:
-        
-        response = bedrock_runtime.converse_stream(
-            modelId=opt_model_id,
-            messages=message_history,
-            system=system_prompts,
-            inferenceConfig=inference_config,
-            additionalModelRequestFields=additional_model_fields
-        )
+    with st.spinner('Processing...'):
 
-        #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-        result_text = ""
-        with st.chat_message("assistant"):
-            result_container = st.container(border=True)
-            result_area = st.empty()
-            stream = response.get('stream')
-            for event in stream:
-                
-                if 'messageStart' in event:
-                    #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                    #result_container.write(opts)                    
-                    pass
+        try:
+            
+            response = bedrock_runtime.converse_stream(
+                modelId=opt_model_id,
+                messages=message_history,
+                system=system_prompts,
+                inferenceConfig=inference_config,
+                additionalModelRequestFields=additional_model_fields
+            )
 
-                if 'contentBlockDelta' in event:
-                    text = event['contentBlockDelta']['delta']['text']
-                    result_text += f"{text}"
-                    result_area.write(result_text)
-
-                if 'messageStop' in event:
-                    #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                    stop_reason = event['messageStop']['stopReason']
-                    if stop_reason == 'end_turn':
+            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+            result_text = ""
+            with st.chat_message("assistant"):
+                result_container = st.container(border=True)
+                result_area = st.empty()
+                stream = response.get('stream')
+                for event in stream:
+                    
+                    if 'messageStart' in event:
+                        #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                        #result_container.write(opts)                    
                         pass
-                    else:
-                        stop_reason_display = stop_reason
-                        if stop_reason == 'max_tokens':
-                            stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                        result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                        result_area.write(result_text_error)
 
-                if 'metadata' in event:
-                    metadata = event['metadata']
-                    if 'usage' in metadata:
-                        input_token_count = metadata['usage']['inputTokens']
-                        output_token_count = metadata['usage']['outputTokens']
-                        total_token_count = metadata['usage']['totalTokens']
-                    if 'metrics' in event['metadata']:
-                        latency = metadata['metrics']['latencyMs']
-                    #stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
-                    #result_container.write(stats)
+                    if 'contentBlockDelta' in event:
+                        text = event['contentBlockDelta']['delta']['text']
+                        result_text += f"{text}"
+                        result_area.write(result_text)
 
-                if "internalServerException" in event:
-                    exception = event["internalServerException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                if "modelStreamErrorException" in event:
-                    exception = event["modelStreamErrorException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                if "throttlingException" in event:
-                    exception = event["throttlingException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                if "validationException" in event:
-                    exception = event["validationException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
+                    if 'messageStop' in event:
+                        #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                        stop_reason = event['messageStop']['stopReason']
+                        if stop_reason == 'end_turn':
+                            pass
+                        else:
+                            stop_reason_display = stop_reason
+                            if stop_reason == 'max_tokens':
+                                stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                            result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                            result_area.write(result_text_error)
 
-            col1, col2, col3 = st.columns([1,1,5])
+                    if 'metadata' in event:
+                        metadata = event['metadata']
+                        if 'usage' in metadata:
+                            input_token_count = metadata['usage']['inputTokens']
+                            output_token_count = metadata['usage']['outputTokens']
+                            total_token_count = metadata['usage']['totalTokens']
+                        if 'metrics' in event['metadata']:
+                            latency = metadata['metrics']['latencyMs']
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                        result_container.write(stats)
 
-            with col1:
-                #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
-                pass
-            with col2:
-                if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
-                    st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-            with col3:
-                #st.markdown('3')
-                pass
-        
-        message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+                    if "internalServerException" in event:
+                        exception = event["internalServerException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    if "modelStreamErrorException" in event:
+                        exception = event["modelStreamErrorException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    if "throttlingException" in event:
+                        exception = event["throttlingException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+                    if "validationException" in event:
+                        exception = event["validationException"]
+                        result_text += f"\n\{exception}"
+                        result_area.write(result_text)
+
+                #col1, col2, col3 = st.columns([1,1,5])
+
+                #with col1:
+                    #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
+                #    pass
+                #with col2:
+                #    if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
+                #        st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
+                #with col3:
+                #    #st.markdown('3')
+                #    pass
+            
+            message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
 
-        st.session_state.menu_converse_messages.append(message_user_latest)
-        st.session_state.menu_converse_messages.append(message_assistant_latest)
+            st.session_state.menu_converse_messages.append(message_user_latest)
+            st.session_state.menu_converse_messages.append(message_assistant_latest)
 
-        
-        # Trim message History
-        menu_converse_messages = st.session_state.menu_converse_messages
-        menu_converse_messages_len = len(menu_converse_messages)
-        if menu_converse_messages_len > MAX_MESSAGES:
-            del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-        #print(f"menu_converse_messages_len={menu_converse_messages_len}")
+            
+            # Trim message History
+            menu_converse_messages = st.session_state.menu_converse_messages
+            menu_converse_messages_len = len(menu_converse_messages)
+            if menu_converse_messages_len > MAX_MESSAGES:
+                del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
+            #print(f"menu_converse_messages_len={menu_converse_messages_len}")
 
-    except ClientError as err:
-        message = err.response["Error"]["Message"]
-        logger.error("A client error occurred: %s", message)
-        print("A client error occured: " + format(message))
-        st.chat_message("system").write(message)
+            #print(json.dumps(message_user_latest, indent=2))
+            print(message_user_latest)
+
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
+            st.chat_message("system").write(message)
 
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])
