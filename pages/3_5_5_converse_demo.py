@@ -246,7 +246,8 @@ for msg in st.session_state.menu_converse_messages:
             #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
             st.markdown(f"{content_text}")
     
-        
+if "menu_converse_uploader_key" not in st.session_state:
+    st.session_state.menu_converse_uploader_key = 0
 
 # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
 uploaded_file = st.file_uploader(
@@ -254,6 +255,7 @@ uploaded_file = st.file_uploader(
         type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
         accept_multiple_files=False,
         label_visibility="collapsed",
+        key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
     )
 
 prompt = st.chat_input()
@@ -273,7 +275,7 @@ if uploaded_file:
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
         st.image(image, caption='upload images', use_column_width=True)
     elif uploaded_file.type in mime_mapping_document:
-        uploaded_file_key = uploaded_file_name.replace(".", "_").replace(" ", "_")
+        uploaded_file_key = uploaded_file.name.replace(".", "_").replace(" ", "_")
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
         bedrock_file_type = mime_mapping_document[uploaded_file_type]
@@ -290,7 +292,7 @@ if uploaded_file:
         elif "txt" == bedrock_file_type:
             uploaded_file_bytes = base64.b64encode(uploaded_file.read())
         else:
-            st.markdown(uploaded_file_name.replace(".", "_"))
+            st.markdown(uploaded_file_key)
     else:
         print(f"******{uploaded_file.type}") #text/plain
 
@@ -314,7 +316,8 @@ if prompt:
                 }
             )
         elif uploaded_file.type in mime_mapping_document:
-            uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
+            #uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
+            uploaded_file_name_clean = uploaded_file_key
             content.append(
                 {
                     "document": {
@@ -448,8 +451,11 @@ if prompt:
                 del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
             #print(f"menu_converse_messages_len={menu_converse_messages_len}")
 
+            if uploaded_file_name:
+                st.session_state.menu_converse_uploader_key += 1
+
             #print(json.dumps(message_user_latest, indent=2))
-            print(message_user_latest)
+            #print(message_user_latest)
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
