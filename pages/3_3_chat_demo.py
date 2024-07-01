@@ -18,6 +18,8 @@ from pydub.playback import play
 from botocore.exceptions import BotoCoreError, ClientError
 
 AWS_REGION = cmn_settings.AWS_REGION
+AWS_BEDROCK_GUARDRAIL_IDENTIFIER = cmn_settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER
+AWS_BEDROCK_GUARDRAIL_VERSION = cmn_settings.AWS_BEDROCK_GUARDRAIL_VERSION
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -222,7 +224,10 @@ if prompt := st.chat_input():
             modelId = opt_model_id, #bedrock_model_id, 
             contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
             accept = "application/json",
-            body = json.dumps(request))
+            body = json.dumps(request),
+            #trace="ENABLED",
+            guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+            guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION)
 
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
         result_text = ""
