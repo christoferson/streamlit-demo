@@ -283,8 +283,11 @@ if uploaded_file:
         if "csv" == bedrock_file_type:
             uploaded_file_bytes = base64.b64encode(uploaded_file.read())
             uploaded_file.seek(0)
-            uploaded_file_df = pd.read_csv(uploaded_file)
-            st.write(uploaded_file_df)
+            try:
+                uploaded_file_df = pd.read_csv(uploaded_file, encoding = "utf-8")
+                st.write(uploaded_file_df)
+            except Exception as err:
+                st.chat_message("system").write(type(err).__name__)
         elif "pdf" == bedrock_file_type:
             uploaded_file_bytes = uploaded_file.read()
             uploaded_file.seek(0)
