@@ -17,6 +17,7 @@ from PIL import Image
 import io
 import base64
 import uuid
+import pandas as pd
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -126,8 +127,10 @@ mime_mapping_image = {
     "image/webp": "webp",
 }
 
+#'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
 mime_mapping_document = {
     "text/plain": "txt",
+    "application/vnd.ms-excel": "csv",
 }
 
 
@@ -237,7 +240,7 @@ for msg in st.session_state.menu_converse_messages:
 
 uploaded_file = st.file_uploader(
         "Attach Image",
-        type=["PNG", "JPEG", "TXT"],
+        type=["PNG", "JPEG", "TXT", "CSV"],
         accept_multiple_files=False,
         label_visibility="collapsed",
     )
@@ -258,11 +261,18 @@ if uploaded_file:
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
         st.image(image, caption='upload images', use_column_width=True)
     elif uploaded_file.type in mime_mapping_document:
-        print(f"******{uploaded_file.type}") #text/plain
         uploaded_file_bytes = base64.b64encode(uploaded_file.read())
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
-        st.markdown(uploaded_file_name.replace(".", "_"))
+        print(f"-------{mime_mapping_document[uploaded_file_type]}")
+        if "csv" == mime_mapping_document[uploaded_file_type]:
+            uploaded_file.seek(0)
+            uploaded_file_df = pd.read_csv(uploaded_file)
+            st.write(uploaded_file_df)
+        else:
+            st.markdown(uploaded_file_name.replace(".", "_"))
+    else:
+        print(f"******{uploaded_file.type}") #text/plain
 
 if prompt:
     
