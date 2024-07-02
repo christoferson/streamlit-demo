@@ -121,16 +121,17 @@ opt_negative_prompt = opt_negative_prompt_list
 
 with st.sidebar:
     #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_style_preset = st.selectbox(label=":blue[Style Presets]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-    opt_config_scale = st.slider(label=":blue[Prompt Fidelity / Config Scale] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
-    opt_steps = st.slider(label=":blue[Steps]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+    opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
+    opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
+    opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
 
 
 
 #st.title("💬 🖌️ 🖼️ Image Generator")
-st.title("🖼️ Image Generator 3")
+st.markdown("🖼️ Image Generator 3")
 #st.write("Text to Image")
 
 if "menu_img_gen_messages" not in st.session_state:
@@ -148,6 +149,9 @@ for msg in st.session_state.menu_img_gen_messages:
             st.write(content)
         if "assistant" == msg["role"]:
             st.image(content)
+            if "style" in msg:
+                #st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps}")
+                st.markdown(f":blue[**style**] {msg['style']}")
 
 
 if prompt := st.chat_input():
@@ -157,17 +161,19 @@ if prompt := st.chat_input():
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
+    seed = opt_seed
+    if seed < 0:
+        seed = random.randint(0, 4294967295)
 
     request = {
             "text_prompts": (
-                [{"text": prompt, "weight": 1.0}]
-                + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
+                [{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
             ),
             "cfg_scale": opt_config_scale,
             #"clip_guidance_preset"
             #"height": "1024",
             #"width": "1024",
-            "seed": random.randint(0, 4294967295), # The seed determines the initial noise setting.0-4294967295,0
+            "seed": seed, #random.randint(0, 4294967295), # The seed determines the initial noise setting.0-4294967295,0
             #"start_schedule": config["start_schedule"],
             "steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
             "style_preset": opt_style_preset,
@@ -196,9 +202,10 @@ if prompt := st.chat_input():
 
             with st.chat_message("assistant"):
                 st.image(response_image)
-                
+                st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps}")
+            
             st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-            st.session_state.menu_img_gen_messages.append({"role": "assistant", "content": response_image})
+            st.session_state.menu_img_gen_messages.append({"role": "assistant", "content": response_image, "style": opt_style_preset})
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
