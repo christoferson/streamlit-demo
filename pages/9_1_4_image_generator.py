@@ -86,6 +86,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+###########################
+
+def update_menu_img_gen_splash():
+    if st.session_state["menu_img_gen_splash"] == True:
+        st.session_state["menu_img_gen_splash"] = False
+    else:
+        st.session_state["menu_img_gen_splash"] = True
+
+if "menu_img_gen_splash" not in st.session_state:
+    st.session_state["menu_img_gen_splash"] = True
+
+if st.session_state["menu_img_gen_splash"] == True:
+    st.markdown("Sample Prompt 1")
+    st.markdown("Sample Prompt 2")
+    st.button("Close", type="primary", on_click=update_menu_img_gen_splash)
+else:
+    st.button("Again", type="primary", on_click=update_menu_img_gen_splash)
+
+###########################
+
 opt_model_id_list = [
     "stability.stable-diffusion-xl-v1"
 ]
@@ -149,10 +170,7 @@ for msg in st.session_state.menu_img_gen_messages:
             st.write(content)
         if "assistant" == msg["role"]:
             st.image(content)
-            if "style" in msg:
-                #st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps}")
-                st.markdown(f":blue[**style**] {msg['style']}")
-
+            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']}")
 
 if prompt := st.chat_input():
 
@@ -205,7 +223,12 @@ if prompt := st.chat_input():
                 st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps}")
             
             st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-            st.session_state.menu_img_gen_messages.append({"role": "assistant", "content": response_image, "style": opt_style_preset})
+            st.session_state.menu_img_gen_messages.append({"role": "assistant", 
+                "content": response_image, 
+                "style": opt_style_preset,
+                "seed": seed,
+                "scale": opt_config_scale,
+                "steps": opt_steps})
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
