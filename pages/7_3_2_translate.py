@@ -251,13 +251,18 @@ def on_button_translate_clicked():
         stream = response["body"]
         result_container.write_stream(stream_result_data(stream))
 
-        st.session_state["menu_translate_stream_displayed"] = True
-
-        result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
         if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
             translate_result_text = st.session_state["translate_result"]
             if translate_result_text != "" and translate_result_text != error_translate_input_empty:
-                result_columns[0].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=True)
+                result_container.download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=False)
+        
+        st.session_state["menu_translate_stream_displayed"] = True
+        
+        #result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
+        #if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
+        #    translate_result_text = st.session_state["translate_result"]
+        #    if translate_result_text != "" and translate_result_text != error_translate_input_empty:
+        #        result_columns[0].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=True)
 
 
         
