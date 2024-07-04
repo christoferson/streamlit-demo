@@ -51,7 +51,7 @@ opt_model_id_list = [
 system_message = """You are a highly skilled translator with expertise in many languages. 
 Your task is to identify the language of the text I provide and accurately translate it into the specified target language while preserving the meaning, tone, and nuance of the original text. 
 Please maintain proper grammar, spelling, and punctuation in the translated version.
-With regards to the target language, if it is not explicitly specified, assume target is English. If the source is already in English, then assume target is Japanese. 
+In case the the target language is not explicitly specified, If the source is English, then assume the target is Japanese, otherwise assume target is English.
 With regards to the output format, omit preambles and just provide the translated text.
 """
 
@@ -67,7 +67,10 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
 if "translate_input" not in st.session_state:
-    st.session_state["translate_input"] = """It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness, it was the spring of hope, it was the winter of despair."""
+    if "menu_translate_translate_input" in st.session_state:
+        st.session_state["translate_input"] = st.session_state["menu_translate_translate_input"]
+    else:
+        st.session_state["translate_input"] = """It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness, it was the spring of hope, it was the winter of despair."""
 
 if "translate_result" not in st.session_state:
     st.session_state["translate_result"] = None
@@ -99,8 +102,12 @@ result_container = col2_container.container()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     translate_result_text = st.session_state["translate_result"]
     if translate_result_text != "" and translate_result_text != error_translate_input_empty:
-        #result_container.markdown(translate_result_text)
-        pass
+        if 'menu_translate_stream_displayed' in st.session_state:
+            del st.session_state['menu_translate_stream_displayed']
+        else:
+            result_container.markdown(translate_result_text)
+            result_container.download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=False)
+        #pass
 
 
 #result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
@@ -122,7 +129,7 @@ if "translate_result" in st.session_state and st.session_state["translate_result
 #    result_container.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
 def on_text_area_translate_input_changed():
-    pass
+    st.session_state["menu_translate_translate_input"] = st.session_state["translate_input"]
 
 
 col1.text_area(
@@ -243,6 +250,9 @@ def on_button_translate_clicked():
         
         stream = response["body"]
         result_container.write_stream(stream_result_data(stream))
+
+        st.session_state["menu_translate_stream_displayed"] = True
+
         result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
         if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
             translate_result_text = st.session_state["translate_result"]
