@@ -43,16 +43,18 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 #st.markdown(cmn_constants.css_sidebar_2,unsafe_allow_html=True)
 
+bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+
 opt_model_id_list = [
+    "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
 system_message = """You are a highly skilled translator with expertise in many languages. 
 Your task is to identify the language of the text I provide and accurately translate it into the specified target language while preserving the meaning, tone, and nuance of the original text. 
 Please maintain proper grammar, spelling, and punctuation in the translated version.
 In case the the target language is not explicitly specified, If the source is English, then assume the target is Japanese, otherwise assume target is English.
-With regards to the output format, omit preambles and just provide the translated text.
+Omit any preambles and just provide the translated text.
 """
 
 error_translate_input_empty = ":red[Enter Source Text to Translate]"
@@ -64,7 +66,6 @@ with st.sidebar:
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
 
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
 if "translate_input" not in st.session_state:
     if "menu_translate_translate_input" in st.session_state:
@@ -102,9 +103,10 @@ result_container = col2_container.container()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     translate_result_text = st.session_state["translate_result"]
     if translate_result_text != "" and translate_result_text != error_translate_input_empty:
-        if 'menu_translate_stream_displayed' in st.session_state:
+        if 'menu_translate_stream_displayed' in st.session_state and st.session_state['menu_translate_stream_displayed']:
             del st.session_state['menu_translate_stream_displayed']
         else:
+            st.session_state['menu_translate_stream_displayed'] = False
             result_container.markdown(translate_result_text)
             result_container.download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=False)
         #pass
@@ -251,12 +253,15 @@ def on_button_translate_clicked():
         stream = response["body"]
         result_container.write_stream(stream_result_data(stream))
 
+        st.session_state["menu_translate_stream_displayed"] = True
+
+
         if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
             translate_result_text = st.session_state["translate_result"]
             if translate_result_text != "" and translate_result_text != error_translate_input_empty:
                 result_container.download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=False)
+            
         
-        st.session_state["menu_translate_stream_displayed"] = True
         
         #result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
         #if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
