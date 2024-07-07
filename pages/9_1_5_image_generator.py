@@ -150,10 +150,11 @@ with st.sidebar:
     opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
     opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
     opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
-    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimentions")
+    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
     opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
+    opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value="", placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
 
 
 
@@ -189,15 +190,24 @@ if prompt := st.chat_input():
 
     opt_dimensions_width = int(opt_dimensions.split("x")[0])
     opt_dimensions_height = int(opt_dimensions.split("x")[1])
-    print(f"width: {opt_dimensions_width}  height: {opt_dimensions_height}")
+    #print(f"width: {opt_dimensions_width}  height: {opt_dimensions_height}")
+
+    opt_negative_prompt_elements = opt_negative_prompt_list
+    if "" != opt_negative_prompt_csv:
+        opt_negative_prompt_elements = opt_negative_prompt_csv.split(",")
+    print(opt_negative_prompt_elements)
+        
 
     seed = opt_seed
     if seed < 0:
         seed = random.randint(0, 4294967295)
+    
+    logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
 
     request = {
             "text_prompts": (
-                [{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
+                #[{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
+                [{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt_elements]
             ),
             "cfg_scale": opt_config_scale,
             #"clip_guidance_preset"
