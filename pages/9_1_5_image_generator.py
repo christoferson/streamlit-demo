@@ -10,6 +10,7 @@ from PIL import Image
 import os
 from io import BytesIO
 import random
+from datetime import datetime
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -125,6 +126,10 @@ opt_negative_prompt_list = [
     "underexposed", "overexposed", "bad art", "beginner", "amateur", "blurry", "draft", "grainy"
 ]
 
+opt_dimensions_list = [
+    "1024x1024", "1152x896", "1216x832", "1344x768", "1536x640", "640x1536", "768x1344", "832x1216", "896x1152"
+]
+
 opt_style_preset_help = """
 A style preset that guides the image model towards a particular style.
 """
@@ -145,6 +150,7 @@ with st.sidebar:
     opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
     opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
     opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimentions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
     opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
@@ -170,14 +176,20 @@ for msg in st.session_state.menu_img_gen_messages:
             st.write(content)
         if "assistant" == msg["role"]:
             st.image(content)
-            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']}")
+            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
 
 if prompt := st.chat_input():
+
+    st.session_state["menu_img_gen_splash"] = False
 
     message_history = st.session_state.menu_img_gen_messages.copy()
     message_history.append({"role": "user", "content": prompt})
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
+
+    opt_dimensions_width = int(opt_dimensions.split("x")[0])
+    opt_dimensions_height = int(opt_dimensions.split("x")[1])
+    print(f"width: {opt_dimensions_width}  height: {opt_dimensions_height}")
 
     seed = opt_seed
     if seed < 0:
@@ -189,9 +201,9 @@ if prompt := st.chat_input():
             ),
             "cfg_scale": opt_config_scale,
             #"clip_guidance_preset"
-            #"height": "1024",
-            #"width": "1024",
-            "seed": seed, #random.randint(0, 4294967295), # The seed determines the initial noise setting.0-4294967295,0
+            "width": opt_dimensions_width,
+            "height": opt_dimensions_height,
+            "seed": seed, #random.randint(0, 4294967295),
             #"start_schedule": config["start_schedule"],
             "steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
             "style_preset": opt_style_preset,
@@ -210,25 +222,34 @@ if prompt := st.chat_input():
                 body = json.dumps(request))
             
             response_body = json.loads(response.get("body").read())
-            response_image_base64 = response_body["artifacts"][0].get("base64")
-            response_image:Image = base64_to_image(response_image_base64)
+            finish_reason = response_body.get("artifacts")[0].get("finishReason")
+            if finish_reason == 'ERROR' or finish_reason == 'CONTENT_FILTERED':
+                st.chat_message("system").write(f"Image generation error. Error code is {finish_reason}")
+            else:
+                response_image_base64 = response_body["artifacts"][0].get("base64")
+                response_image:Image = base64_to_image(response_image_base64)
 
-            #file_extension = ".png"
-            #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
-            #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
-            #response_image.save(OUTPUT_IMG_PATH)
+                #file_extension = ".png"
+                #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
+                #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
+                #response_image.save(OUTPUT_IMG_PATH)
 
-            with st.chat_message("assistant"):
-                st.image(response_image)
-                st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps}")
-            
-            st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-            st.session_state.menu_img_gen_messages.append({"role": "assistant", 
-                "content": response_image, 
-                "style": opt_style_preset,
-                "seed": seed,
-                "scale": opt_config_scale,
-                "steps": opt_steps})
+                with st.chat_message("assistant"):
+                    current_datetime = datetime.now()
+                    current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
+                    st.image(response_image)
+                    st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
+
+                st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
+                st.session_state.menu_img_gen_messages.append({"role": "assistant", 
+                    "content": response_image, 
+                    "style": opt_style_preset,
+                    "seed": seed,
+                    "scale": opt_config_scale,
+                    "steps": opt_steps,
+                    "width": opt_dimensions_width,
+                    "height": opt_dimensions_height,
+                })
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
