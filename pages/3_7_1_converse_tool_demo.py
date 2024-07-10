@@ -18,6 +18,7 @@ import io
 import base64
 import uuid
 import pandas as pd
+from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -44,6 +45,12 @@ logging.basicConfig(level=logging.INFO)
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 polly = boto3.client("polly", region_name=AWS_REGION)
+calculator_tool = CalculatorBedrockConverseTool()
+tool_config = {
+        "tools": [
+            calculator_tool.definition            
+        ]
+    }
 
 ####################################################################################
 
@@ -186,7 +193,114 @@ def recite_button_clicked(text):
         print("Could not stream audio")
         #sys.exit(-1)
         return
-       
+
+def invoke_llm(message_history, system_prompts, tool_config, inference_config, additional_model_fields):
+    try:
+
+        tool_invocation = {
+            "tool_name": None
+        }
+        tool_input = ""
+        
+        response = bedrock_runtime.converse_stream(
+            modelId=opt_model_id,
+            messages=message_history,
+            system=system_prompts,
+            toolConfig=tool_config,
+            inferenceConfig=inference_config,
+            additionalModelRequestFields=additional_model_fields
+        )
+
+        #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+        result_text = ""
+        with st.chat_message("assistant"):
+            result_container = st.container(border=True)
+            result_area = st.empty()
+            stream = response.get('stream')
+            for event in stream:
+                
+                if 'messageStart' in event:
+                    #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                    #result_container.write(opts)
+                    print('messageStart')
+                    pass
+
+                if 'contentBlockStart' in event:
+                    content_block_start = event['contentBlockStart']
+                    print(content_block_start)
+                    if 'start' in content_block_start:
+                        content_block_start_start = content_block_start['start']
+                        if 'toolUse' in content_block_start_start:
+                            content_block_tool_use = content_block_start_start['toolUse']
+                            tool_use_id = content_block_tool_use['toolUseId']
+                            tool_use_name = content_block_tool_use['name']
+                            print(f"tool_use_id={tool_use_id} tool_use_name={tool_use_name}")
+                            tool_invocation['tool_name'] = tool_use_name
+                            tool_invocation['tool_use_id'] = tool_use_id
+
+                if 'contentBlockDelta' in event:
+                    content_delta = event['contentBlockDelta']['delta']
+                    print(f"content_delta {content_delta}")
+                    if 'text' in content_delta:
+                        result_text += f"{content_delta['text']}"
+                        result_area.write(result_text)
+                    if 'toolUse' in content_delta:
+                        content_delta_tool_input = content_delta['toolUse']['input']
+                        tool_input += content_delta_tool_input
+                        
+                if 'messageStop' in event:
+                    print(f"messageStop")
+                    #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                    stop_reason = event['messageStop']['stopReason']
+                    if stop_reason == 'end_turn':
+                        pass
+                    elif "tool_use" == stop_reason:
+                        tool_input_json = json.loads(tool_input)
+                        print(tool_input_json) #{'sign': 'WZPZ'}
+                        tool_invocation['tool_arguments'] = tool_input
+                        pass
+                    else:
+                        stop_reason_display = stop_reason
+                        if stop_reason == 'max_tokens':
+                            stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                        result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                        result_area.write(result_text_error)
+
+                if 'metadata' in event:
+                    metadata = event['metadata']
+                    if 'usage' in metadata:
+                        input_token_count = metadata['usage']['inputTokens']
+                        output_token_count = metadata['usage']['outputTokens']
+                        total_token_count = metadata['usage']['totalTokens']
+                    if 'metrics' in event['metadata']:
+                        latency = metadata['metrics']['latencyMs']
+                    stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                    result_container.write(stats)
+
+                if "internalServerException" in event:
+                    exception = event["internalServerException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                if "modelStreamErrorException" in event:
+                    exception = event["modelStreamErrorException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                if "throttlingException" in event:
+                    exception = event["throttlingException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                if "validationException" in event:
+                    exception = event["validationException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+
+    except ClientError as err:
+        message = err.response["Error"]["Message"]
+        logger.error("A client error occurred: %s", message)
+        print("A client error occured: " + format(message))
+        st.chat_message("system").write(message)
+
+
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -361,11 +475,17 @@ if prompt:
     with st.spinner('Processing...'):
 
         try:
+
+            tool_invocation = {
+                "tool_name": None
+            }
+            tool_input = ""
             
             response = bedrock_runtime.converse_stream(
                 modelId=opt_model_id,
                 messages=message_history,
                 system=system_prompts,
+                toolConfig=tool_config,
                 inferenceConfig=inference_config,
                 additionalModelRequestFields=additional_model_fields
             )
@@ -383,15 +503,37 @@ if prompt:
                         #result_container.write(opts)                    
                         pass
 
-                    if 'contentBlockDelta' in event:
-                        text = event['contentBlockDelta']['delta']['text']
-                        result_text += f"{text}"
-                        result_area.write(result_text)
+                    if 'contentBlockStart' in event:
+                        content_block_start = event['contentBlockStart']
+                        print(content_block_start)
+                        if 'start' in content_block_start:
+                            content_block_start_start = content_block_start['start']
+                            if 'toolUse' in content_block_start_start:
+                                content_block_tool_use = content_block_start_start['toolUse']
+                                tool_use_id = content_block_tool_use['toolUseId']
+                                tool_use_name = content_block_tool_use['name']
+                                print(f"tool_use_id={tool_use_id} tool_use_name={tool_use_name}")
+                                tool_invocation['tool_name'] = tool_use_name
+                                tool_invocation['tool_use_id'] = tool_use_id
 
+                    if 'contentBlockDelta' in event:
+                        content_delta = event['contentBlockDelta']['delta']
+                        if 'text' in content_delta:
+                            result_text += f"{content_delta['text']}"
+                            result_area.write(result_text)
+                        if 'toolUse' in content_delta:
+                            content_delta_tool_input = content_delta['toolUse']['input']
+                            tool_input += content_delta_tool_input
+                            
                     if 'messageStop' in event:
                         #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
                         stop_reason = event['messageStop']['stopReason']
                         if stop_reason == 'end_turn':
+                            pass
+                        elif "tool_use" == stop_reason:
+                            tool_input_json = json.loads(tool_input)
+                            print(tool_input_json) #{'sign': 'WZPZ'}
+                            tool_invocation['tool_arguments'] = tool_input
                             pass
                         else:
                             stop_reason_display = stop_reason
@@ -428,17 +570,59 @@ if prompt:
                         result_text += f"\n\{exception}"
                         result_area.write(result_text)
 
-                #col1, col2, col3 = st.columns([1,1,5])
+            ##############
 
-                #with col1:
-                    #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
-                #    pass
-                #with col2:
-                #    if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
-                #        st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-                #with col3:
-                #    #st.markdown('3')
-                #    pass
+            print(tool_invocation)
+
+            if tool_invocation['tool_name'] != None:
+
+                tool_name = tool_invocation['tool_name']
+                tool_args_json = json.loads(tool_invocation['tool_arguments'])
+
+                tool_request_message = {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": tool_invocation['tool_use_id'],
+                                "name": tool_invocation['tool_name'],
+                                "input": json.loads(tool_invocation['tool_arguments'])
+                            }
+                        }
+                    ]
+                }
+
+                if calculator_tool.matches(tool_name):
+                    expr_result = calculator_tool.invoke(tool_args_json['expression'])
+
+                    tool_result_message = {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                        "toolUseId": tool_invocation['tool_use_id'],
+                                        "content": [{"json": {"expr_result": expr_result}}]
+                                        #"status": 'error',
+                                    }
+
+                            }
+                        ]
+                    }
+
+                messages = [message_user_latest, tool_request_message, tool_result_message]
+                #tool_invocation = generate_text(bedrock_runtime, model_id, tool_config, messages)
+                #print(tool_invocation)
+                #def invoke_llm(message_history, system_prompts, tool_config, inference_config, additional_model_fields):
+
+                result_text += f"\n\n:blue[Tool Request: {json.dumps(tool_request_message, indent=2)}]\n"
+                result_area.markdown(result_text)
+
+                result_text += f"\n\nTool Result: {json.dumps(tool_result_message, indent=2)}\n"
+                result_area.markdown(result_text)
+
+                invoke_llm(messages, system_prompts, tool_config, inference_config, additional_model_fields)
+
+            ##############
             
             message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
@@ -469,3 +653,5 @@ if prompt:
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])
     st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+
+
