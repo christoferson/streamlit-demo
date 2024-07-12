@@ -40,3 +40,11 @@ metric_data_input_token_count_df = pd.DataFrame({
     'Value': metric_data_input_token_count['Values'],
 })
 st.line_chart(metric_data_input_token_count_df, x='Timestamp', y='Value', color=["#FF0000"], x_label='Time', y_label='Count')
+
+st.markdown("OutputTokenCount")
+metric_data_output_token_count = bedrock_cloudwatch_get_metric(metric_name='OutputTokenCount', start_time=start_time, end_time=end_time)
+metric_data_output_token_count_df = pd.DataFrame({
+    'Timestamp': metric_data_output_token_count['Timestamps'],
+    'Value': metric_data_output_token_count['Values'],
+})
+st.line_chart(metric_data_output_token_count_df, x='Timestamp', y='Value', color=["#FF0000"], x_label='Time', y_label='Count')
