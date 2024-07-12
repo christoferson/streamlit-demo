@@ -4,6 +4,7 @@ import cmn_auth
 import cmn_settings
 import logging
 from botocore.exceptions import ClientError
+import app_bedrock_lib
 
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agent-runtime/client/retrieve_and_generate.html
 
@@ -23,7 +24,8 @@ from botocore.exceptions import ClientError
 AWS_REGION = cmn_settings.AWS_REGION
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-client = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
+bedrock = boto3.client("bedrock", region_name=AWS_REGION)
+bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
 
 
 st.set_page_config(
@@ -41,33 +43,9 @@ st.set_page_config(
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 #stSidebarHeader stSidebarNav stSidebarNavSeparator
-st.html(
-    """
-<style>
-[data-testid="stSidebarContent"] {
-    color: white;
-    background-color: none;
-}
-[data-testid="stSidebarNav"] {
-    color: white;
-    background-color: none;
-}
-[data-testid="stSidebarNavItems"] {
-    color: white;
-    background-color: none;
-    scrollbar-color: lightgray lightblue;
-    overflow-y: scroll;
-}
 
-[data-testid="stSidebarNavSeparator"] {
-    color: white;
-    background-color: none;
-    
-}
-
-</style>
-"""
-)
+opt_model_id_list = app_bedrock_lib.bedrock_list_models(bedrock)
+print(opt_model_id_list)
 
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0"
@@ -183,7 +161,7 @@ if prompt := st.chat_input(
             if "menu_docquery_session_id" in st.session_state:
                 params["sessionId"] = st.session_state["menu_docquery_session_id"]
 
-            response = client.retrieve_and_generate(**params)
+            response = bedrock_agent_runtime.retrieve_and_generate(**params)
 
             
             st.markdown(response["output"]["text"])
