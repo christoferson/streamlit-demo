@@ -1,10 +1,12 @@
 import streamlit as st
 import boto3
 import cmn_settings
+import cmn_st_audio
 import json
 import logging
 import cmn_auth
 import pyperclip
+from io import BytesIO
 
 from botocore.exceptions import ClientError
 
@@ -59,10 +61,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-def copy_button_clicked(text):
-    pyperclip.copy(text)
-    #st.session_state.button = not st.session_state.button
-
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
@@ -91,21 +89,7 @@ if "translate_input" not in st.session_state:
     st.session_state["translate_input"] = """It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness, it was the spring of hope, it was the winter of despair."""
 
 if "translate_result" not in st.session_state:
-    st.session_state["translate_result"] = "Default text"
-
-def write_translate_result_if_present():
-    text = st.session_state["translate_result"]
-    result_container = col2_container.container()
-    result_area = result_container.empty()
-    result_area.write(text)
-    col1, col2, col3 = result_container.columns([1,1,15])
-    with col1:
-        st.button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
-
-def on_text_area_translate_input_changed():
-    #st.session_state["translate_input"] = "Default text"
-    #print(st.session_state["translate_input"])
-    write_translate_result_if_present()
+    st.session_state["translate_result"] = ""
 
 
 
@@ -118,6 +102,37 @@ col2_container = col2.container()
 col2_container.caption(":blue[Result]")
 
 
+def write_translate_result_if_present():
+    text = st.session_state["translate_result"]
+    #print(f"\n\ncol2_container: {col2_container}\n\n")
+    result_container = col2_container.container()
+    #print(f"\n\nresult_container: {result_container} \n\n")
+    result_area = result_container.empty()
+    result_area.write(text)
+    
+    col1, col2, col3 = result_container.columns([5,5,5])
+    with col1:
+        st.button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
+    with col2:
+        st.markdown("2")
+    with col3:
+        st.markdown("3")
+    #with col2:
+    #    try:
+    #        if "audio_stream" in st.session_state and st.session_state["audio_stream"] != None:
+    #            audio_stream = st.session_state['audio_stream']
+    #            #print(f"MM: {audio_stream}")
+    #            audio_bytes = BytesIO(audio_stream)
+    #            st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+    #    except Exception as error:
+    #        print(error)
+
+def on_text_area_translate_input_changed():
+    #st.session_state["translate_input"] = "Default text"
+    #print(st.session_state["translate_input"])
+    write_translate_result_if_present()
+
+
 col1.text_area(
         ":blue[Input]",
         #value=st.session_state["translate_result"],
@@ -128,8 +143,20 @@ col1.text_area(
 
 def on_button_copy_clicked():
     text = st.session_state["translate_result"]
-    pyperclip.copy(text)
+    if text != None and text != "":
+        print(f"on_button_copy_clicked {text}")
+        pyperclip.copy(text)
     write_translate_result_if_present()
+
+
+def recite_button_clicked(text):
+    audio_binary = cmn_st_audio.synthesize_speech(text)
+    if audio_binary != None:
+        st.session_state['audio_stream'] = audio_binary
+    else:
+        st.session_state['audio_stream'] = None
+    write_translate_result_if_present()            
+    
 
 def on_button_clear_clicked():
     st.session_state["translate_input"] = ""
@@ -209,9 +236,20 @@ def on_button_clicked():
                     #result_container.write(stats)
                     st.session_state["translate_result"] = result_text
                     result_area.write(result_text)
-                    col1, col2, col3 = result_container.columns([1,1,15])
+                    col1, col2, col3 = result_container.columns([5,5,5])
                     with col1:
                         st.button(key='copy_button', label='📄', type='primary', on_click=on_button_copy_clicked)
+                    #with col2:
+                        #if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
+                        #st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
+                    #    st.button(key='recite_button', label='▶️', type='primary')
+                    #with col3:
+                        #st.write(st.session_state["audio_stream"])
+                    with col2:
+                        st.markdown("2")
+                    with col3:
+                        st.markdown("3")
+                    
 
             elif event["internalServerException"]:
                 exception = event["internalServerException"]
