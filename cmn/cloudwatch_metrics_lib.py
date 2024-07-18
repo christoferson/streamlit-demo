@@ -6,44 +6,47 @@ AWS_REGION = cmn_settings.AWS_REGION
 
 cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
 
-def cloudwatch_get_metric(metric_name='Invocations', 
+def cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='Invocations', 
                           start_time:datetime=datetime.now() - timedelta(days=7),
                           end_time:datetime=datetime.now()):
     print(f"**********************cloudwatch_get_metric {metric_name}")
     metric_data = {
-
+        'Values': [],
+        'Timestamps': [],
+        'NextToken': None
     }
         
-    get_metric_data_response = _call(metric_name, start_time, end_time)
-
-    #print(get_metric_data_response)
+    get_metric_data_response = _call(metric_namespace, metric_name, start_time, end_time, next_token="")
     metric_data_list = get_metric_data_response['MetricDataResults']
-    #for metric in metric_data_list:
-    #    st.markdown(metric['Timestamps'])
-
     metric_data_values = metric_data_list[0]['Values']
     metric_data_timestamps = metric_data_list[0]['Timestamps']
-    next_token = None
+    metric_data['Values'].extend(metric_data_values)
+    metric_data['Timestamps'].extend(metric_data_timestamps)
+    next_token = ""
     if 'NextToken' in get_metric_data_response:
         next_token = get_metric_data_response['NextToken']
-
-    metric_data = {
-        'Values': metric_data_values,
-        'Timestamps': metric_data_timestamps,
-        'NextToken': next_token
-    }
+        while next_token != "":
+            print(f"**********************cloudwatch_get_metric {metric_name} Next={next_token}")
+            get_metric_data_response = _call(metric_namespace, metric_name, start_time, end_time, next_token=next_token)
+            metric_data_list = get_metric_data_response['MetricDataResults']
+            metric_data_values = metric_data_list[0]['Values']
+            metric_data_timestamps = metric_data_list[0]['Timestamps']
+            metric_data['Values'].extend(metric_data_values)
+            metric_data['Timestamps'].extend(metric_data_timestamps)
+            next_token = ""
+            if 'NextToken' in get_metric_data_response:
+                next_token = get_metric_data_response['NextToken']
 
     return metric_data
 
 
-def _call(metric_name, start_time, end_time):
-    get_metric_data_response = cloudwatch.get_metric_data(
-        MetricDataQueries=[
+def _call(metric_namespace, metric_name, start_time, end_time, next_token = ""):
+    metric_data_query_list = [
             {
                 'Id': 'claude_3_sonnet_invocations',
                 'MetricStat': {
                     'Metric': {
-                        'Namespace': 'AWS/Bedrock',
+                        'Namespace': metric_namespace,
                         'MetricName': metric_name,
                         'Dimensions': [
                             #{
@@ -62,15 +65,28 @@ def _call(metric_name, start_time, end_time):
                 #'Period': 123,
                 #'AccountId': 'string'
             },
-        ],
-        StartTime=start_time, #datetime(2024, 7, 2),
-        EndTime=end_time, #datetime(2024, 7, 11),
-        #NextToken='string',
-        ScanBy= 'TimestampAscending', #'TimestampDescending'|'TimestampAscending',
-        #MaxDatapoints=123,
-        #LabelOptions={
-        #    'Timezone': 'string'
-        #}
-    )
-
+        ]
+    if next_token != "":
+        get_metric_data_response = cloudwatch.get_metric_data(
+            MetricDataQueries=metric_data_query_list,
+            StartTime=start_time, #datetime(2024, 7, 2),
+            EndTime=end_time, #datetime(2024, 7, 11),
+            NextToken=next_token,
+            ScanBy= 'TimestampAscending', #'TimestampDescending'|'TimestampAscending',
+            #MaxDatapoints=123,
+            #LabelOptions={
+            #    'Timezone': 'string'
+            #}
+        )
+    else:
+        get_metric_data_response = cloudwatch.get_metric_data(
+            MetricDataQueries=metric_data_query_list,
+            StartTime=start_time, #datetime(2024, 7, 2),
+            EndTime=end_time, #datetime(2024, 7, 11),
+            ScanBy= 'TimestampAscending', #'TimestampDescending'|'TimestampAscending',
+            #MaxDatapoints=123,
+            #LabelOptions={
+            #    'Timezone': 'string'
+            #}
+        )
     return get_metric_data_response
