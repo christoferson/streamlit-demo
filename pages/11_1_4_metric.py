@@ -25,7 +25,7 @@ def bedrock_cloudwatch_get_metric(metric_namespace, metric_name, start_time, end
 start_time = datetime.now() - timedelta(weeks=12) #datetime(2024, 7, 2) #datetime.now() - timedelta(days=7),
 end_time = datetime.now() #datetime(2024, 7, 11) #datetime.now() - timedelta(days=1),
 
-st.markdown(f"{start_time} to {end_time}")
+st.markdown(f"### :green[{start_time} to {end_time}]")
 
 st.markdown("### :blue[Invocations by TimeStamp]")
 metric_data_invocation_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='Invocations', start_time=start_time, end_time=end_time)
@@ -76,11 +76,32 @@ metric_data_output_token_count_df = pd.DataFrame({
 })
 st.line_chart(metric_data_output_token_count_df, x='Timestamp', y='OutputTokenCount', color=["#FF0000"], x_label='Time', y_label='OutputTokenCount')
 
+
+st.markdown("### :blue[OutputTokenCount by Date]")
+#st.markdown("Invocations by Date")
+metric_data_output_token_count_df['Date'] = metric_data_output_token_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+# Group by date and sum the values
+metric_data_output_token_count_by_date_df = metric_data_output_token_count_df.groupby('Date').agg({'OutputTokenCount': 'sum'}).reset_index()
+st.dataframe(metric_data_output_token_count_by_date_df, use_container_width=True)
+st.line_chart(metric_data_output_token_count_by_date_df, x='Date', y='OutputTokenCount', color=["#FF0000"], x_label='Date', y_label='OutputTokenCount')
+st.bar_chart(metric_data_output_token_count_by_date_df, x='Date', y='OutputTokenCount', color=["#FF0000"], x_label='Date', y_label='OutputTokenCount')
+
+
+
 st.markdown("### :blue[TokenCount by Timestamp]")
 #st.markdown("TokenCount")
 metric_data_token_count_df = pd.merge(metric_data_input_token_count_df, metric_data_output_token_count_df, on='Timestamp', how='outer')
 #metric_data_token_count_df.set_index('Timestamp', inplace=True)
 st.line_chart(metric_data_token_count_df, x='Timestamp', y=['InputTokenCount', 'OutputTokenCount'], color=["#FF0000", "#FF00FF"])
+
+
+
+st.markdown("### :blue[TokenCount by Date]")
+#st.markdown("TokenCount")
+metric_data_token_count_by_date_df = pd.merge(metric_data_input_token_count_by_date_df, metric_data_output_token_count_by_date_df, on='Date', how='outer')
+#metric_data_token_count_df.set_index('Timestamp', inplace=True)
+st.line_chart(metric_data_token_count_by_date_df, x='Date', y=['InputTokenCount', 'OutputTokenCount'], color=["#FF0000", "#FF00FF"])
+st.bar_chart(metric_data_token_count_by_date_df.set_index('Date'))
 
 st.divider()
 
