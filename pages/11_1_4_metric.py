@@ -131,7 +131,7 @@ st.dataframe(metric_data_input_token_count_weekly_df)
 
 
 
-tab1, tab2, tab3 = st.tabs(["Cat", "Dog", "Owl"])
+tab1, tab2, tab3 = st.tabs(["Invocation", "InputToken", "OutputToken"])
 
 with tab1:
    st.header("Weekly Token Count")
@@ -144,5 +144,14 @@ with tab2:
    st.bar_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"])
 
 with tab3:
-   st.header("An owl")
-   st.image("https://static.streamlit.io/examples/owl.jpg", width=200)
+    st.markdown("##### :blue[Output Token by Date]")
+    st.dataframe(metric_data_output_token_count_by_date_df, use_container_width=True)
+    st.line_chart(metric_data_output_token_count_by_date_df, x='Date', y='OutputTokenCount', color=["#FF0000"], x_label='Date', y_label='OutputTokenCount')
+    st.bar_chart(metric_data_output_token_count_by_date_df, x='Date', y='OutputTokenCount', color=["#FF0000"], x_label='Date', y_label='OutputTokenCount')
+
+    st.markdown("##### :blue[Output Token by Week]")
+    metric_data_output_token_count_df['Week'] = metric_data_output_token_count_df['Timestamp'].dt.strftime('%Y-%W')
+    metric_data_output_token_count_weekly_df = metric_data_output_token_count_df.groupby('Week', as_index=False)['OutputTokenCount'].sum()
+    st.dataframe(metric_data_output_token_count_weekly_df)
+    st.line_chart(metric_data_output_token_count_weekly_df, x='Week', y='OutputTokenCount', color=["#FF0000"], x_label='Week', y_label='OutputTokenCount')
+    st.bar_chart(metric_data_output_token_count_weekly_df, x='Week', y='OutputTokenCount', color=["#FF0000"], x_label='Week', y_label='OutputTokenCount')
