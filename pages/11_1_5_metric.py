@@ -128,7 +128,7 @@ st.divider()
 
 
 
-tab1, tab2, tab3 = st.tabs(["Invocation", "InputToken", "OutputToken"])
+tab1, tab2, tab3, tab4 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage"])
 
 with tab1:
     st.markdown("##### :blue[Invocations by Date]")
@@ -139,7 +139,7 @@ with tab1:
     st.markdown("##### :blue[Invocations by Week]")
     metric_data_invocation_count_df['Week'] = metric_data_invocation_count_df['Timestamp'].dt.strftime('%Y-%W')
     metric_data_invocation_count_weekly_df = metric_data_invocation_count_df.groupby('Week', as_index=False)['Value'].sum()
-    st.dataframe(metric_data_invocation_count_weekly_df)
+    st.dataframe(metric_data_invocation_count_weekly_df, use_container_width=True)
     st.line_chart(metric_data_invocation_count_weekly_df, x='Week', y='Value', color=["#FF0000"], x_label='Week', y_label='Count')
     st.bar_chart(metric_data_invocation_count_weekly_df, x='Week', y='Value', color=["#FF0000"], x_label='Week', y_label='Count')
 
@@ -154,7 +154,7 @@ with tab2:
     st.markdown("##### :blue[Input Token by Week]")
     metric_data_input_token_count_df['Week'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%W')
     metric_data_input_token_count_weekly_df = metric_data_input_token_count_df.groupby('Week', as_index=False)['InputTokenCount'].sum()
-    st.dataframe(metric_data_input_token_count_weekly_df)
+    st.dataframe(metric_data_input_token_count_weekly_df, use_container_width=True)
     st.line_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
     st.bar_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
 
@@ -167,6 +167,25 @@ with tab3:
     st.markdown("##### :blue[Output Token by Week]")
     metric_data_output_token_count_df['Week'] = metric_data_output_token_count_df['Timestamp'].dt.strftime('%Y-%W')
     metric_data_output_token_count_weekly_df = metric_data_output_token_count_df.groupby('Week', as_index=False)['OutputTokenCount'].sum()
-    st.dataframe(metric_data_output_token_count_weekly_df)
+    st.dataframe(metric_data_output_token_count_weekly_df, use_container_width=True)
     st.line_chart(metric_data_output_token_count_weekly_df, x='Week', y='OutputTokenCount', color=["#FF0000"], x_label='Week', y_label='OutputTokenCount')
     st.bar_chart(metric_data_output_token_count_weekly_df, x='Week', y='OutputTokenCount', color=["#FF0000"], x_label='Week', y_label='OutputTokenCount')
+
+
+with tab4:
+    st.markdown("##### :blue[Output Image]")
+
+    metric_data_output_image_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='OutputImageCount', start_time=start_time, end_time=end_time)
+    metric_data_output_image_count_df = pd.DataFrame({
+        'Timestamp': metric_data_output_image_count['Timestamps'],
+        'Value': metric_data_output_image_count['Values'],
+    })
+    st.dataframe(metric_data_output_image_count_df, use_container_width=True)
+    metric_data_output_image_count_df['Date'] = metric_data_output_image_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+    # Group by date and sum the values
+    metric_data_output_image_count_by_date_df = metric_data_output_image_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+    st.dataframe(metric_data_output_image_count_by_date_df, use_container_width=True)
+    st.line_chart(metric_data_output_image_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    st.bar_chart(metric_data_output_image_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+
+# 
