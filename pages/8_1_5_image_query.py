@@ -91,6 +91,7 @@ with st.sidebar:
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 st.title("💬 Image Query 8.1.3")
 st.write("Ask LLM Questions")
@@ -109,14 +110,42 @@ with col2:
 
     uploaded_file_name = None
     if uploaded_file:
+        uploaded_file_bytes = uploaded_file.getvalue()
         image = Image.open(uploaded_file)
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        #uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
         st.image(
             image, caption='upload images',
             use_column_width=True
         )
+        print(uploaded_file_type)
+        #uploaded_file_bytes = uploaded_file.read()
+        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
+        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes)
+
+        response = rekognition.detect_labels(
+            Image={'Bytes': uploaded_file_bytes},
+            #MaxLabels=123,
+            #MinConfidence=...,
+            Features=[
+                'IMAGE_PROPERTIES',
+            ],
+            Settings={
+                'ImageProperties': {
+                    'MaxDominantColors': 5
+                }
+            }
+        )
+
+        print(response)
+        st.write(response)
+
+        img_properties = response['ImageProperties']
+        fg_dominant_colors = img_properties['Foreground']['DominantColors']
+        st.write(fg_dominant_colors)
+
+        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
 
 ######
 
@@ -160,6 +189,7 @@ with col1:
                     },
                 }
             )
+            
         message_history.append({"role": "user", "content": content})
         #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
