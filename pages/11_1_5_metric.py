@@ -19,8 +19,21 @@ def list_metrics():
 @st.cache_data(show_spinner='Loading Metrics')
 def bedrock_cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time):
     metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time)
-    print(f"NextToken: {metric_data['NextToken']}")
+    #print(f"NextToken: {metric_data['NextToken']}")
     return metric_data
+
+@st.cache_data(show_spinner='Loading Metrics')
+def bedrock_cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name, metric_dimensions, start_time, end_time):
+    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name, metric_dimensions, start_time, end_time)
+    #print(f"NextToken: {metric_data['NextToken']}")
+    return metric_data
+
+@st.cache_data(show_spinner='Loading Metrics')
+def bedrock_cloudwatch_get_metric_expressoin(metric_namespace, metric_name, start_time, end_time):
+    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric_expression(metric_namespace, metric_name, start_time, end_time)
+    #print(f"NextToken: {metric_data['NextToken']}")
+    return metric_data
+
 
 start_time = datetime.now() - timedelta(weeks=12) #datetime(2024, 7, 2) #datetime.now() - timedelta(days=7),
 end_time = datetime.now() #datetime(2024, 7, 11) #datetime.now() - timedelta(days=1),
@@ -128,7 +141,7 @@ st.divider()
 
 
 
-tab1, tab2, tab3, tab4 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage", "UserInvocation"])
 
 with tab1:
     st.markdown("##### :blue[Invocations by Date]")
@@ -188,4 +201,20 @@ with tab4:
     st.line_chart(metric_data_output_image_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
     st.bar_chart(metric_data_output_image_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
 
-# 
+with tab5:
+   
+    #metric_data_app_user_invocation_count = bedrock_cloudwatch_get_metric(metric_namespace='App/Chat', metric_name='UserInvocation', start_time=start_time, end_time=end_time)
+
+    metric_data_app_user_invocation_count = bedrock_cloudwatch_get_metric_with_dimensions(
+        metric_namespace='App/Chat', 
+            metric_name='UserInvocation', metric_dimensions=[{
+                'Name': 'User',
+                'Value': 'Fred',
+            }], start_time=start_time, end_time=end_time)
+    #metric_data_app_user_invocation_count = bedrock_cloudwatch_get_metric_expressoin(metric_namespace='App/Chat', metric_name='UserInvocation', start_time=start_time, end_time=end_time)
+    
+    metric_data_app_user_invocation_count_df = pd.DataFrame({
+        'Timestamp': metric_data_app_user_invocation_count['Timestamps'],
+        'Value': metric_data_app_user_invocation_count['Values'],
+    })
+    st.dataframe(metric_data_app_user_invocation_count_df, use_container_width=True)
