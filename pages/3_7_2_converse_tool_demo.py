@@ -19,6 +19,7 @@ import base64
 import uuid
 import pandas as pd
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
+from cmn.bedrock_converse_tools_2 import AcronymBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -46,9 +47,11 @@ logging.basicConfig(level=logging.INFO)
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 polly = boto3.client("polly", region_name=AWS_REGION)
 calculator_tool = CalculatorBedrockConverseTool()
+acronym_tool = AcronymBedrockConverseTool()
 tool_config = {
         "tools": [
-            calculator_tool.definition            
+            calculator_tool.definition,
+            acronym_tool.definition
         ]
     }
 
@@ -533,6 +536,7 @@ if prompt:
                         if stop_reason == 'end_turn':
                             pass
                         elif "tool_use" == stop_reason:
+                            print(f"input: {tool_input}")
                             tool_input_json = json.loads(tool_input)
                             print(tool_input_json) #{'sign': 'WZPZ'}
                             tool_invocation['tool_arguments'] = tool_input
@@ -596,6 +600,23 @@ if prompt:
 
                 if calculator_tool.matches(tool_name):
                     expr_result = calculator_tool.invoke(tool_args_json['expression'])
+
+                    tool_result_message = {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                        "toolUseId": tool_invocation['tool_use_id'],
+                                        "content": [{"json": {"expr_result": expr_result}}]
+                                        #"status": 'error',
+                                    }
+
+                            }
+                        ]
+                    }
+                
+                if acronym_tool.matches(tool_name):
+                    expr_result = acronym_tool.invoke(tool_args_json['expression'])
 
                     tool_result_message = {
                         "role": "user",
