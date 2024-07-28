@@ -7,6 +7,10 @@ import cmn_auth
 import io
 import base64
 from PIL import Image
+import cv2
+import numpy as np
+from collections import Counter
+
 
 from botocore.exceptions import ClientError
 
@@ -62,6 +66,22 @@ st.markdown(
 )
 
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
+
+
+def get_top_colors(image, n=3):
+    # Convert the image to a flattened 1D array of RGB values
+    pixels = np.float32(image).reshape((-1, 3))
+
+    # Create a dictionary to store the count of each RGB value
+    color_counts = Counter(map(tuple, pixels))
+
+    # Sort the dictionary by value (count) in descending order
+    sorted_colors = sorted(color_counts.items(), key=lambda x: x[1], reverse=True)
+
+    # Get the top n colors
+    top_colors = sorted_colors[:n]
+
+    return top_colors
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -120,7 +140,7 @@ with col2:
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
         
-        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties")
+        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties", key="uploaded_file_fetch_image_properties")
 
         if uploaded_file_fetch_image_properties:
             response = rekognition.detect_labels(
@@ -149,6 +169,32 @@ with col2:
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
                 st.write(f"RGB {fg_dc_red} {fg_dc_blue} {fg_dc_green} Hex {fg_dc_hex} Color {vfg_dc_css_color} {vfg_dc_pixel_percent}")
+
+    #print(cv2.__version__)
+
+    if uploaded_file_bytes and uploaded_file_bytes != None:
+
+        uploaded_file_fetch_opencv = st.checkbox("Get Image Properties", key="uploaded_file_fetch_opencv")
+
+        if uploaded_file_fetch_opencv:
+            # Read the uploaded image using OpenCV
+            file_bytes = np.asarray(bytearray(uploaded_file_bytes), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+            # Check if the image was read successfully
+            if image is None:
+                st.error("Error: Could not read the uploaded image file.")
+            else:
+                # Get the top 3 dominant colors
+                top_colors = get_top_colors(image, n=3)
+
+                # Print the top 3 dominant colors
+                if top_colors:
+                    st.write("Top 3 dominant RGB colors:")
+                    for i, (color, count) in enumerate(top_colors, start=1):
+                        st.write(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {count}")
+                else:
+                    st.warning("No dominant colors found in the image.")
 
 ######
 
