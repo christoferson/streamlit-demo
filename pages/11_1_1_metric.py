@@ -3,6 +3,7 @@ import cmn_settings
 import streamlit as st
 import numpy as np
 import pandas as pd
+import cmn.cloudwatch_metrics_lib
 
 from datetime import datetime
 
@@ -15,7 +16,11 @@ def list_metrics():
     for metric in list_metrics_response['Metrics']:
         st.markdown(metric)
 
-st.divider()
+@st.cache_data
+def bedrock_cloudwatch_get_metric(metric_name):
+    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric(metric_name)
+    return metric_data
+
 
 get_metric_data_response = client.get_metric_data(
     MetricDataQueries=[
@@ -84,3 +89,12 @@ st.write("DataFrame:", df)
 #st.line_chart(df.set_index('Timestamp'))
 st.markdown("Invocations")
 st.line_chart(df, x='Timestamp', y='Value', color=["#FF0000"], x_label='Time', y_label='Count')
+
+st.divider()
+
+metric_data_input_token_count = bedrock_cloudwatch_get_metric(metric_name='InputTokenCount')
+metric_data_input_token_count_df = pd.DataFrame({
+    'Timestamp': metric_data_input_token_count['Timestamps'],
+    'Value': metric_data_input_token_count['Values'],
+})
+st.line_chart(metric_data_input_token_count_df, x='Timestamp', y='Value', color=["#FF0000"], x_label='Time', y_label='Count')
