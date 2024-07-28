@@ -67,13 +67,45 @@ st.markdown(
 
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
+######################
 
-def get_top_colors(image, n=3):
+def is_close_to_white(color, threshold=230):
+    return all(c >= threshold for c in color)
+
+def get_top_colors(image, n=7, exclude_background=True, white_threshold=230):
+    # Check if the image is valid
+    if image is None or image.size == 0:
+        return []
+
     # Convert the image to a flattened 1D array of RGB values
     pixels = np.float32(image).reshape((-1, 3))
 
+    # Exclude background colors if requested
+    if exclude_background:
+        try:
+            # Use GrabCut algorithm for foreground segmentation
+            mask = np.zeros(image.shape[:2], np.uint8)
+            bgdModel = np.zeros((1, 65), np.float64)
+            fgdModel = np.zeros((1, 65), np.float64)
+            rect = (1, 1, image.shape[1]-2, image.shape[0]-2)  # Slightly smaller rectangle
+            cv2.grabCut(image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+            mask = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
+
+            # Check if any foreground pixels were found
+            if np.sum(mask) == 0:
+                raise ValueError("No foreground pixels found")
+
+            pixels = pixels[mask.ravel() == 1]
+        except Exception as e:
+            print(f"GrabCut failed: {str(e)}. Using entire image.")
+            # If GrabCut fails, use the entire image
+            pixels = np.float32(image).reshape((-1, 3))
+
+    # Filter out colors close to white
+    non_white_pixels = [tuple(pixel) for pixel in pixels if not is_close_to_white(pixel, white_threshold)]
+
     # Create a dictionary to store the count of each RGB value
-    color_counts = Counter(map(tuple, pixels))
+    color_counts = Counter(non_white_pixels)
 
     # Sort the dictionary by value (count) in descending order
     sorted_colors = sorted(color_counts.items(), key=lambda x: x[1], reverse=True)
@@ -82,6 +114,62 @@ def get_top_colors(image, n=3):
     top_colors = sorted_colors[:n]
 
     return top_colors
+
+
+#####
+
+from PIL import Image, ImageFilter
+import numpy as np
+from sklearn.cluster import KMeans
+from collections import Counter
+
+def rgb_to_hex(rgb):
+    return '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+
+def get_foreground_mask(image):
+    gray = image.convert('L')
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    mask = edges.point(lambda x: 255 if x > 10 else 0)
+    mask = mask.filter(ImageFilter.MaxFilter(5))
+    return mask
+
+def get_dominant_colors(image, mask, n_colors=5, white_threshold=230):
+    img_array = np.array(image)
+    mask_array = np.array(mask)
+    foreground_pixels = img_array[mask_array == 255]
+    non_white_pixels = foreground_pixels[(foreground_pixels < white_threshold).any(axis=1)]
+
+    kmeans = KMeans(n_clusters=n_colors, random_state=42, n_init=10)
+    kmeans.fit(non_white_pixels)
+
+    colors = kmeans.cluster_centers_.astype(int)
+    label_counts = Counter(kmeans.labels_)
+    sorted_colors = sorted(zip(colors, label_counts.values()), key=lambda x: x[1], reverse=True)
+
+    total_pixels = sum(label_counts.values())
+    color_info = [
+        {
+            "rgb": tuple(color),
+            "hex": rgb_to_hex(color),
+            "percentage": count / total_pixels * 100
+        }
+        for color, count in sorted_colors
+    ]
+
+    return color_info
+
+def get_dominant_foreground_colors(image:Image, n_colors=5, white_threshold=230):
+
+    # Get foreground mask
+    mask = get_foreground_mask(image)
+
+    # Get dominant colors
+    dominant_colors = get_dominant_colors(image, mask, n_colors, white_threshold)
+
+    return dominant_colors
+
+######################
+
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -127,14 +215,15 @@ with col2:
 
     uploaded_file_name = None
     uploaded_file_bytes = None
+    uploaded_file_image = None
     if uploaded_file:
         uploaded_file_bytes = uploaded_file.getvalue()
-        image = Image.open(uploaded_file)
+        uploaded_file_image = Image.open(uploaded_file)
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        uploaded_file_base64 = image_to_base64(uploaded_file_image, mime_mapping[uploaded_file_type])
         st.image(
-            image, caption='upload images',
+            uploaded_file_image, caption='upload images',
             use_column_width=True
         )
 
@@ -186,15 +275,29 @@ with col2:
                 st.error("Error: Could not read the uploaded image file.")
             else:
                 # Get the top 3 dominant colors
-                top_colors = get_top_colors(image, n=3)
+                top_colors = get_top_colors(image, n=7)
 
                 # Print the top 3 dominant colors
                 if top_colors:
                     st.write("Top 3 dominant RGB colors:")
                     for i, (color, count) in enumerate(top_colors, start=1):
-                        st.write(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {count}")
+                        st.markdown(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {count} <span style='color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
                 else:
                     st.warning("No dominant colors found in the image.")
+
+###
+
+    if uploaded_file_bytes and uploaded_file_bytes != None:
+
+        uploaded_file_fetch_pillow = st.checkbox("Get Image Properties", key="uploaded_file_fetch_pillow")
+
+        if uploaded_file_fetch_pillow:
+
+            dominant_colors = get_dominant_foreground_colors(uploaded_file_image, n_colors=7, white_threshold=230)
+
+            for dominant_color in dominant_colors:
+                color = dominant_color['rgb']
+                st.markdown(f"RGB{dominant_color['rgb']}, {dominant_color['hex']}, {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
 
 ######
 
