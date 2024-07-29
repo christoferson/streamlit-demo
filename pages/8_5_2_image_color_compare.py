@@ -4,7 +4,6 @@ import cmn_settings
 import json
 import logging
 import cmn_auth
-import pyperclip
 import io
 import base64
 from PIL import Image
@@ -62,9 +61,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-def copy_button_clicked(text):
-    pyperclip.copy(text)
-    #st.session_state.button = not st.session_state.button
+rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -93,22 +90,25 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 
 st.title("💬 Image Color Compare")
-st.write("Ask LLM Questions")
 
 
 col1, col2, col3 = st.columns([3, 2, 2])
 
+######
+
 with col2:
 
     uploaded_file  = st.file_uploader(
-        "Image File",
+        "Image File - 1",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
         #label_visibility="collapsed",
     )
 
     uploaded_file_name = None
+    uploaded_file_bytes = None
     if uploaded_file:
+        uploaded_file_bytes = uploaded_file.getvalue()
         image = Image.open(uploaded_file)
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
@@ -118,27 +118,95 @@ with col2:
             use_column_width=True
         )
 
+    if uploaded_file_bytes and uploaded_file_bytes != None:
+        
+        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties")
+
+        if uploaded_file_fetch_image_properties:
+            response = rekognition.detect_labels(
+                Image={'Bytes': uploaded_file_bytes},
+                #MaxLabels=123,
+                #MinConfidence=...,
+                Features=[
+                    'IMAGE_PROPERTIES',
+                ],
+                Settings={
+                    'ImageProperties': {
+                        'MaxDominantColors': 5
+                    }
+                }
+            )
+            img_properties = response['ImageProperties']
+            fg_dominant_colors = img_properties['Foreground']['DominantColors']
+            #st.write(fg_dominant_colors)
+
+            for fg_dominant_color in fg_dominant_colors:
+                fg_dc_red = fg_dominant_color['Red']
+                fg_dc_blue = fg_dominant_color['Blue']
+                fg_dc_green = fg_dominant_color['Green']
+                fg_dc_hex = fg_dominant_color['HexCode']
+                vfg_dc_css_color = fg_dominant_color['CSSColor']
+                vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
+                vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
+                st.write(f"RGB {fg_dc_red} {fg_dc_blue} {fg_dc_green} Hex {fg_dc_hex} Color {vfg_dc_css_color} {vfg_dc_pixel_percent}")
+
 ######
 
 with col3:
 
-    uploaded_file_2  = st.file_uploader(
-        "Image File 2",
+    uploaded_file_2 = st.file_uploader(
+        "Image File - 2",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
         #label_visibility="collapsed",
     )
 
     uploaded_file_2_name = None
+    uploaded_file_2_bytes = None
     if uploaded_file_2:
-        image = Image.open(uploaded_file)
-        uploaded_file_name = uploaded_file.name
-        uploaded_file_type = uploaded_file.type
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        uploaded_file_2_bytes = uploaded_file_2.getvalue()
+        image_2 = Image.open(uploaded_file_2)
+        uploaded_file_2_name = uploaded_file_2.name
+        uploaded_file_2_type = uploaded_file_2.type
+        uploaded_file_2_base64 = image_to_base64(image_2, mime_mapping[uploaded_file_2_type])
         st.image(
-            image, caption='upload images',
+            image_2, caption='upload images',
             use_column_width=True
         )
+
+
+    if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
+        
+        uploaded_file_2_fetch_image_properties = st.checkbox("Get Image Properties", key="uploaded_file_2_fetch_image_properties")
+
+        if uploaded_file_2_fetch_image_properties:
+            response = rekognition.detect_labels(
+                Image={'Bytes': uploaded_file_2_bytes},
+                #MaxLabels=123,
+                #MinConfidence=...,
+                Features=[
+                    'IMAGE_PROPERTIES',
+                ],
+                Settings={
+                    'ImageProperties': {
+                        'MaxDominantColors': 5
+                    }
+                }
+            )
+            img_properties = response['ImageProperties']
+            fg_dominant_colors = img_properties['Foreground']['DominantColors']
+            #st.write(fg_dominant_colors)
+
+            for fg_dominant_color in fg_dominant_colors:
+                fg_dc_red = fg_dominant_color['Red']
+                fg_dc_blue = fg_dominant_color['Blue']
+                fg_dc_green = fg_dominant_color['Green']
+                fg_dc_hex = fg_dominant_color['HexCode']
+                vfg_dc_css_color = fg_dominant_color['CSSColor']
+                vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
+                vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
+                st.write(f"RGB {fg_dc_red} {fg_dc_blue} {fg_dc_green} Hex {fg_dc_hex} Color {vfg_dc_css_color} {vfg_dc_pixel_percent}")
+
 
     #####
 
@@ -181,6 +249,19 @@ with col1:
                     },
                 }
             )
+
+        if uploaded_file_2_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_2_type,
+                        "data": uploaded_file_2_base64,
+                    },
+                }
+            )
+
         message_history.append({"role": "user", "content": content})
         #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
