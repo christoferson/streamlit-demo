@@ -96,15 +96,15 @@ st.title("💬 Image Query 8.1.3")
 st.write("Ask LLM Questions")
 
 
-col1, col2 = st.columns([2, 1])
+col1, col2 = st.columns([3, 2])
 
 with col2:
 
     uploaded_file  = st.file_uploader(
-        "",
+        "Image File",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
-        label_visibility="collapsed",
+        #label_visibility="collapsed",
     )
 
     uploaded_file_name = None
