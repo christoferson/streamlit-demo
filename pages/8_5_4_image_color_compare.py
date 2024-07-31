@@ -69,10 +69,24 @@ rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 ######################
 
+def rgb_to_hex(rgb):
+    """
+    Convert an RGB color tuple to a hexadecimal color code.
+
+    Args:
+        rgb (tuple): A tuple of three integers representing the RGB color values.
+            Each value should be in the range 0-255.
+
+    Returns:
+        str: A hexadecimal color code in the format "#RRGGBB".
+    """
+    r, g, b = rgb
+    return '#{:02x}{:02x}{:02x}'.format(r, g, b)
+
 def is_close_to_white(color, threshold=230):
     return all(c >= threshold for c in color)
 
-def get_top_colors(image, n=7, exclude_background=True, white_threshold=230):
+def opencv_get_top_colors(image, n=7, exclude_background=True, white_threshold=200):
     # Check if the image is valid
     if image is None or image.size == 0:
         return []
@@ -158,7 +172,7 @@ def get_dominant_colors(image, mask, n_colors=5, white_threshold=230):
 
     return color_info
 
-def get_dominant_foreground_colors(image:Image, n_colors=5, white_threshold=230):
+def pillow_get_dominant_foreground_colors(image:Image, n_colors=5, white_threshold=230):
 
     # Get foreground mask
     mask = get_foreground_mask(image)
@@ -200,7 +214,7 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 st.title("💬 Image Color Compare")
 
 
-col1, col2, col3 = st.columns([3, 2, 2])
+col1, col2, col3 = st.columns([2, 2, 2])
 
 ######
 
@@ -210,7 +224,7 @@ with col2:
         "Image File - 1",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
-        #label_visibility="collapsed",
+        label_visibility="collapsed",
     )
 
     uploaded_file_name = None
@@ -229,7 +243,7 @@ with col2:
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
         
-        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties", key="uploaded_file_fetch_image_properties")
+        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties (Rekognition)", key="uploaded_file_fetch_image_properties")
 
         if uploaded_file_fetch_image_properties:
             response = rekognition.detect_labels(
@@ -241,13 +255,12 @@ with col2:
                 ],
                 Settings={
                     'ImageProperties': {
-                        'MaxDominantColors': 5
+                        'MaxDominantColors': 7
                     }
                 }
             )
             img_properties = response['ImageProperties']
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
-            #st.write(fg_dominant_colors)
 
             for fg_dominant_color in fg_dominant_colors:
                 fg_dc_red = fg_dominant_color['Red']
@@ -257,13 +270,12 @@ with col2:
                 vfg_dc_css_color = fg_dominant_color['CSSColor']
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
-                st.write(f"RGB {fg_dc_red} {fg_dc_blue} {fg_dc_green} Hex {fg_dc_hex} Color {vfg_dc_css_color} {vfg_dc_pixel_percent}")
+                st.markdown(f"RGB({fg_dc_red} {fg_dc_green} {fg_dc_blue}) {fg_dc_hex} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f} <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
 
-    #print(cv2.__version__)
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
 
-        uploaded_file_fetch_opencv = st.checkbox("Get Image Properties", key="uploaded_file_fetch_opencv")
+        uploaded_file_fetch_opencv = st.checkbox("Get Image Properties (OpenCv)", key="uploaded_file_fetch_opencv")
 
         if uploaded_file_fetch_opencv:
             # Read the uploaded image using OpenCV
@@ -275,13 +287,14 @@ with col2:
                 st.error("Error: Could not read the uploaded image file.")
             else:
                 # Get the top 3 dominant colors
-                top_colors = get_top_colors(image, n=7)
+                top_colors = opencv_get_top_colors(image, n=7)
 
                 # Print the top 3 dominant colors
                 if top_colors:
-                    st.write("Top 3 dominant RGB colors:")
+                    st.write("Top 5 dominant RGB colors:")
                     for i, (color, count) in enumerate(top_colors, start=1):
-                        st.markdown(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {count} <span style='color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
+                        hexcode = rgb_to_hex((color[0], color[1], color[2]))
+                        st.markdown(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {hexcode} {count} <span style='color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
                 else:
                     st.warning("No dominant colors found in the image.")
 
@@ -289,11 +302,11 @@ with col2:
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
 
-        uploaded_file_fetch_pillow = st.checkbox("Get Image Properties", key="uploaded_file_fetch_pillow")
+        uploaded_file_fetch_pillow = st.checkbox("Get Image Properties (Pillow)", key="uploaded_file_fetch_pillow")
 
         if uploaded_file_fetch_pillow:
 
-            dominant_colors = get_dominant_foreground_colors(uploaded_file_image, n_colors=7, white_threshold=230)
+            dominant_colors = pillow_get_dominant_foreground_colors(uploaded_file_image, n_colors=7, white_threshold=200)
 
             for dominant_color in dominant_colors:
                 color = dominant_color['rgb']
@@ -307,7 +320,7 @@ with col3:
         "Image File - 2",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
-        #label_visibility="collapsed",
+        label_visibility="collapsed",
     )
 
     uploaded_file_2_name = None
@@ -361,11 +374,11 @@ with col3:
 
 with col1:
 
-    if "menu_image_query_messages" not in st.session_state:
-        st.session_state["menu_image_query_messages"] = []
+    if "menu_image_color_compare_messages" not in st.session_state:
+        st.session_state["menu_image_color_compare_messages"] = []
 
     idx = 1
-    for msg in st.session_state.menu_image_query_messages:
+    for msg in st.session_state.menu_image_color_compare_messages:
         idx = idx + 1
         content = msg["content"]
         with st.chat_message(msg["role"]):
@@ -379,7 +392,7 @@ with col1:
 
     if prompt := st.chat_input():
 
-        message_history = st.session_state.menu_image_query_messages.copy()
+        message_history = st.session_state.menu_image_color_compare_messages.copy()
         content =  [
                         {
                             "type": "text",
@@ -417,7 +430,7 @@ with col1:
 
         #user_message =  {"role": "user", "content": f"{prompt}"}
         #messages = [st.session_state.messages]
-        print(f"messages={st.session_state.menu_image_query_messages}")
+        print(f"messages={st.session_state.menu_image_color_compare_messages}")
 
         request = {
             "anthropic_version": "bedrock-2023-05-31",
@@ -515,8 +528,8 @@ with col1:
                 #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
                 
 
-            st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
-            st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
+            st.session_state.menu_image_color_compare_messages.append({"role": "user", "content": prompt})
+            st.session_state.menu_image_color_compare_messages.append({"role": "assistant", "content": result_text})
 
             
             
