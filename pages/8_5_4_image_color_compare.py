@@ -270,7 +270,7 @@ with col2:
                 vfg_dc_css_color = fg_dominant_color['CSSColor']
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
-                st.markdown(f"RGB({fg_dc_red} {fg_dc_green} {fg_dc_blue}) {fg_dc_hex} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f} <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
+                st.markdown(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}% <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
 
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
@@ -310,7 +310,7 @@ with col2:
 
             for dominant_color in dominant_colors:
                 color = dominant_color['rgb']
-                st.markdown(f"RGB{dominant_color['rgb']}, {dominant_color['hex']}, {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
+                st.markdown(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
 
 ######
 
@@ -325,8 +325,10 @@ with col3:
 
     uploaded_file_2_name = None
     uploaded_file_2_bytes = None
+    uploaded_file_2_image = None
     if uploaded_file_2:
         uploaded_file_2_bytes = uploaded_file_2.getvalue()
+        uploaded_file_2_image = Image.open(uploaded_file_2)
         image_2 = Image.open(uploaded_file_2)
         uploaded_file_2_name = uploaded_file_2.name
         uploaded_file_2_type = uploaded_file_2.type
@@ -339,7 +341,7 @@ with col3:
 
     if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
         
-        uploaded_file_2_fetch_image_properties = st.checkbox("Get Image Properties", key="uploaded_file_2_fetch_image_properties")
+        uploaded_file_2_fetch_image_properties = st.checkbox("Get Image Properties (Rekognition)", key="uploaded_file_2_fetch_image_properties")
 
         if uploaded_file_2_fetch_image_properties:
             response = rekognition.detect_labels(
@@ -351,7 +353,7 @@ with col3:
                 ],
                 Settings={
                     'ImageProperties': {
-                        'MaxDominantColors': 5
+                        'MaxDominantColors': 7
                     }
                 }
             )
@@ -367,7 +369,19 @@ with col3:
                 vfg_dc_css_color = fg_dominant_color['CSSColor']
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
-                st.write(f"RGB {fg_dc_red} {fg_dc_blue} {fg_dc_green} Hex {fg_dc_hex} Color {vfg_dc_css_color} {vfg_dc_pixel_percent}")
+                st.markdown(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}% <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
+
+    if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
+
+        uploaded_file_2_fetch_pillow = st.checkbox("Get Image Properties (Pillow)", key="uploaded_file_2_fetch_pillow")
+
+        if uploaded_file_2_fetch_pillow:
+
+            dominant_colors = pillow_get_dominant_foreground_colors(uploaded_file_2_image, n_colors=7, white_threshold=200)
+
+            for dominant_color in dominant_colors:
+                color = dominant_color['rgb']
+                st.markdown(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
 
 
     #####
