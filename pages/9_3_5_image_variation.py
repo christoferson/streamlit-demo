@@ -1,6 +1,7 @@
 import streamlit as st
 import boto3
 import cmn_settings
+import cmn_constants
 import json
 import logging
 import cmn_auth
@@ -29,20 +30,25 @@ logging.basicConfig(level=logging.INFO)
 ####################################################################################
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
-polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
 
 
 ### Utilities
 
-def image_to_base64(image):
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
-
 def base64_to_image(base64_str) -> Image:
     return Image.open(io.BytesIO(base64.decodebytes(bytes(base64_str, "utf-8"))))
+
+
+def image_to_base64(image,mime_type:str):
+    buffer = io.BytesIO()
+    image.save(buffer, format=mime_type)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+mime_mapping = {
+        "image/png": "PNG",
+        "image/jpeg": "JPEG"
+    }
 
 #####################
 
@@ -60,57 +66,9 @@ st.set_page_config(
 
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
-st.markdown(
-    """
-    <style>
-    button[kind="primary"] {
-        background: none!important;
-        border: none;
-        padding: 0!important;
-        margin: 0;
-        color: black !important;
-        text-decoration: none;
-        cursor: pointer;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        text-decoration: none;
-        color: black !important;
-    }
-    button[kind="primary"]:focus {
-        outline: none !important;
-        box-shadow: none !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(cmn_constants.css_btn_primary, unsafe_allow_html=True)
 
-
-###########################
-
-def update_menu_img_gen_splash():
-    if st.session_state["menu_img_gen_splash"] == True:
-        st.session_state["menu_img_gen_splash"] = False
-    else:
-        st.session_state["menu_img_gen_splash"] = True
-
-if "menu_img_gen_splash" not in st.session_state:
-    st.session_state["menu_img_gen_splash"] = True
-
-if st.session_state["menu_img_gen_splash"] == True:
-    st.markdown("Sample Prompt 1")
-    st.markdown("Sample Prompt 2")
-    st.button("Close", type="primary", on_click=update_menu_img_gen_splash)
-else:
-    st.button("Again", type="primary", on_click=update_menu_img_gen_splash)
-
-###########################
-
-opt_model_id_list = [
-    "stability.stable-diffusion-xl-v1"
-]
+opt_model_id_list = [ "stability.stable-diffusion-xl-v1" ]
 
 opt_style_preset_list = [
     "anime",
@@ -158,18 +116,17 @@ with st.sidebar:
 
 
 
-#st.title("💬 🖌️ 🖼️ Image Generator")
-st.markdown("🖼️ Image Generator 3")
-#st.write("Text to Image")
+st.markdown("🖼️ Image Variation 1")
 
-if "menu_img_gen_messages" not in st.session_state:
-    st.session_state["menu_img_gen_messages"] = [
+if "menu_img_variation_messages" not in st.session_state:
+    st.session_state["menu_img_variation_messages"] = [
         #{"role": "user", "content": "Hello there."},
         #{"role": "assistant", "content": "How can I help you?"}
     ]
 
+
 idx = 1
-for msg in st.session_state.menu_img_gen_messages:
+for msg in st.session_state.menu_img_variation_messages:
     idx = idx + 1
     content = msg["content"]
     with st.chat_message(msg["role"]):
@@ -179,11 +136,36 @@ for msg in st.session_state.menu_img_gen_messages:
             st.image(content)
             st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
 
-if prompt := st.chat_input():
 
-    st.session_state["menu_img_gen_splash"] = False
 
-    message_history = st.session_state.menu_img_gen_messages.copy()
+uploaded_file = st.file_uploader(
+    "",
+    type=["PNG", "JPEG"],
+    accept_multiple_files=False,
+    label_visibility="collapsed",
+    key="menu_img_variation_init_image"
+)
+
+uploaded_file_name = None
+if uploaded_file:
+    uploaded_file_bytes = uploaded_file.getvalue()
+    uploaded_file_image = Image.open(uploaded_file)
+    uploaded_file_name = uploaded_file.name
+    uploaded_file_type = uploaded_file.type
+    uploaded_file_base64 = image_to_base64(uploaded_file_image, mime_mapping[uploaded_file_type])
+    st.image(
+        uploaded_file_image, caption='upload images',
+        use_column_width=True
+    )
+    print(uploaded_file_type)
+    #uploaded_file_bytes = uploaded_file.read()
+    #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
+    #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes)
+
+
+if prompt := st.chat_input(disabled=uploaded_file_name==None):
+
+    message_history = st.session_state.menu_img_variation_messages.copy()
     message_history.append({"role": "user", "content": prompt})
     #st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
@@ -204,54 +186,63 @@ if prompt := st.chat_input():
     
     logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
 
-    request = {
-            "text_prompts": (
-                #[{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
-                [{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt_elements]
-            ),
-            "cfg_scale": opt_config_scale,
-            #"clip_guidance_preset"
-            "width": opt_dimensions_width,
-            "height": opt_dimensions_height,
-            "seed": seed, #random.randint(0, 4294967295),
-            #"start_schedule": config["start_schedule"],
-            "steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
-            "style_preset": opt_style_preset,
-            "samples": 1,
-        }
     #json.dumps(request, indent=3)
+
+    variation_prompts = [
+        "Trendy casual sneakers, comfortable design, vibrant colors, for young adults",
+        "Stylish high heel shoes, modern design, comfortable fit, for fashion-forward women",
+        "Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts",
+        "High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs",
+    ]
 
     with st.spinner('Generating Image...'):
 
+        
         try:
 
-            response = bedrock_runtime.invoke_model(
-                modelId = opt_model_id,
-                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-                accept = "application/json",
-                body = json.dumps(request))
-            
-            response_body = json.loads(response.get("body").read())
-            finish_reason = response_body.get("artifacts")[0].get("finishReason")
-            if finish_reason == 'ERROR' or finish_reason == 'CONTENT_FILTERED':
-                st.chat_message("system").write(f"Image generation error. Error code is {finish_reason}")
-            else:
-                response_image_base64 = response_body["artifacts"][0].get("base64")
-                response_image:Image = base64_to_image(response_image_base64)
+            for variation_prompt in variation_prompts:
+                    
+                request = {
+                        "text_prompts": (
+                            #[{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
+                            [{"text": variation_prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt_elements]
+                        ),
+                        "cfg_scale": opt_config_scale,
+                        #"clip_guidance_preset"
+                        "width": opt_dimensions_width,
+                        "height": opt_dimensions_height,
+                        "seed": seed, #random.randint(0, 4294967295),
+                        #"start_schedule": config["start_schedule"],
+                        "steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
+                        "style_preset": opt_style_preset,
+                        "samples": 1,
+                        "init_image": uploaded_file_base64,
+                        "init_image_mode": "IMAGE_STRENGTH",
+                        #"image_strength": 1,
+                    }
 
-                #file_extension = ".png"
-                #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
-                #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
-                #response_image.save(OUTPUT_IMG_PATH)
+                response = bedrock_runtime.invoke_model(
+                    modelId = opt_model_id,
+                    contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                    accept = "application/json",
+                    body = json.dumps(request))
+                
+                response_body = json.loads(response.get("body").read())
+                finish_reason = response_body.get("artifacts")[0].get("finishReason")
+                if finish_reason == 'ERROR' or finish_reason == 'CONTENT_FILTERED':
+                    st.chat_message("system").write(f"Image generation error. Error code is {finish_reason}")
+                else:
+                    response_image_base64 = response_body["artifacts"][0].get("base64")
+                    response_image:Image = base64_to_image(response_image_base64)
 
-                with st.chat_message("assistant"):
-                    current_datetime = datetime.now()
-                    current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
-                    st.image(response_image)
-                    st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
+                    with st.chat_message("assistant"):
+                        current_datetime = datetime.now()
+                        current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
+                        st.image(response_image)
+                        st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
 
-                st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-                st.session_state.menu_img_gen_messages.append({"role": "assistant", 
+                st.session_state.menu_img_variation_messages.append({"role": "user", "content": prompt})
+                st.session_state.menu_img_variation_messages.append({"role": "assistant", 
                     "content": response_image, 
                     "style": opt_style_preset,
                     "seed": seed,
