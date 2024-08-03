@@ -50,6 +50,7 @@ mime_mapping = {
         "image/jpeg": "JPEG"
     }
 
+
 #####################
 
 st.set_page_config(
@@ -125,16 +126,16 @@ if "menu_img_variation_messages" not in st.session_state:
     ]
 
 
-idx = 1
-for msg in st.session_state.menu_img_variation_messages:
-    idx = idx + 1
-    content = msg["content"]
-    with st.chat_message(msg["role"]):
-        if "user" == msg["role"]:
-            st.write(content)
-        if "assistant" == msg["role"]:
-            st.image(content)
-            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
+#idx = 1
+#for msg in st.session_state.menu_img_variation_messages:
+#    idx = idx + 1
+#    content = msg["content"]
+#    with st.chat_message(msg["role"]):
+#        if "user" == msg["role"]:
+#            st.write(content)
+#        if "assistant" == msg["role"]:
+#            st.image(content)
+#            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
 
 
 
@@ -162,13 +163,15 @@ if uploaded_file:
     #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
     #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes)
 
+generate_btn = st.button("Generate", type="primary", disabled=uploaded_file_name==None)
 
-if prompt := st.chat_input(disabled=uploaded_file_name==None):
+#if prompt := st.chat_input(disabled=uploaded_file_name==None):
 
-    message_history = st.session_state.menu_img_variation_messages.copy()
-    message_history.append({"role": "user", "content": prompt})
-    #st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
+if generate_btn:
+
+    #message_history = st.session_state.menu_img_variation_messages.copy()
+    #message_history.append({"role": "user", "content": prompt})
+    #st.chat_message("user").write(prompt)
 
     opt_dimensions_width = int(opt_dimensions.split("x")[0])
     opt_dimensions_height = int(opt_dimensions.split("x")[1])
@@ -184,15 +187,15 @@ if prompt := st.chat_input(disabled=uploaded_file_name==None):
     if seed < 0:
         seed = random.randint(0, 4294967295)
     
-    logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
+    #logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
 
     #json.dumps(request, indent=3)
 
     variation_prompts = [
         "Trendy casual sneakers, comfortable design, vibrant colors, for young adults",
         "Stylish high heel shoes, modern design, comfortable fit, for fashion-forward women",
-        "Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts",
-        "High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs",
+        #"Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts",
+        #"High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs",
     ]
 
     with st.spinner('Generating Image...'):
@@ -241,20 +244,21 @@ if prompt := st.chat_input(disabled=uploaded_file_name==None):
                         st.image(response_image)
                         st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
 
-                st.session_state.menu_img_variation_messages.append({"role": "user", "content": prompt})
-                st.session_state.menu_img_variation_messages.append({"role": "assistant", 
-                    "content": response_image, 
-                    "style": opt_style_preset,
-                    "seed": seed,
-                    "scale": opt_config_scale,
-                    "steps": opt_steps,
-                    "width": opt_dimensions_width,
-                    "height": opt_dimensions_height,
-                })
+                #st.session_state.menu_img_variation_messages.append({"role": "user", "content": prompt})
+                #st.session_state.menu_img_variation_messages.append({"role": "assistant", 
+                #    "content": response_image, 
+                #    "style": opt_style_preset,
+                #    "seed": seed,
+                #    "scale": opt_config_scale,
+                #    "steps": opt_steps,
+                #    "width": opt_dimensions_width,
+                #    "height": opt_dimensions_height,
+                #})
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
             logger.error("A client error occurred: %s", message)
             print("A client error occured: " + format(message))
             st.chat_message("system").write(message)
+
 
