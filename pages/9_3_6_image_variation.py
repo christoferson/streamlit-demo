@@ -47,10 +47,9 @@ def image_to_base64(image,mime_type:str):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 mime_mapping = {
-        "image/png": "PNG",
-        "image/jpeg": "JPEG"
-    }
-
+    "image/png": "PNG",
+    "image/jpeg": "JPEG"
+}
 
 #####################
 
@@ -126,14 +125,13 @@ with st.sidebar:
     opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value="", placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
 
 
-
 st.markdown("🖼️ Image Variation 1")
 
-if "menu_img_variation_messages" not in st.session_state:
-    st.session_state["menu_img_variation_messages"] = [
-        #{"role": "user", "content": "Hello there."},
-        #{"role": "assistant", "content": "How can I help you?"}
-    ]
+#if "menu_img_variation_messages" not in st.session_state:
+#    st.session_state["menu_img_variation_messages"] = [
+#        #{"role": "user", "content": "Hello there."},
+#        #{"role": "assistant", "content": "How can I help you?"}
+#    ]
 
 
 #idx = 1
@@ -148,9 +146,8 @@ if "menu_img_variation_messages" not in st.session_state:
 #            st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
 
 
-
 uploaded_file = st.file_uploader(
-    "Upload Base Image",
+    "Base Image",
     type=["PNG", "JPEG"],
     accept_multiple_files=False,
     label_visibility="collapsed",
@@ -167,6 +164,8 @@ if uploaded_file:
 
     # Get the original dimensions
     original_width, original_height = uploaded_file_image.size
+    new_width = original_width
+    new_height = original_height
 
     # Check if the original dimensions are multiples of 64
     if original_width % 64 != 0 or original_height % 64 != 0:
@@ -180,7 +179,7 @@ if uploaded_file:
 
 
 
-    st.image(uploaded_file_image, caption=f"Base Image {original_width}x{original_height}",
+    st.image(uploaded_file_image, caption=f"Base Image {original_width}x{original_height} {new_width}x{new_height}",
         use_column_width="auto" #"auto", "always", "never", or bool
     )
     print(uploaded_file_type)
@@ -201,7 +200,6 @@ generate_btn = st.button("Generate", type="primary", disabled=uploaded_file_name
 
 if generate_btn:
 
-        
     # Split the string into lines
     variation_prompts_lines = variation_prompts_str.split("\n")
 
@@ -220,7 +218,6 @@ if generate_btn:
     if "" != opt_negative_prompt_csv:
         opt_negative_prompt_elements = opt_negative_prompt_csv.split(",")
     print(opt_negative_prompt_elements)
-        
 
     seed = opt_seed
     if seed < 0:
@@ -229,7 +226,6 @@ if generate_btn:
     #logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
 
     #json.dumps(request, indent=3)
-
 
 
     with st.spinner('Generating Image...'):
