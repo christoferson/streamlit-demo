@@ -1,6 +1,7 @@
 import streamlit as st
 import boto3
 import cmn_settings
+import cmn_constants
 import json
 import logging
 import cmn_auth
@@ -38,32 +39,7 @@ st.set_page_config(
     }
 )
 
-st.markdown(
-    """
-    <style>
-    button[kind="primary"] {
-        background: none!important;
-        border: none;
-        padding: 0!important;
-        margin: 0;
-        color: black !important;
-        text-decoration: none;
-        cursor: pointer;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        text-decoration: none;
-        color: black !important;
-    }
-    button[kind="primary"]:focus {
-        outline: none !important;
-        box-shadow: none !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(cmn_constants.css_btn_primary, unsafe_allow_html=True)
 
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
@@ -220,6 +196,26 @@ def get_contrast(img):
 
 ##################
 
+@st.cache_data(show_spinner='Loading Image Properties')
+def bedrock_rekognition_get_image_properties(uploaded_file_bytes):
+    response = rekognition.detect_labels(
+        Image={'Bytes': uploaded_file_bytes},
+        #MaxLabels=123,
+        #MinConfidence=...,
+        Features=[
+            'IMAGE_PROPERTIES',
+        ],
+        Settings={
+            'ImageProperties': {
+                'MaxDominantColors': 7
+            }
+        }
+    )
+    return response
+
+
+###########################
+
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -282,19 +278,20 @@ with col2:
         uploaded_file_fetch_image_properties = st.checkbox(":rainbow[**Get Image Properties (Rekognition)**]", key="uploaded_file_fetch_image_properties")
 
         if uploaded_file_fetch_image_properties:
-            response = rekognition.detect_labels(
-                Image={'Bytes': uploaded_file_bytes},
-                #MaxLabels=123,
-                #MinConfidence=...,
-                Features=[
-                    'IMAGE_PROPERTIES',
-                ],
-                Settings={
-                    'ImageProperties': {
-                        'MaxDominantColors': 7
-                    }
-                }
-            )
+            #response = rekognition.detect_labels(
+            #    Image={'Bytes': uploaded_file_bytes},
+            #    #MaxLabels=123,
+            #    #MinConfidence=...,
+            #    Features=[
+            #        'IMAGE_PROPERTIES',
+            #    ],
+            #    Settings={
+            #        'ImageProperties': {
+            #            'MaxDominantColors': 7
+            #        }
+            #    }
+            #)
+            response = bedrock_rekognition_get_image_properties(uploaded_file_bytes)
             img_properties = response['ImageProperties']
             img_quality = img_properties['Quality']
             img_quality_brightness = img_quality['Brightness']
@@ -366,19 +363,20 @@ with col3:
         uploaded_file_2_fetch_image_properties = st.checkbox(":rainbow[Get Image Properties (Rekognition)]", key="uploaded_file_2_fetch_image_properties")
 
         if uploaded_file_2_fetch_image_properties:
-            response = rekognition.detect_labels(
-                Image={'Bytes': uploaded_file_2_bytes},
-                #MaxLabels=123,
-                #MinConfidence=...,
-                Features=[
-                    'IMAGE_PROPERTIES',
-                ],
-                Settings={
-                    'ImageProperties': {
-                        'MaxDominantColors': 7
-                    }
-                }
-            )
+            #response = rekognition.detect_labels(
+            #    Image={'Bytes': uploaded_file_2_bytes},
+            #    #MaxLabels=123,
+            #    #MinConfidence=...,
+            #    Features=[
+            #        'IMAGE_PROPERTIES',
+            #    ],
+            #    Settings={
+            #        'ImageProperties': {
+            #            'MaxDominantColors': 7
+            #        }
+            #    }
+            #)
+            response = bedrock_rekognition_get_image_properties(uploaded_file_2_bytes)
             img_properties = response['ImageProperties']
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
             img_quality = img_properties['Quality']
@@ -580,6 +578,143 @@ with col1:
 
             
             
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
+            st.chat_message("system").write(message)
+
+#############################
+
+bcol1, bcol2 = st.columns([2, 4])
+
+with bcol2:
+
+    st.divider()
+
+    compare_prompt = """I have provided you 2 images. Please do the following:
+    1. For each image, list out the dominant colors in the foreground or subject. Use Hex Codes, RGB, and Css Color Names to describe each color.
+    2. Compare the 2 images and describe how similar or different are they.
+    3. In the scale of 1 to 10, 1 is totally different and 10 identical, rate and compare the dominant colors of the foreground or subject of the 2 images.
+    Think step by step and make sure to verify that the color codes are as accurate as possible.
+    """
+
+    compare_btn = st.button("Compare", type="primary", disabled=uploaded_file_name==None or uploaded_file_2_name==None)
+
+    if compare_btn:
+        
+        content =  [
+                        {
+                            "type": "text",
+                            "text": f"{compare_prompt}"
+                        }
+                    ]
+
+        if uploaded_file_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_type,
+                        "data": uploaded_file_base64,
+                    },
+                }
+            )
+
+        if uploaded_file_2_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_2_type,
+                        "data": uploaded_file_2_base64,
+                    },
+                }
+            )
+
+        message_history = []
+        message_history.append({"role": "user", "content": content})
+
+        request = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "temperature": opt_temperature,
+            "top_p": opt_top_p,
+            "top_k": opt_top_k,
+            "max_tokens": opt_max_tokens,
+            "system": opt_system_msg,
+            "messages": message_history #st.session_state.messages
+        }
+
+        try:
+            response = bedrock_runtime.invoke_model_with_response_stream(
+                modelId = opt_model_id, #bedrock_model_id, 
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request))
+
+            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+            result_text = ""
+            result_container = st.container(border=True)
+            result_area = st.empty()
+            stream = response["body"]
+            for event in stream:
+                
+                if event["chunk"]:
+
+                    chunk = json.loads(event["chunk"]["bytes"])
+
+                    if chunk['type'] == 'message_start':
+                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
+                        pass
+
+                    elif chunk['type'] == 'message_delta':
+                        pass
+
+                    elif chunk['type'] == 'content_block_delta':
+                        if chunk['delta']['type'] == 'text_delta':
+                            text = chunk['delta']['text']
+                            #await msg.stream_token(f"{text}")
+                            result_text += f"{text}"
+                            result_area.write(result_text)
+
+                    elif chunk['type'] == 'message_stop':
+                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                        input_token_count = invocation_metrics["inputTokenCount"]
+                        output_token_count = invocation_metrics["outputTokenCount"]
+                        latency = invocation_metrics["invocationLatency"]
+                        lag = invocation_metrics["firstByteLatency"]
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+
+                        invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        result_text_final = f"""{result_text}  \n\n:blue[{invocation_metrics}]"""
+                        result_area.write(f"{result_text_final}")
+
+                elif "internalServerException" in event:
+                    exception = event["internalServerException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                elif "modelStreamErrorException" in event:
+                    exception = event["modelStreamErrorException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                elif "modelTimeoutException" in event:
+                    exception = event["modelTimeoutException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                elif "throttlingException" in event:
+                    exception = event["throttlingException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                elif "validationException" in event:
+                    exception = event["validationException"]
+                    result_text += f"\n\{exception}"
+                    result_area.write(result_text)
+                else:
+                    result_text += f"\n\nUnknown Token"
+                    result_area.write(result_text)
+
         except ClientError as err:
             message = err.response["Error"]["Message"]
             logger.error("A client error occurred: %s", message)
