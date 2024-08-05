@@ -6,7 +6,7 @@ import logging
 import cmn_auth
 import io
 import base64
-from PIL import Image
+from PIL import Image, ImageFilter
 import cv2
 import numpy as np
 from collections import Counter
@@ -184,6 +184,42 @@ def pillow_get_dominant_foreground_colors(image:Image, n_colors=5, white_thresho
 
 ######################
 
+def get_brightness(img):
+    """
+    Estimate the brightness of an image on a scale of 0-100.
+    :param img: PIL Image object
+    :return: float, estimated brightness (0-100)
+    """
+    gray_img = img.convert('L')
+    brightness = np.mean(np.array(gray_img))
+    # Normalize to 0-100 scale
+    return (brightness / 255) * 100
+
+def get_sharpness(img):
+    """
+    Estimate the sharpness of an image on a scale of 0-100.
+    :param img: PIL Image object
+    :return: float, estimated sharpness (0-100)
+    """
+    blurred = img.filter(ImageFilter.BLUR)
+    diff = np.array(img) - np.array(blurred)
+    sharpness = np.var(diff)
+    # Normalize to 0-100 scale (assuming max sharpness around 10000)
+    return min(sharpness / 100, 100)
+
+def get_contrast(img):
+    """
+    Estimate the contrast of an image on a scale of 0-100.
+    :param img: PIL Image object
+    :return: float, estimated contrast (0-100)
+    """
+    gray_img = img.convert('L')
+    contrast = np.std(np.array(gray_img))
+    # Normalize to 0-100 scale (assuming max contrast around 100)
+    return min(contrast, 100)
+
+##################
+
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -237,13 +273,13 @@ with col2:
         uploaded_file_type = uploaded_file.type
         uploaded_file_base64 = image_to_base64(uploaded_file_image, mime_mapping[uploaded_file_type])
         st.image(
-            uploaded_file_image, caption='upload images',
-            use_column_width=True
+            uploaded_file_image,
+            use_column_width=True,
         )
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
         
-        uploaded_file_fetch_image_properties = st.checkbox("Get Image Properties (Rekognition)", key="uploaded_file_fetch_image_properties")
+        uploaded_file_fetch_image_properties = st.checkbox(":rainbow[**Get Image Properties (Rekognition)**]", key="uploaded_file_fetch_image_properties")
 
         if uploaded_file_fetch_image_properties:
             response = rekognition.detect_labels(
@@ -260,6 +296,12 @@ with col2:
                 }
             )
             img_properties = response['ImageProperties']
+            img_quality = img_properties['Quality']
+            img_quality_brightness = img_quality['Brightness']
+            img_quality_sharpness = img_quality['Sharpness']
+            img_quality_contrast = img_quality['Contrast']
+            st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
+
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
 
             for fg_dominant_color in fg_dominant_colors:
@@ -276,9 +318,15 @@ with col2:
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
 
-        uploaded_file_fetch_pillow = st.checkbox("Get Image Properties (Pillow)", key="uploaded_file_fetch_pillow")
+        uploaded_file_fetch_pillow = st.checkbox(":rainbow[Get Image Properties (Pillow)]", key="uploaded_file_fetch_pillow")
 
         if uploaded_file_fetch_pillow:
+
+            img_quality_brightness = get_brightness(uploaded_file_image)
+            img_quality_sharpness = get_sharpness(uploaded_file_image)
+            img_quality_contrast = get_contrast(uploaded_file_image)
+
+            st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
 
             dominant_colors = pillow_get_dominant_foreground_colors(uploaded_file_image, n_colors=7, white_threshold=200)
 
@@ -308,14 +356,14 @@ with col3:
         uploaded_file_2_type = uploaded_file_2.type
         uploaded_file_2_base64 = image_to_base64(image_2, mime_mapping[uploaded_file_2_type])
         st.image(
-            image_2, caption='upload images',
+            image_2,
             use_column_width=True
         )
 
 
     if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
         
-        uploaded_file_2_fetch_image_properties = st.checkbox("Get Image Properties (Rekognition)", key="uploaded_file_2_fetch_image_properties")
+        uploaded_file_2_fetch_image_properties = st.checkbox(":rainbow[Get Image Properties (Rekognition)]", key="uploaded_file_2_fetch_image_properties")
 
         if uploaded_file_2_fetch_image_properties:
             response = rekognition.detect_labels(
@@ -333,7 +381,11 @@ with col3:
             )
             img_properties = response['ImageProperties']
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
-            #st.write(fg_dominant_colors)
+            img_quality = img_properties['Quality']
+            img_quality_brightness = img_quality['Brightness']
+            img_quality_sharpness = img_quality['Sharpness']
+            img_quality_contrast = img_quality['Contrast']
+            st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
 
             for fg_dominant_color in fg_dominant_colors:
                 fg_dc_red = fg_dominant_color['Red']
@@ -347,9 +399,16 @@ with col3:
 
     if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
 
-        uploaded_file_2_fetch_pillow = st.checkbox("Get Image Properties (Pillow)", key="uploaded_file_2_fetch_pillow")
+        uploaded_file_2_fetch_pillow = st.checkbox(":rainbow[Get Image Properties (Pillow)]", key="uploaded_file_2_fetch_pillow")
 
         if uploaded_file_2_fetch_pillow:
+
+            img_quality_brightness = get_brightness(uploaded_file_2_image)
+            img_quality_sharpness = get_sharpness(uploaded_file_2_image)
+            img_quality_contrast = get_contrast(uploaded_file_2_image)
+
+            st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
+
 
             dominant_colors = pillow_get_dominant_foreground_colors(uploaded_file_2_image, n_colors=7, white_threshold=200)
 
