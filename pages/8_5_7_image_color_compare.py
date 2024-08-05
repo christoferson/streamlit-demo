@@ -601,8 +601,8 @@ compare_with_meta_prompt = f"""I have provided you 2 images as well as metadata 
 
 
 Please do the following:
-1. For each image, list out the dominant colors in the foreground or subject. Use Hex Codes, RGB, and Css Color Names to describe each color.
-2. Check if the image quality are good and there are no bad characteristics like Underexposed, Overexposed, Dim, Low contrast, Blurred, Grainy/Noisy, Oversaturated, Lens flare, Vignetting, Poor white balance etc.
+1. For each image, list out the dominant colors in the foreground or subject. Use Hex Codes, RGB, and Css Color Names to describe each color. In case the indicated color in the metadata is incorrect or inaccurate, please revise and output the correct color.
+2. Check if the image quality are good and there are no bad characteristics like Underexposed, Overexposed, Dim, Low contrast, Blurred, Grainy/Noisy, Oversaturated, Lens flare, Vignetting, Poor white balance etc. Also, if the metadata is available, apply quantitative analysis using the provided brighness, contrast, and sharpness.
 3. Verify the provided dominant foreground colors of each image if they are accurate and then re-order them as necessary in descending order. Limit the output to the top 5 colors.
 4. Comparison Section: While also looking back at the prior information from previous steps, compare the 2 images and describe how similar or different are they.
 5. Conclusion Section: As a conclusion, consider all prior information and then in the scale of 1 to 10, 1 is totally different and 10 identical, rate and compare the dominant colors of the foreground or subject of the 2 images.
