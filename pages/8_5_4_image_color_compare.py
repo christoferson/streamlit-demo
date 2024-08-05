@@ -272,32 +272,6 @@ with col2:
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
                 st.markdown(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}% <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
 
-
-    if uploaded_file_bytes and uploaded_file_bytes != None:
-
-        uploaded_file_fetch_opencv = st.checkbox("Get Image Properties (OpenCv)", key="uploaded_file_fetch_opencv")
-
-        if uploaded_file_fetch_opencv:
-            # Read the uploaded image using OpenCV
-            file_bytes = np.asarray(bytearray(uploaded_file_bytes), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
-            # Check if the image was read successfully
-            if image is None:
-                st.error("Error: Could not read the uploaded image file.")
-            else:
-                # Get the top 3 dominant colors
-                top_colors = opencv_get_top_colors(image, n=7)
-
-                # Print the top 3 dominant colors
-                if top_colors:
-                    st.write("Top 5 dominant RGB colors:")
-                    for i, (color, count) in enumerate(top_colors, start=1):
-                        hexcode = rgb_to_hex((color[0], color[1], color[2]))
-                        st.markdown(f"{i}. RGB({color[0]}, {color[1]}, {color[2]}): {hexcode} {count} <span style='color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
-                else:
-                    st.warning("No dominant colors found in the image.")
-
 ###
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
