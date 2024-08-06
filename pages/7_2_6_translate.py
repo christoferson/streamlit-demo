@@ -7,6 +7,7 @@ import logging
 import cmn_auth
 import pyperclip
 from io import BytesIO
+import textwrap as tw
 
 from botocore.exceptions import ClientError
 
@@ -114,6 +115,18 @@ result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_area.markdown(st.session_state["translate_result"])
+    """
+    result_area.code(
+        "\n".join(
+            tw.wrap(
+                st.session_state["translate_result"],
+                width=100,
+                drop_whitespace=True, replace_whitespace=False,
+            )
+        ), language="md"
+    )
+    result_area.code(st.session_state["translate_result"])
+    """
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
     result_columns[0].button(key='copy_button', label='📄 Copy', type='primary', on_click=on_button_copy_clicked)
@@ -240,3 +253,5 @@ def on_button_translate_clicked():
 button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
 button_panel[8].button("Translate", on_click=on_button_translate_clicked)
 button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked)
+
+
