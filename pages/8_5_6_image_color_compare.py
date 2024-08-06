@@ -45,6 +45,75 @@ rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 ######################
 
+
+def stream_result_data(stream):
+
+    result_text = ""
+
+    try: 
+
+        for event in stream:
+            
+            if "chunk" in event:
+
+                chunk = json.loads(event["chunk"]["bytes"])
+
+                if chunk['type'] == 'message_start':
+                    #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
+                    pass
+
+                elif chunk['type'] == 'message_delta':
+                    pass
+
+                elif chunk['type'] == 'content_block_delta':
+                    if chunk['delta']['type'] == 'text_delta':
+                        text = chunk['delta']['text']
+                        result_text += f"{text}"
+                        yield text
+
+                elif chunk['type'] == 'message_stop':
+                    invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                    input_token_count = invocation_metrics["inputTokenCount"]
+                    output_token_count = invocation_metrics["outputTokenCount"]
+                    latency = invocation_metrics["invocationLatency"]
+                    lag = invocation_metrics["firstByteLatency"]
+                    #stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                    #result_area.markdown(result_text)
+                    #st.session_state["translate_result"] = result_text
+                    #yield result_text
+                    #yield output_token_count
+                    pass
+
+
+            elif "internalServerException" in event:
+                exception = event["internalServerException"]
+                yield exception
+            elif "modelStreamErrorException" in event:
+                exception = event["modelStreamErrorException"]
+                yield exception
+            elif "modelTimeoutException" in event:
+                exception = event["modelTimeoutException"]
+                yield exception
+            elif "throttlingException" in event:
+                exception = event["throttlingException"]
+                yield exception
+            elif "validationException" in event:
+                exception = event["validationException"]
+                yield exception
+            else:
+                yield "Unknown Token"
+
+        st.session_state["translate_result"] = result_text
+    
+    except ClientError as err:
+        message = err.response["Error"]["Message"]
+        logger.error("A client error occurred: %s", message)
+        print("A client error occured: " + format(message))
+        yield message
+
+
+######################
+
 def rgb_to_hex(rgb):
     """
     Convert an RGB color tuple to a hexadecimal color code.
@@ -262,6 +331,8 @@ with col2:
     uploaded_file_name = None
     uploaded_file_bytes = None
     uploaded_file_image = None
+    uploaded_file_1_quality = None
+    uploaded_file_1_foreground_colors = []
     if uploaded_file:
         uploaded_file_bytes = uploaded_file.getvalue()
         uploaded_file_image = Image.open(uploaded_file)
@@ -298,9 +369,11 @@ with col2:
             img_quality_sharpness = img_quality['Sharpness']
             img_quality_contrast = img_quality['Contrast']
             st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
+            uploaded_file_1_quality = f"Brightness: {img_quality_brightness:.2f} Sharpness: {img_quality_sharpness:.2f} Contrast: {img_quality_contrast:.2f}"
 
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
 
+            uploaded_file_1_foreground_colors = []
             for fg_dominant_color in fg_dominant_colors:
                 fg_dc_red = fg_dominant_color['Red']
                 fg_dc_blue = fg_dominant_color['Blue']
@@ -310,6 +383,7 @@ with col2:
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
                 st.markdown(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}% <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
+                uploaded_file_1_foreground_colors.append(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}%")
 
 ###
 
@@ -330,6 +404,7 @@ with col2:
             for dominant_color in dominant_colors:
                 color = dominant_color['rgb']
                 st.markdown(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
+                uploaded_file_1_foreground_colors.append(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}%")
 
 ######
 
@@ -345,6 +420,8 @@ with col3:
     uploaded_file_2_name = None
     uploaded_file_2_bytes = None
     uploaded_file_2_image = None
+    uploaded_file_2_quality = None
+    uploaded_file_2_foreground_colors = []
     if uploaded_file_2:
         uploaded_file_2_bytes = uploaded_file_2.getvalue()
         uploaded_file_2_image = Image.open(uploaded_file_2)
@@ -384,7 +461,9 @@ with col3:
             img_quality_sharpness = img_quality['Sharpness']
             img_quality_contrast = img_quality['Contrast']
             st.markdown(f":blue[**Brightness:**] {img_quality_brightness:.2f} :blue[**Sharpness:**] {img_quality_sharpness:.2f} :blue[**Contrast:**] {img_quality_contrast:.2f}")
+            uploaded_file_2_quality = f"Brightness: {img_quality_brightness:.2f} Sharpness: {img_quality_sharpness:.2f} Contrast: {img_quality_contrast:.2f}"
 
+            uploaded_file_2_foreground_colors = []
             for fg_dominant_color in fg_dominant_colors:
                 fg_dc_red = fg_dominant_color['Red']
                 fg_dc_blue = fg_dominant_color['Blue']
@@ -394,6 +473,7 @@ with col3:
                 vfg_dc_simple_color = fg_dominant_color['SimplifiedColor']
                 vfg_dc_pixel_percent = fg_dominant_color['PixelPercent']
                 st.markdown(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}% <span style='font-size:28px;color:rgb({fg_dc_red}, {fg_dc_green}, {fg_dc_blue})'>■</span>", unsafe_allow_html=True)
+                uploaded_file_2_foreground_colors.append(f"RGB({fg_dc_red},{fg_dc_green},{fg_dc_blue}) {fg_dc_hex.upper()} {vfg_dc_css_color} {vfg_dc_pixel_percent:.2f}%")
 
     if uploaded_file_2_bytes and uploaded_file_2_bytes != None:
 
@@ -413,7 +493,7 @@ with col3:
             for dominant_color in dominant_colors:
                 color = dominant_color['rgb']
                 st.markdown(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}% <span style='font-size:28px;color:rgb({color[0]}, {color[1]}, {color[2]})'>■</span>", unsafe_allow_html=True)
-
+                uploaded_file_2_foreground_colors.append(f"RGB{dominant_color['rgb']} {dominant_color['hex'].upper()} {dominant_color['percentage']:.2f}%")
 
     #####
 
@@ -592,8 +672,8 @@ with bcol2:
 
     st.divider()
 
-    compare_prompt = """I have provided you 2 images. Please do the following:
-    1. For each image, list out the dominant colors in the foreground or subject. Use Hex Codes, RGB, and Css Color Names to describe each color.
+    compare_prompt = """I have provided you 2 images to compare their color and design. Please do the following:
+    1. For each image, list out the dominant colors in the foreground or of the subject. Use Hex Codes, RGB, and Css Color Names to describe each color.
     2. Compare the 2 images and describe how similar or different are they.
     3. In the scale of 1 to 10, 1 is totally different and 10 identical, rate and compare the dominant colors of the foreground or subject of the 2 images.
     Think step by step and make sure to verify that the color codes are as accurate as possible.
@@ -655,66 +735,111 @@ with bcol2:
                 body = json.dumps(request))
 
             #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-            result_text = ""
+            #result_text = ""
             result_container = st.container(border=True)
-            result_area = st.empty()
+            #result_area = st.empty()
             stream = response["body"]
-            for event in stream:
-                
-                if event["chunk"]:
+            result_container.write_stream(stream_result_data(stream))
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
+            st.chat_message("system").write(message)
 
-                    chunk = json.loads(event["chunk"]["bytes"])
+    st.divider()
 
-                    if chunk['type'] == 'message_start':
-                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        pass
+    uploaded_file_1_foreground_colors_meta = '\n'.join(str(item) for item in uploaded_file_1_foreground_colors)
+    uploaded_file_2_foreground_colors_meta = '\n'.join(str(item) for item in uploaded_file_2_foreground_colors)
 
-                    elif chunk['type'] == 'message_delta':
-                        pass
+    compare_with_meta_prompt = f"""I have provided you 2 images as well as metadata regarding the image quality and dominant foreground colors.
+    <image_1_quality>
+    {uploaded_file_1_quality}
+    </image_1_quality>
+    <image_1_foreground_colors>
+    {uploaded_file_1_foreground_colors_meta}
+    </image_1_foreground_colors>
 
-                    elif chunk['type'] == 'content_block_delta':
-                        if chunk['delta']['type'] == 'text_delta':
-                            text = chunk['delta']['text']
-                            #await msg.stream_token(f"{text}")
-                            result_text += f"{text}"
-                            result_area.write(result_text)
+    <image_2_quality>
+    {uploaded_file_2_quality}
+    </image_2_quality>
+    <image_2_foreground_colors>
+    {uploaded_file_2_foreground_colors_meta}
+    </image_2_foreground_colors>
 
-                    elif chunk['type'] == 'message_stop':
-                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                        input_token_count = invocation_metrics["inputTokenCount"]
-                        output_token_count = invocation_metrics["outputTokenCount"]
-                        latency = invocation_metrics["invocationLatency"]
-                        lag = invocation_metrics["firstByteLatency"]
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+    
+    Please do the following:
+    1. For each image, list out the dominant colors in the foreground or subject. Use Hex Codes, RGB, and Css Color Names to describe each color.
+    2. Check if the image quality are good and there are no bad characteristics like Underexposed, Overexposed, Dim, Low contrast, Blurred, Grainy/Noisy, Oversaturated, Lens flare, Vignetting, Poor white balance etc.
+    3. Verify the provided dominant foreground colors of each image if they are accurate and then re-order them as necessary in descending order. Limit the output to the top 5 colors.
+    4. Comparison Section: While also looking back at the prior information from previous steps, compare the 2 images and describe how similar or different are they.
+    5. Conclusion Section: As a conclusion, consider all prior information and then in the scale of 1 to 10, 1 is totally different and 10 identical, rate and compare the dominant colors of the foreground or subject of the 2 images.
+    Think step by step and make sure to verify that the color codes are as accurate as possible.
+    Show each step as a separate and independent paragraph with a clear header label. Prefix each section title with ***. 
+    Provide sufficient space in between the sections or steps by adding 3 newlines after the sections or paragraphs.
+    Provide the output in both English and Japanese language.
+    """
 
-                        invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_text_final = f"""{result_text}  \n\n:blue[{invocation_metrics}]"""
-                        result_area.write(f"{result_text_final}")
+    compare_with_meta_btn = st.button("Compare with Meta", type="primary", disabled=uploaded_file_name==None or uploaded_file_2_name==None)
 
-                elif "internalServerException" in event:
-                    exception = event["internalServerException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "modelStreamErrorException" in event:
-                    exception = event["modelStreamErrorException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "modelTimeoutException" in event:
-                    exception = event["modelTimeoutException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "throttlingException" in event:
-                    exception = event["throttlingException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "validationException" in event:
-                    exception = event["validationException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                else:
-                    result_text += f"\n\nUnknown Token"
-                    result_area.write(result_text)
+    if compare_with_meta_btn:
+        
+        content =  [
+                        {
+                            "type": "text",
+                            "text": f"{compare_with_meta_prompt}"
+                        }
+                    ]
 
+        if uploaded_file_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_type,
+                        "data": uploaded_file_base64,
+                    },
+                }
+            )
+
+        if uploaded_file_2_name:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": uploaded_file_2_type,
+                        "data": uploaded_file_2_base64,
+                    },
+                }
+            )
+
+        message_history = []
+        message_history.append({"role": "user", "content": content})
+
+        request = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "temperature": opt_temperature,
+            "top_p": opt_top_p,
+            "top_k": opt_top_k,
+            "max_tokens": opt_max_tokens,
+            "system": opt_system_msg,
+            "messages": message_history #st.session_state.messages
+        }
+
+        try:
+            response = bedrock_runtime.invoke_model_with_response_stream(
+                modelId = opt_model_id, #bedrock_model_id, 
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request))
+
+            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+            #result_text = ""
+            result_container = st.container(border=True)
+            #result_area = st.empty()
+            stream = response["body"]
+            result_container.write_stream(stream_result_data(stream))
         except ClientError as err:
             message = err.response["Error"]["Message"]
             logger.error("A client error occurred: %s", message)
