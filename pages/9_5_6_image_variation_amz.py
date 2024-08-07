@@ -78,7 +78,7 @@ variation_prompts_init = [
     "Stylish and comfortable sandals for women, perfect for a beach vacation or resort wear",
 ]
 
-opt_model_id_list = [ "stability.stable-diffusion-xl-v1" ]
+opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
 
 opt_style_preset_list = [
     "anime",
@@ -110,7 +110,7 @@ opt_steps_help = """
 Generation step determines how many times the image is sampled. More steps can result in a more accurate result.
 """
 
-opt_model_id = "stability.stable-diffusion-xl-v1"
+opt_model_id = "amazon.titan-image-generator-v2:0"
 opt_negative_prompt = opt_negative_prompt_list
 
 with st.sidebar:
@@ -247,22 +247,21 @@ if generate_btn:
                     col_index = i % 3
                         
                     request = {
-                            "text_prompts": (
-                                #[{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
-                                [{"text": variation_prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt_elements]
-                            ),
-                            "cfg_scale": opt_config_scale,
-                            #"clip_guidance_preset"
-                            "width": opt_dimensions_width,
-                            "height": opt_dimensions_height,
-                            "seed": seed, #random.randint(0, 4294967295),
-                            #"start_schedule": config["start_schedule"],
-                            "steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
-                            "style_preset": opt_style_preset,
-                            "samples": 1,
-                            "init_image": uploaded_file_base64,
-                            "init_image_mode": "IMAGE_STRENGTH",
-                            #"image_strength": 1,
+                            "taskType": "TEXT_IMAGE",
+                            "textToImageParams": {
+                                "text": variation_prompt,
+                                "conditionImage": uploaded_file_base64,
+                                "controlStrength": 0.7, #opt_config_scale,
+                                "controlMode": "CANNY_EDGE"
+                            },
+                            "imageGenerationConfig": {
+                                "numberOfImages": 1,
+                                "height": opt_dimensions_height,
+                                "width": opt_dimensions_width,
+                                "cfgScale": opt_config_scale,
+                                "quality": "standard",
+                                "seed": seed,
+                            }
                         }
 
                     response = bedrock_runtime.invoke_model(
@@ -272,7 +271,7 @@ if generate_btn:
                         body = json.dumps(request))
                     
                     response_body = json.loads(response.get("body").read())
-                    finish_reason = response_body.get("artifacts")[0].get("finishReason")
+                    finish_reason = response_body.get("error")
 
                     # Display the image and metadata in the corresponding column
                     with cols[col_index]:
@@ -280,7 +279,8 @@ if generate_btn:
                         if finish_reason == 'ERROR' or finish_reason == 'CONTENT_FILTERED':
                             st.markdown(f"Image generation error. Error code is {finish_reason}")
                         else:
-                            response_image_base64 = response_body["artifacts"][0].get("base64")
+                            #response_image_base64 = response_body["images"][0].get("base64")
+                            response_image_base64 = response_body.get("images")[0]
                             response_image:Image = base64_to_image(response_image_base64)
                             st.image(response_image)
                             st.markdown(f":orange[*{variation_prompt}*]")
