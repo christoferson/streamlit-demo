@@ -103,6 +103,10 @@ opt_style_preset_help = """
 A style preset that guides the image model towards a particular style.
 """
 
+opt_similarity_strength_help = """
+Specifies how similar the generated image should be to the input image(s) Use a lower value to introduce more randomness in the generation. Accepted range is between 0.2 and 1.0 (both inclusive), while a default of 0.7 is used if this parameter is missing in the request.
+"""
+
 opt_config_scale_help = """
 Determines how much the final image portrays the prompt. Use a lower number to increase randomness in the generation.
 """
@@ -117,9 +121,10 @@ opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed
 
 with st.sidebar:
     #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=1.1, max_value=10.0, value=8.0, step=0.1, key="config_scale", help=opt_config_scale_help)
-    opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+    #opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+    opt_similarity_strength = st.slider(label=":blue[**Similarity Strength**] - Loose vs Strict", min_value=0.2, max_value=1.0, value=0.7, step=0.1, key="opt_similarity_strength", help=opt_similarity_strength_help)
+    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=1.1, max_value=8.0, value=8.0, step=0.1, key="config_scale", help=opt_config_scale_help)
+    #opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
     opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 1, key="dimensions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
@@ -237,7 +242,7 @@ if generate_btn:
             # Print commmon request properties
             current_datetime = datetime.now()
             current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
-            st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
+            st.markdown(f":blue[similarity] {opt_similarity_strength} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
             
             cols = st.columns(3)
             
@@ -254,14 +259,14 @@ if generate_btn:
                                 "text": variation_prompt,
                                 "negativeText": opt_negative_prompt_csv,
                                 "images": [uploaded_file_base64],
-                                "similarityStrength": 0.7,
+                                "similarityStrength": opt_similarity_strength,
                             },
                             "imageGenerationConfig": {
                                 "numberOfImages": 1,
                                 "height": opt_dimensions_height,
                                 "width": opt_dimensions_width,
                                 "cfgScale": opt_config_scale,
-                                #"quality": "standard",
+                                "quality": "premium", #"standard" || "premium"
                                 "seed": seed,
                             }
                         }
