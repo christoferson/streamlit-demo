@@ -70,14 +70,15 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 st.markdown(cmn_constants.css_btn_primary, unsafe_allow_html=True)
 
 variation_prompts_init = [
-    "Trendy casual sneakers, comfortable design, vibrant colors, for young adults",
-    "Stylish high heel shoes, modern design, comfortable fit, for fashion-forward women",
-    "Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts",
-    "High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs",
-    "Slip-resistant work boots, with steel toe protection for construction or industrial settings",
-    "Stylish and comfortable sandals for women, perfect for a beach vacation or resort wear",
+    "Trendy casual sneakers, comfortable design, vibrant colors, for young adults, highly detailed, 4k resolution",
+    "Stylish high heel shoes, modern design, comfortable fit, for fashion-forward women, highly detailed, 4k resolution",
+    "Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts, highly detailed, 4k resolution",
+    "High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs, highly detailed, 4k resolution",
+    "Slip-resistant work boots, with steel toe protection for construction or industrial settings, highly detailed, 4k resolution",
+    "Stylish and comfortable sandals for women, perfect for a beach vacation or resort wear, highly detailed, 4k resolution",
 ]
 
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
 
 opt_style_preset_list = [
@@ -95,7 +96,7 @@ opt_negative_prompt_list = [
 ]
 
 opt_dimensions_list = [
-    "1024x1024", "1152x896", "1216x832", "1344x768", "1536x640", "640x1536", "768x1344", "832x1216", "896x1152"
+    "1024x1024", "1152x768"
 ]
 
 opt_style_preset_help = """
@@ -116,9 +117,9 @@ opt_negative_prompt = opt_negative_prompt_list
 with st.sidebar:
     #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
+    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=1.1, max_value=10.0, value=8.0, step=0.1, key="config_scale", help=opt_config_scale_help)
     opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
-    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
+    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 1, key="dimensions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
     opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
@@ -247,19 +248,19 @@ if generate_btn:
                     col_index = i % 3
                         
                     request = {
-                            "taskType": "TEXT_IMAGE",
-                            "textToImageParams": {
+                            "taskType": "IMAGE_VARIATION",
+                            "imageVariationParams": {
                                 "text": variation_prompt,
-                                "conditionImage": uploaded_file_base64,
-                                "controlStrength": 0.7, #opt_config_scale,
-                                "controlMode": "CANNY_EDGE"
+                                "negativeText": opt_negative_prompt_csv,
+                                "images": [uploaded_file_base64],
+                                "similarityStrength": 0.7,
                             },
                             "imageGenerationConfig": {
                                 "numberOfImages": 1,
                                 "height": opt_dimensions_height,
                                 "width": opt_dimensions_width,
                                 "cfgScale": opt_config_scale,
-                                "quality": "standard",
+                                #"quality": "standard",
                                 "seed": seed,
                             }
                         }
