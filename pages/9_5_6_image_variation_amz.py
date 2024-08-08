@@ -113,6 +113,7 @@ Generation step determines how many times the image is sampled. More steps can r
 
 opt_model_id = "amazon.titan-image-generator-v2:0"
 opt_negative_prompt = opt_negative_prompt_list
+opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
 with st.sidebar:
     #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
@@ -123,7 +124,7 @@ with st.sidebar:
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
     opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
-    opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value="", placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
+    opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
 
 
 st.markdown("🖼️ Image Variation 1")
