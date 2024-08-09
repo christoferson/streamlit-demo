@@ -70,13 +70,41 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 st.markdown(cmn_constants.css_btn_primary, unsafe_allow_html=True)
 
 variation_prompts_init = [
-    "Trendy casual sneakers, comfortable design, vibrant colors, for young adults, highly detailed, 4k resolution",
-    "Stylish high heel shoes, modern design, comfortable fit, for fashion-forward women, highly detailed, 4k resolution",
-    "Rugged hiking boots, waterproof material, excellent traction, for outdoor enthusiasts, highly detailed, 4k resolution",
-    "High-end designer shoes, premium materials, unique aesthetic, for fashion connoisseurs, highly detailed, 4k resolution",
-    "Slip-resistant work boots, with steel toe protection for construction or industrial settings, highly detailed, 4k resolution",
-    "Stylish and comfortable sandals for women, perfect for a beach vacation or resort wear, highly detailed, 4k resolution",
+    "Colorful, realistic shoe based on this sketch. Add vibrant colors, textures, and details to make it look like a real, stylish sneaker. Highly detailed. 4K.",
+    #"Transform this shoe sketch into a vibrant, photorealistic sneaker. Add rich textures, bold colors, and intricate details. Maintain the original shape while bringing it to life. 4K resolution, highly detailed.",
+    #"Color this shoe outline with a modern, trendy palette. Incorporate sleek materials, subtle gradients, and eye-catching accents. Make it look like a premium, fashionable sneaker. Ultra-high definition, sharp details.",
+    "Breathe life into this shoe sketch with a explosion of colors. Create a hyper-realistic sneaker with visible fabric textures, reflective elements, and complex stitching patterns. Photorealistic quality, 4K detail.",
+    #"Render this shoe drawing as a cutting-edge athletic sneaker. Use a mix of mesh, synthetic leather, and rubber textures. Add dynamic color blocking and futuristic design elements. Highly detailed, studio-quality image.",
+    "Convert this basic shoe outline into a luxury sneaker design. Incorporate premium materials like suede, full-grain leather, and metallic accents. Use a sophisticated color palette. Photorealistic rendering, ultra-high resolution.",
+    "Transform this sketch into a street-style sneaker icon. Add bold graffiti-inspired colors, unique texture combinations, and urban-themed details. Keep the original silhouette but make it pop with vivid realism. 4K quality.",
+    "Bring this shoe sketch to life as a retro-inspired sneaker. Use vintage color schemes, classic materials, and nostalgic design elements. Add wear and texture for authenticity. Highly detailed, photorealistic rendering.",
+    #"Color this outline to create a futuristic, tech-inspired sneaker. Incorporate holographic elements, neon accents, and sleek, modern textures. Make it look like it's from the year 2050. Ultra-high definition, sharp details.",
+    "Render this shoe sketch as a high-performance running sneaker. Add breathable mesh textures, supportive overlays, and a dynamic sole design. Use a gradient color scheme for a sense of motion. 4K resolution, highly detailed.",
+    "Transform this basic shoe drawing into an avant-garde fashion sneaker. Use unconventional color combinations, mixed materials, and artistic details. Make it worthy of a high-fashion runway. Photorealistic quality, intricate details."
 ]
+
+variation_prompts_init = [
+    "Transform this sketch into a cyberpunk-inspired sneaker. Blend neon colors with matte black, add holographic accents and LED-like details. Make it look futuristic yet wearable. 4K resolution, hyper-detailed.",
+    "Render this outline as an eco-friendly, sustainable sneaker. Use textures resembling recycled materials, natural dyes, and organic shapes. Add earthy tones with pops of vibrant green. Highly detailed, photorealistic quality.",
+    "Bring this shoe sketch to life as a luxurious basketball sneaker. Combine premium leather with high-tech performance materials. Use a bold color scheme with metallic gold accents. Ultra-high definition, visible textures.",
+    "Convert this drawing into a whimsical, fairy-tale inspired shoe. Add fantastical elements like tiny flowers, sparkling dust, and iridescent materials. Use pastel colors with magical shimmer. Dreamlike quality, intricate 4K details.",
+    "Transform this outline into a rugged, all-terrain hiking boot. Add durable textures like waterproof leather and ripstop fabric. Use earth tones with bright accents for visibility. Hyper-realistic, showing every stitch and tread.",
+    "Render this sketch as a 1950s vintage-style sneaker with a modern twist. Combine classic canvas textures with contemporary color blocking. Add retro-futuristic details. High-resolution, with a slightly worn, authentic look.",
+    "Bring this shoe to life as a high-fashion platform sneaker. Mix luxe materials like patent leather and suede. Use a monochromatic color scheme with a pop of neon. Avant-garde style, photorealistic rendering.",
+    "Color this outline as a glow-in-the-dark party sneaker. Use fluorescent pigments and light-reactive materials. Add fun, youthful patterns and textures. Ultra-vibrant in normal light, with visible glow effect. 4K detail.",
+]
+
+
+variation_prompts_init = [
+    "Transform this basic sketch into a steampunk-inspired boot. Incorporate textures of aged leather, polished brass, and intricate clockwork. Use a rich, vintage color palette. Highly detailed with visible rivets and gears."
+    "Render this drawing as a ballet-inspired athletic shoe. Blend the elegance of satin with the functionality of performance mesh. Use soft, pastel tones with ribbon-like laces. Graceful yet sporty, in high-definition detail.",
+    "Convert this outline into a comic book style sneaker. Use bold, primary colors with black outlines and halftone pattern fills. Add 'pow' and 'zoom' text elements as part of the design. Highly stylized yet 3D-looking.",
+    "Bring this shoe sketch to life as a sushi-inspired sneaker. Use textures and colors reminiscent of nori, rice, and various fish. Add chopstick-like laces and wasabi-colored accents. Photorealistic yet whimsical, 4K detail.",
+    "Transform this basic shape into a glacier-inspired winter boot. Use icy blue tones, crystalline textures, and frosty white accents. Add the appearance of carved ice and snow-like fur trim. Ultra-high definition, cold and crisp looking.",
+    "Render this outline as a Moroccan-inspired slip-on. Incorporate intricate mosaic patterns, rich jewel tones, and the texture of embroidered fabrics. Add metallic thread-like details. Ornate and luxurious, with photorealistic quality.",
+    "Color this sketch as a firefighter-inspired safety boot. Use durable, heat-resistant textures, reflective strips, and heavy-duty hardware. Combine black and yellow with a pop of fire-engine red. Rugged and functional, highly detailed.",
+]
+
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
@@ -92,7 +120,8 @@ opt_style_preset_list = [
 opt_negative_prompt_list = [
     "ugly", "tiling", "out of frame",
     "disfigured", "deformed", "bad anatomy", "cut off", "low contrast", 
-    "underexposed", "overexposed", "bad art", "beginner", "amateur", "blurry", "draft", "grainy"
+    "underexposed", "overexposed", "bad art", "beginner", "amateur", "blurry", "draft", "grainy",
+    "distorted shape", "additional lines", "changing the original sketch structure"
 ]
 
 opt_dimensions_list = [
@@ -117,7 +146,7 @@ Generation step determines how many times the image is sampled. More steps can r
 
 opt_model_id = "amazon.titan-image-generator-v2:0"
 opt_negative_prompt = opt_negative_prompt_list
-opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
+opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy, distorted shape, additional lines, changing the original sketch structure"
 
 with st.sidebar:
     #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
@@ -185,10 +214,10 @@ if uploaded_file:
         uploaded_file_base64 = image_to_base64(uploaded_file_image, mime_mapping[uploaded_file_type])
 
 
-
-    st.image(uploaded_file_image, caption=f"Base Image {original_width}x{original_height} {new_width}x{new_height}",
-        use_column_width="auto" #"auto", "always", "never", or bool
-    )
+    with st.expander("Image", expanded=True):
+        st.image(uploaded_file_image, caption=f"Base Image {original_width}x{original_height} {new_width}x{new_height}",
+            use_column_width="auto" #"auto", "always", "never", or bool
+        )
     print(uploaded_file_type)
     #uploaded_file_bytes = uploaded_file.read()
     #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
@@ -197,9 +226,10 @@ if uploaded_file:
 # Join the elements with a newline character
 variation_prompts_init_str = "\n".join(variation_prompts_init)
 
-# Display the text area with the joined string
-variation_prompts_str = st.text_area(":blue[**Variation Prompts**]", value=variation_prompts_init_str, height=170, max_chars=2000,
-                                     placeholder="Enter each variation as a separate line")
+with st.expander("Prompts", expanded=True):
+    # Display the text area with the joined string
+    variation_prompts_str = st.text_area(":blue[**Variation Prompts**]", value=variation_prompts_init_str, height=170, max_chars=2000,
+                                        placeholder="Enter each variation as a separate line")
 
 generate_btn = st.button("Generate", type="primary")
 
@@ -211,7 +241,7 @@ if generate_btn:
     variation_prompts_lines = variation_prompts_str.split("\n")
 
     # Take only the first 6 lines
-    variation_prompts = [line.strip() for line in variation_prompts_lines[:1] if line.strip()]
+    variation_prompts = [line.strip() for line in variation_prompts_lines[:8] if line.strip()]
 
     #message_history = st.session_state.menu_img_variation_messages.copy()
     #message_history.append({"role": "user", "content": prompt})
@@ -254,22 +284,21 @@ if generate_btn:
                     col_index = i % 3
                         
                     request = {
-                            "taskType": "COLOR_GUIDED_GENERATION",
-                            "colorGuidedGenerationParams": {
+                            "taskType": "TEXT_IMAGE",
+                            "textToImageParams": {
                                 "text": variation_prompt,
-                                #"text": "digital painting of a girl, dreamy and ethereal, pink eyes, peaceful expression, ornate frilly dress, fantasy, intricate, elegant, rainbow bubbles, highly detailed, digital painting, artstation, concept art, smooth, sharp focus, illustration",
                                 "negativeText": opt_negative_prompt_csv,
-                                #"colors": ['#ff8080', '#ffb280', '#ffe680', '#e5ff80'],
-                                "colors": ["#ff8080", "#ffb280", "#ffe680", "#ffe680"],
-                                #"image": uploaded_file_base64,
-                                #"referenceImage": uploaded_file_base64,
-                                #"similarityStrength": opt_similarity_strength,
+                                "conditionImage": uploaded_file_base64,
+                                "controlMode": "CANNY_EDGE",
+                                #"controlStrength": 0.7
                             },
                             "imageGenerationConfig": {
                                 "numberOfImages": 1,
-                                "height": 512,
-                                "width": 512,
-                                "cfgScale": 8.0
+                                "height": opt_dimensions_height, #1024,
+                                "width": opt_dimensions_width, #1024,
+                                "cfgScale": opt_config_scale,
+                                #"quality": "premium", #"standard" || "premium"
+                                "seed": seed,
                             }
                         }
                     
