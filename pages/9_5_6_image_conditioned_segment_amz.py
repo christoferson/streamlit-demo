@@ -70,91 +70,17 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 st.markdown(cmn_constants.css_btn_primary, unsafe_allow_html=True)
 
 variation_prompts_init = [
-    "Colorful, realistic shoe based on this sketch. Add vibrant colors, textures, and details to make it look like a real, stylish sneaker. Highly detailed. 4K.",
-    #"Transform this shoe sketch into a vibrant, photorealistic sneaker. Add rich textures, bold colors, and intricate details. Maintain the original shape while bringing it to life. 4K resolution, highly detailed.",
-    #"Color this shoe outline with a modern, trendy palette. Incorporate sleek materials, subtle gradients, and eye-catching accents. Make it look like a premium, fashionable sneaker. Ultra-high definition, sharp details.",
-    "Breathe life into this shoe sketch with a explosion of colors. Create a hyper-realistic sneaker with visible fabric textures, reflective elements, and complex stitching patterns. Photorealistic quality, 4K detail.",
-    #"Render this shoe drawing as a cutting-edge athletic sneaker. Use a mix of mesh, synthetic leather, and rubber textures. Add dynamic color blocking and futuristic design elements. Highly detailed, studio-quality image.",
-    "Convert this basic shoe outline into a luxury sneaker design. Incorporate premium materials like suede, full-grain leather, and metallic accents. Use a sophisticated color palette. Photorealistic rendering, ultra-high resolution.",
-    "Transform this sketch into a street-style sneaker icon. Add bold graffiti-inspired colors, unique texture combinations, and urban-themed details. Keep the original silhouette but make it pop with vivid realism. 4K quality.",
-    "Bring this shoe sketch to life as a retro-inspired sneaker. Use vintage color schemes, classic materials, and nostalgic design elements. Add wear and texture for authenticity. Highly detailed, photorealistic rendering.",
-    #"Color this outline to create a futuristic, tech-inspired sneaker. Incorporate holographic elements, neon accents, and sleek, modern textures. Make it look like it's from the year 2050. Ultra-high definition, sharp details.",
-    "Render this shoe sketch as a high-performance running sneaker. Add breathable mesh textures, supportive overlays, and a dynamic sole design. Use a gradient color scheme for a sense of motion. 4K resolution, highly detailed.",
-    "Transform this basic shoe drawing into an avant-garde fashion sneaker. Use unconventional color combinations, mixed materials, and artistic details. Make it worthy of a high-fashion runway. Photorealistic quality, intricate details."
+    "Render Acme shoes with royal blue upper, white sole, gold laces. Navy heel, silver toe cap. Red tongue with white logo. Black midsole accent. Preserve Acme logo in original colors. Photorealistic 8K, studio lighting.",
+    "Create Acme sneakers with forest green upper, tan sole. Brown laces, beige heel. Olive tongue, gold logo. White midsole accent. Keep Acme logo unchanged. Detailed texture, outdoor lighting.",
+    "Generate Acme runners with crimson upper, black sole. White laces, gray heel. Black tongue, silver logo. Red midsole accent. Original Acme logo colors. High-def render, dynamic lighting.",
+    "Produce Acme shoes with purple upper, light gray sole. Lavender laces, dark purple heel. White tongue, purple logo. Silver midsole accent. Maintain Acme logo design. Photorealistic, soft lighting.",
+    "Visualize Acme sneakers with orange upper, navy sole. Blue laces, white heel. Navy tongue, orange logo. Light blue midsole accent. Preserve original Acme logo. 8K resolution, bright lighting.",
+    "Render Acme runners with teal upper, white sole. Navy laces, light blue heel. White tongue, teal logo. Dark blue midsole accent. Keep Acme logo as is. Detailed textures, studio setup.",
+    "Create Acme shoes with charcoal upper, neon green sole. Black laces, gray heel. Green tongue, white logo. Yellow midsole accent. Original Acme logo intact. High-contrast, futuristic lighting.",
+    "Generate Acme sneakers with pastel pink upper, white sole. Light gray laces, dark pink heel. White tongue, pink logo. Soft purple midsole accent. Preserve Acme logo colors. Dreamy, soft-focus rendering.",
+    "Produce Acme runners with metallic silver upper, black sole. White laces, gunmetal heel. Black tongue, silver logo. Red midsole accent. Keep Acme logo design. Ultra-realistic, dramatic lighting."
 ]
 
-variation_prompts_init = [
-    "Transform this sketch into a cyberpunk-inspired sneaker. Blend neon colors with matte black, add holographic accents and LED-like details. Make it look futuristic yet wearable. 4K resolution, hyper-detailed.",
-    "Render this outline as an eco-friendly, sustainable sneaker. Use textures resembling recycled materials, natural dyes, and organic shapes. Add earthy tones with pops of vibrant green. Highly detailed, photorealistic quality.",
-    "Bring this shoe sketch to life as a luxurious basketball sneaker. Combine premium leather with high-tech performance materials. Use a bold color scheme with metallic gold accents. Ultra-high definition, visible textures.",
-    "Convert this drawing into a whimsical, fairy-tale inspired shoe. Add fantastical elements like tiny flowers, sparkling dust, and iridescent materials. Use pastel colors with magical shimmer. Dreamlike quality, intricate 4K details.",
-    "Transform this outline into a rugged, all-terrain hiking boot. Add durable textures like waterproof leather and ripstop fabric. Use earth tones with bright accents for visibility. Hyper-realistic, showing every stitch and tread.",
-    "Render this sketch as a 1950s vintage-style sneaker with a modern twist. Combine classic canvas textures with contemporary color blocking. Add retro-futuristic details. High-resolution, with a slightly worn, authentic look.",
-    "Bring this shoe to life as a high-fashion platform sneaker. Mix luxe materials like patent leather and suede. Use a monochromatic color scheme with a pop of neon. Avant-garde style, photorealistic rendering.",
-    "Color this outline as a glow-in-the-dark party sneaker. Use fluorescent pigments and light-reactive materials. Add fun, youthful patterns and textures. Ultra-vibrant in normal light, with visible glow effect. 4K detail.",
-]
-
-
-variation_prompts_init = [
-    "Transform this basic sketch into a steampunk-inspired boot. Incorporate textures of aged leather, polished brass, and intricate clockwork. Use a rich, vintage color palette. Highly detailed with visible rivets and gears."
-    "Render this drawing as a ballet-inspired athletic shoe. Blend the elegance of satin with the functionality of performance mesh. Use soft, pastel tones with ribbon-like laces. Graceful yet sporty, in high-definition detail.",
-    "Convert this outline into a comic book style sneaker. Use bold, primary colors with black outlines and halftone pattern fills. Add 'pow' and 'zoom' text elements as part of the design. Highly stylized yet 3D-looking.",
-    "Bring this shoe sketch to life as a sushi-inspired sneaker. Use textures and colors reminiscent of nori, rice, and various fish. Add chopstick-like laces and wasabi-colored accents. Photorealistic yet whimsical, 4K detail.",
-    "Transform this basic shape into a glacier-inspired winter boot. Use icy blue tones, crystalline textures, and frosty white accents. Add the appearance of carved ice and snow-like fur trim. Ultra-high definition, cold and crisp looking.",
-    "Render this outline as a Moroccan-inspired slip-on. Incorporate intricate mosaic patterns, rich jewel tones, and the texture of embroidered fabrics. Add metallic thread-like details. Ornate and luxurious, with photorealistic quality.",
-    "Color this sketch as a firefighter-inspired safety boot. Use durable, heat-resistant textures, reflective strips, and heavy-duty hardware. Combine black and yellow with a pop of fire-engine red. Rugged and functional, highly detailed.",
-]
-
-variation_prompts_init = [
-    "Transform this outline into a bioluminescent deep-sea inspired sneaker. Use dark blues and blacks with glowing neon accents. Add textures resembling fish scales and jellyfish tentacles. Ethereal and mysterious, in 4K detail."
-    "Render this sketch as a Bauhaus-inspired minimalist shoe. Use primary colors in geometric blocks. Incorporate textures of smooth leather and canvas. Clean lines, functional aesthetics, highly detailed yet simple.",
-    "Bring this shoe to life as a baroque-style formal sneaker. Add ornate gold filigree patterns over rich velvet textures. Use deep, royal colors like burgundy and navy. Opulent and extravagant, with photorealistic detailing.",
-    "Convert this drawing into a circuit board sneaker. Use green and silver tones, add metallic pathways and electronic component-like details. Make it look like a wearable piece of technology. Ultra-high definition, futuristic.",
-    "Color this outline as a candy-inspired platform shoe. Use swirling patterns of bright, saturated colors. Add textures that look like hard candy, gummy bears, and cotton candy. Playful and mouth-watering, in vivid 4K."
-    "Transform this basic shape into a zen garden slip-on. Use sandy textures, incorporate patterns like raked sand and placed rocks. Add bamboo-like elements. Serene earth tones, with highly detailed, calming aesthetics.",
-    "Render this sketch as a post-apocalyptic survival boot. Combine distressed leather with repurposed materials like tire treads and metal scraps. Use muted, dusty colors with rust accents. Weathered, rugged, highly detailed.",
-    "Bring this outline to life as a Art Nouveau-inspired evening shoe. Use flowing, organic lines and nature-inspired motifs. Add iridescent peacock feather patterns and delicate floral elements. Elegant and artistic, in 4K detail.",
-    "Color this drawing as a tropical rainforest hiking shoe. Use vibrant greens and earthy browns, add textures resembling leaves, bark, and exotic flowers. Include subtle animal print accents. Lush and wild, photorealistic quality.",
-]
-
-
-variation_prompts_init = [
-    "Transform this sketch into a constellation-themed sneaker. Use deep space blues and purples with glittering star-like accents. Add zodiac symbols and galactic swirls. Cosmic and dreamy, with ultra-high definition details.",
-    "Render this outline as a Mondrian-inspired color block shoe. Use primary colors in geometric sections divided by bold black lines. Clean, artistic, and striking, with visible canvas-like textures. Highly detailed, modernist aesthetic.",
-    "Bring this shoe to life as a stealth tactical boot. Use matte black textures with subtle dark grey patterns for camouflage effect. Add technical details like reinforced toe caps and ankle supports. Sleek, functional, 4K resolution.",
-    "Convert this drawing into a rococo-style mule. Use pastel colors, add intricate floral patterns and cherub motifs. Incorporate textures of silk and delicate lace. Ornate and romantic, with photorealistic detailing.",
-    #"Color this sketch as a volcano-inspired trail runner. Use gradients of black, red, and orange to mimic cooling lava. Add textures resembling volcanic rock and ash. Dynamic and intense, with highly detailed, textured surfaces.",
-    "Transform this basic shape into a stained-glass inspired formal shoe. Use jewel tones separated by black lines to mimic lead caming. Add a glossy finish to resemble polished glass. Artistic and luminous, in vivid 4K detail.",
-    "Render this outline as a quantum physics-themed sneaker. Use cool blues and purples, add patterns representing particle waves and atomic structures. Incorporate holographic elements. Cerebral and cutting-edge, ultra-high definition.",
-    "Bring this shoe sketch to life as a Día de los Muertos celebration boot. Use vibrant colors, incorporate intricate sugar skull patterns and marigold motifs. Add textures resembling embroidered fabric. Festive and cultural, highly detailed.",
-    "Color this drawing as a bonsai-inspired minimalist sandal. Use natural wood tones and textures, add delicate branch-like straps and leaf-shaped accents. Zen and organic, with 4K photorealistic wood grain details.",
-    "Transform this outline into a Van Gogh 'Starry Night' inspired sneaker. Use swirling blues and yellows, add textured brushstroke patterns. Make it look like a wearable masterpiece. Highly detailed, 4K resolution.",
-]
-
-variation_prompts_init = [
-    "Render this sketch as a bioluminescent fungi boot. Use earthy browns with glowing neon accents. Add textures resembling mushroom caps and mycelium networks. Ethereal and organic, ultra-high definition.",
-    "Bring this shoe to life as a Fabergé egg-inspired formal heel. Use pastel colors, add intricate gold filigree and jewel-like embellishments. Ornate and luxurious, with photorealistic detailing.",
-    "Convert this drawing into a solar system sneaker. Use deep space black with planetary rings and orbits. Add textures of different planet surfaces. Cosmic and educational, in vivid 4K detail.",
-    "Color this outline as a Venetian carnival masquerade shoe. Use rich jewel tones, add intricate mask-like patterns and feather textures. Mysterious and elegant, highly detailed.",
-    "Transform this basic shape into a coral reef sandal. Use vibrant underwater colors, add textures of coral, sea anemones, and fish scales. Vibrant and alive, with ultra-high definition marine details.",
-    "Render this sketch as a steampunk aviator boot. Combine distressed leather with brass gears and gauges. Use warm browns and metallic accents. Retro-futuristic and functional, in 4K detail.",
-    "Bring this outline to life as a Mondrian-inspired color block heel. Use primary colors in geometric sections divided by bold black lines. Clean, artistic, and striking, with visible canvas-like textures.",
-    "Color this drawing as a Northern Lights-inspired trail runner. Use dark blues and greens with streaks of purple and pink aurora effects. Add textures resembling snow and ice. Magical and dynamic, photorealistic quality.",
-    "Transform this sketch into a Día de Muertos celebration sneaker. Use vibrant colors, incorporate sugar skull patterns and marigold motifs. Festive and cultural, highly detailed.",
-]
-
-
-variation_prompts_init = [
-    "Render this outline as a cyberpunk street racer boot. Use neon colors over matte black, add holographic accents and LED-like details. Futuristic and edgy, with ultra-high definition textures.",
-    "Bring this shoe to life as a Zen garden-inspired slip-on. Use sandy textures, incorporate patterns like raked sand and placed rocks. Serene earth tones, with highly detailed, calming aesthetics.",
-    "Convert this drawing into a stained-glass cathedral window shoe. Use jewel tones separated by black lines to mimic lead caming. Add a glossy finish to resemble polished glass. Artistic and luminous, in vivid 4K detail.",
-    "Color this sketch as a tropical bird-inspired running shoe. Use vibrant feather patterns, add textures resembling different types of plumage. Exotic and eye-catching, with photorealistic feather details.",
-    "Transform this basic shape into a Art Deco cinema-inspired evening shoe. Use geometric patterns in gold and black, add textures reminiscent of velvet theater curtains. Glamorous and nostalgic, highly detailed.",
-    "Render this outline as a quantum computing-themed sneaker. Use cool blues and silvers, add patterns representing qubits and entanglement. Incorporate circuit-like elements. Futuristic and complex, ultra-high definition.",
-    "Bring this shoe sketch to life as a Moroccan tile-inspired sandal. Use intricate geometric patterns in rich blues and golds. Add textures resembling glazed ceramic. Ornate and cultural, with 4K photorealistic detail.",
-    "Color this drawing as a bonsai-inspired minimalist boot. Use natural wood tones and textures, add delicate branch-like patterns and leaf-shaped accents. Zen and organic, with 4K photorealistic wood grain details.",
-    "Transform this outline into a climate change awareness sneaker. Use gradients from cool blues to warm reds, incorporate melting ice cap patterns and rising sea level motifs. Impactful and thought-provoking, highly detailed.",
-]
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
@@ -339,7 +265,7 @@ if generate_btn:
                                 "text": variation_prompt,
                                 "negativeText": opt_negative_prompt_csv,
                                 "conditionImage": uploaded_file_base64,
-                                "controlMode": "CANNY_EDGE",
+                                "controlMode": "SEGMENTATION",
                                 #"controlStrength": 0.7
                             },
                             "imageGenerationConfig": {
