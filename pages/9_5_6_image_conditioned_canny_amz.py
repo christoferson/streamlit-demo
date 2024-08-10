@@ -105,6 +105,56 @@ variation_prompts_init = [
     "Color this sketch as a firefighter-inspired safety boot. Use durable, heat-resistant textures, reflective strips, and heavy-duty hardware. Combine black and yellow with a pop of fire-engine red. Rugged and functional, highly detailed.",
 ]
 
+variation_prompts_init = [
+    "Transform this outline into a bioluminescent deep-sea inspired sneaker. Use dark blues and blacks with glowing neon accents. Add textures resembling fish scales and jellyfish tentacles. Ethereal and mysterious, in 4K detail."
+    "Render this sketch as a Bauhaus-inspired minimalist shoe. Use primary colors in geometric blocks. Incorporate textures of smooth leather and canvas. Clean lines, functional aesthetics, highly detailed yet simple.",
+    "Bring this shoe to life as a baroque-style formal sneaker. Add ornate gold filigree patterns over rich velvet textures. Use deep, royal colors like burgundy and navy. Opulent and extravagant, with photorealistic detailing.",
+    "Convert this drawing into a circuit board sneaker. Use green and silver tones, add metallic pathways and electronic component-like details. Make it look like a wearable piece of technology. Ultra-high definition, futuristic.",
+    "Color this outline as a candy-inspired platform shoe. Use swirling patterns of bright, saturated colors. Add textures that look like hard candy, gummy bears, and cotton candy. Playful and mouth-watering, in vivid 4K."
+    "Transform this basic shape into a zen garden slip-on. Use sandy textures, incorporate patterns like raked sand and placed rocks. Add bamboo-like elements. Serene earth tones, with highly detailed, calming aesthetics.",
+    "Render this sketch as a post-apocalyptic survival boot. Combine distressed leather with repurposed materials like tire treads and metal scraps. Use muted, dusty colors with rust accents. Weathered, rugged, highly detailed.",
+    "Bring this outline to life as a Art Nouveau-inspired evening shoe. Use flowing, organic lines and nature-inspired motifs. Add iridescent peacock feather patterns and delicate floral elements. Elegant and artistic, in 4K detail.",
+    "Color this drawing as a tropical rainforest hiking shoe. Use vibrant greens and earthy browns, add textures resembling leaves, bark, and exotic flowers. Include subtle animal print accents. Lush and wild, photorealistic quality.",
+]
+
+
+variation_prompts_init = [
+    "Transform this sketch into a constellation-themed sneaker. Use deep space blues and purples with glittering star-like accents. Add zodiac symbols and galactic swirls. Cosmic and dreamy, with ultra-high definition details.",
+    "Render this outline as a Mondrian-inspired color block shoe. Use primary colors in geometric sections divided by bold black lines. Clean, artistic, and striking, with visible canvas-like textures. Highly detailed, modernist aesthetic.",
+    "Bring this shoe to life as a stealth tactical boot. Use matte black textures with subtle dark grey patterns for camouflage effect. Add technical details like reinforced toe caps and ankle supports. Sleek, functional, 4K resolution.",
+    "Convert this drawing into a rococo-style mule. Use pastel colors, add intricate floral patterns and cherub motifs. Incorporate textures of silk and delicate lace. Ornate and romantic, with photorealistic detailing.",
+    #"Color this sketch as a volcano-inspired trail runner. Use gradients of black, red, and orange to mimic cooling lava. Add textures resembling volcanic rock and ash. Dynamic and intense, with highly detailed, textured surfaces.",
+    "Transform this basic shape into a stained-glass inspired formal shoe. Use jewel tones separated by black lines to mimic lead caming. Add a glossy finish to resemble polished glass. Artistic and luminous, in vivid 4K detail.",
+    "Render this outline as a quantum physics-themed sneaker. Use cool blues and purples, add patterns representing particle waves and atomic structures. Incorporate holographic elements. Cerebral and cutting-edge, ultra-high definition.",
+    "Bring this shoe sketch to life as a Día de los Muertos celebration boot. Use vibrant colors, incorporate intricate sugar skull patterns and marigold motifs. Add textures resembling embroidered fabric. Festive and cultural, highly detailed.",
+    "Color this drawing as a bonsai-inspired minimalist sandal. Use natural wood tones and textures, add delicate branch-like straps and leaf-shaped accents. Zen and organic, with 4K photorealistic wood grain details.",
+    "Transform this outline into a Van Gogh 'Starry Night' inspired sneaker. Use swirling blues and yellows, add textured brushstroke patterns. Make it look like a wearable masterpiece. Highly detailed, 4K resolution.",
+]
+
+variation_prompts_init = [
+    "Render this sketch as a bioluminescent fungi boot. Use earthy browns with glowing neon accents. Add textures resembling mushroom caps and mycelium networks. Ethereal and organic, ultra-high definition.",
+    "Bring this shoe to life as a Fabergé egg-inspired formal heel. Use pastel colors, add intricate gold filigree and jewel-like embellishments. Ornate and luxurious, with photorealistic detailing.",
+    "Convert this drawing into a solar system sneaker. Use deep space black with planetary rings and orbits. Add textures of different planet surfaces. Cosmic and educational, in vivid 4K detail.",
+    "Color this outline as a Venetian carnival masquerade shoe. Use rich jewel tones, add intricate mask-like patterns and feather textures. Mysterious and elegant, highly detailed.",
+    "Transform this basic shape into a coral reef sandal. Use vibrant underwater colors, add textures of coral, sea anemones, and fish scales. Vibrant and alive, with ultra-high definition marine details.",
+    "Render this sketch as a steampunk aviator boot. Combine distressed leather with brass gears and gauges. Use warm browns and metallic accents. Retro-futuristic and functional, in 4K detail.",
+    "Bring this outline to life as a Mondrian-inspired color block heel. Use primary colors in geometric sections divided by bold black lines. Clean, artistic, and striking, with visible canvas-like textures.",
+    "Color this drawing as a Northern Lights-inspired trail runner. Use dark blues and greens with streaks of purple and pink aurora effects. Add textures resembling snow and ice. Magical and dynamic, photorealistic quality.",
+    "Transform this sketch into a Día de Muertos celebration sneaker. Use vibrant colors, incorporate sugar skull patterns and marigold motifs. Festive and cultural, highly detailed.",
+]
+
+
+variation_prompts_init = [
+    "Render this outline as a cyberpunk street racer boot. Use neon colors over matte black, add holographic accents and LED-like details. Futuristic and edgy, with ultra-high definition textures.",
+    "Bring this shoe to life as a Zen garden-inspired slip-on. Use sandy textures, incorporate patterns like raked sand and placed rocks. Serene earth tones, with highly detailed, calming aesthetics.",
+    "Convert this drawing into a stained-glass cathedral window shoe. Use jewel tones separated by black lines to mimic lead caming. Add a glossy finish to resemble polished glass. Artistic and luminous, in vivid 4K detail.",
+    "Color this sketch as a tropical bird-inspired running shoe. Use vibrant feather patterns, add textures resembling different types of plumage. Exotic and eye-catching, with photorealistic feather details.",
+    "Transform this basic shape into a Art Deco cinema-inspired evening shoe. Use geometric patterns in gold and black, add textures reminiscent of velvet theater curtains. Glamorous and nostalgic, highly detailed.",
+    "Render this outline as a quantum computing-themed sneaker. Use cool blues and silvers, add patterns representing qubits and entanglement. Incorporate circuit-like elements. Futuristic and complex, ultra-high definition.",
+    "Bring this shoe sketch to life as a Moroccan tile-inspired sandal. Use intricate geometric patterns in rich blues and golds. Add textures resembling glazed ceramic. Ornate and cultural, with 4K photorealistic detail.",
+    "Color this drawing as a bonsai-inspired minimalist boot. Use natural wood tones and textures, add delicate branch-like patterns and leaf-shaped accents. Zen and organic, with 4K photorealistic wood grain details.",
+    "Transform this outline into a climate change awareness sneaker. Use gradients from cool blues to warm reds, incorporate melting ice cap patterns and rising sea level motifs. Impactful and thought-provoking, highly detailed.",
+]
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
@@ -241,7 +291,7 @@ if generate_btn:
     variation_prompts_lines = variation_prompts_str.split("\n")
 
     # Take only the first 6 lines
-    variation_prompts = [line.strip() for line in variation_prompts_lines[:8] if line.strip()]
+    variation_prompts = [line.strip() for line in variation_prompts_lines[:12] if line.strip()]
 
     #message_history = st.session_state.menu_img_variation_messages.copy()
     #message_history.append({"role": "user", "content": prompt})
