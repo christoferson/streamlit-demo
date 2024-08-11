@@ -156,6 +156,32 @@ variation_prompts_init = [
     "Transform this outline into a climate change awareness sneaker. Use gradients from cool blues to warm reds, incorporate melting ice cap patterns and rising sea level motifs. Impactful and thought-provoking, highly detailed.",
 ]
 
+variation_prompts_init = [
+    #"Render this Acme shoe outline in a cyberpunk street racer style. Use neon colors over matte black, add holographic accents and LED-like details. Futuristic and edgy, with ultra-high definition textures while preserving the original sketch.",
+    "Bring this Acme shoe sketch to life with a Zen garden-inspired design. Use sandy textures, incorporate patterns like raked sand and placed rocks. Serene earth tones, with highly detailed, calming aesthetics while maintaining the original outline.",
+    #"Convert this Acme shoe drawing into a stained-glass cathedral window design. Use jewel tones separated by black lines to mimic lead caming. Add a glossy finish to resemble polished glass. Artistic and luminous, in vivid 4K detail while retaining the original sketch.",
+    "Color this Acme shoe sketch with a tropical bird-inspired running shoe design. Use vibrant feather patterns, add textures resembling different types of plumage. Exotic and eye-catching, with photorealistic feather details while preserving the original outline.",
+    "Transform this Acme shoe shape into an Art Deco cinema-inspired evening shoe design. Use geometric patterns in gold and black, add textures reminiscent of velvet theater curtains. Glamorous and nostalgic, highly detailed while maintaining the original sketch.",
+    #"Render this Acme shoe outline with a quantum computing-themed design. Use cool blues and silvers, add patterns representing qubits and entanglement. Incorporate circuit-like elements. Futuristic and complex, ultra-high definition while preserving the original sketch.",
+    #"Bring this Acme shoe sketch to life with a Moroccan tile-inspired sandal design. Use intricate geometric patterns in rich blues and golds. Add textures resembling glazed ceramic. Ornate and cultural, with 4K photorealistic detail while retaining the original outline.",
+    #"Color this Acme shoe drawing with a bonsai-inspired minimalist boot design. Use natural wood tones and textures, add delicate branch-like patterns and leaf-shaped accents. Zen and organic, with 4K photorealistic wood grain details while preserving the original sketch.",
+    "Transform this Acme shoe outline into a climate change awareness sneaker design. Use gradients from cool blues to warm reds, incorporate melting ice cap patterns and rising sea level motifs. Impactful and thought-provoking, highly detailed while maintaining the original sketch."
+]
+
+variation_prompts_init = [ 
+    "Photorealistic Acme running shoe, white mesh upper, black rubber sole, red tiger stripes on sides, silver logo, studio lighting", 
+    "Acme sports shoe render, navy blue synthetic leather upper, white midsole, neon yellow laces and logo, glossy finish, 3/4 view", 
+    "Modern Acme sneaker design, light grey knit upper, speckled midsole, neon green accents, metallic silver logo, on white background", 
+    "Acme performance shoe, black mesh upper with red overlays, white cushioned sole, blue gel visible in heel, dynamic angle", 
+    "Minimalist Acme trainer, all-white design, subtle texture variations, tonal logo, clean lines, side profile view", 
+    "Futuristic Acme concept, sleek silver upper, holographic accents, transparent sole with visible technology, floating in space", 
+    "Acme trail running shoe, olive green upper, brown leather overlays, aggressive rubber outsole, mud splatter effect, outdoor setting", 
+    "Retro-inspired Acme sneaker, pastel pink suede upper, mint green tiger stripes, gum sole, 80s aesthetic, neon studio backdrop", 
+    "High-performance Acme sprint spike, electric blue upper, gold spike plate, streamlined design, motion blur effect", 
+    "Acme luxury collaboration, premium black leather upper, rose gold accents, embossed logo, marble backdrop, high-end product shot" 
+]
+
+
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
 
