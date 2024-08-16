@@ -118,6 +118,9 @@ opt_style_preset_list = [
     "3d-model",
     "cinematic",
     "fantasy-art",
+    "enhance",
+    "isometric",
+    "line-art"
 ]
 
 opt_negative_prompt_list = [
