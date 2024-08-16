@@ -99,6 +99,22 @@ variation_prompts_init = [
     "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions" 
 ]
 
+#Bold neon accents, geometric patterns, eye-catching light pink base design for urban trendsetters
+#Elegant light gold metallic finish, subtle shimmer, sophisticated look for evening wear
+#Nature-inspired color palette, organic textures, eco-friendly materials for environmentally conscious consumers
+#Retro-inspired design, light blue themed vintage color blocking, nostalgic appeal for fashion enthusiasts
+#Minimalist monochrome style, clean lines, timeless light purple elegance for versatile wardrobes
+#Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink
+
+variation_prompts_init = [ 
+    "Bold neon accents, geometric patterns, eye-catching light pink base design for urban trendsetters", 
+    "Elegant light gold metallic finish, subtle shimmer, sophisticated look for evening wear", 
+    "Nature-inspired color palette, organic textures, eco-friendly materials for environmentally conscious consumers", 
+    "Retro-inspired design, light blue themed vintage color blocking, nostalgic appeal for fashion enthusiasts", 
+    "Minimalist monochrome style, clean lines, timeless light purple elegance for versatile wardrobes", 
+    "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink" 
+]
+
 opt_model_id_list = [
     "stability.stable-diffusion-xl-v1"
 ]
