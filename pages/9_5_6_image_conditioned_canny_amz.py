@@ -181,6 +181,42 @@ variation_prompts_init = [
     "Acme luxury collaboration, premium black leather upper, rose gold accents, embossed logo, marble backdrop, high-end product shot" 
 ]
 
+variation_prompts_init = [
+    "Vibrant neon colors, electric blue outfit with hot pink accents, glowing racket strings",
+    "Sunset gradient background, golden-orange tennis dress, warm tones throughout",
+    "Cyberpunk style, metallic silver outfit with holographic reflections, futuristic racket design",
+    #"Watercolor effect, soft pastel colors blending together, light blue and lavender tones",
+    #"Pop art inspired, bold primary colors, thick black outlines, dotted pattern on the dress",
+    #"Monochromatic blue scheme, varying shades of blue from navy to sky blue, white highlights",
+    #"Nature-inspired, green tennis dress with leaf patterns, earthy brown tones for skin and hair",
+    #"Retro 80s look, bright teal and purple color blocking, geometric patterns on the outfit",
+    "Minimalist design, grayscale image with a single accent color (red) for the racket and logo"
+]
+
+variation_prompts_init = [
+    "Acme women's tennis dress sketch with a bold geometric pattern overlay, maintaining pencil line quality",
+    "Hand-drawn Acme tennis dress with floral accents and a gradient color wash from white to pale yellow",
+    "Sketchy Acme dress design featuring a asymmetrical hemline and contrasting color blocks in cool tones",
+    "Pencil sketch of Acme tennis outfit with added futuristic elements like LED trim and smart fabric textures",
+    "Loose, expressive drawing of Acme dress with a retro-inspired collar and striped pattern, vintage color palette",
+    "Artistic rendition of Acme tennis wear incorporating abstract watercolor splashes within the sketch lines",
+    "Hand-drawn Acme dress with exaggerated pleats and ruffles, shading suggesting a metallic fabric sheen",
+    "Sketchy Acme tennis outfit design with added cyberpunk-inspired tech details and neon accent lines",
+    "Expressive pencil sketch of Acme dress featuring an ombre effect from top to bottom, cool to warm colors"
+]
+
+
+variation_prompts_init = [
+    "Acme tennis dress sketch with a modern color-block design, using bold lines and subtle shading",
+    "Hand-drawn Acme outfit featuring a mesh overlay pattern and strategically placed ventilation zones",
+    "Pencil rendering of Acme dress with an avant-garde asymmetrical cut and origami-inspired pleats",
+    "Loose sketch of Acme tennis wear incorporating sustainable fabric textures and eco-friendly design notes",
+    "Expressive drawing of Acme dress with a high-low hemline and dynamic movement lines suggesting flexibility",
+    "Artistic Acme tennis outfit sketch with a minimalist design and single bold accent stripe",
+    "Hand-drawn Acme dress featuring a wraparound skirt design and innovative quick-dry fabric texture hints",
+    "Sketchy Acme tennis wear with exaggerated athletic seams and compression panel illustrations",
+    "Pencil sketch of Acme outfit showcasing a convertible design with detachable sleeves and modular elements"
+]
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
