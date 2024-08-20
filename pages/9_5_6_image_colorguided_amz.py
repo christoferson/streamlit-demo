@@ -201,7 +201,7 @@ variation_prompts_init_str = "\n".join(variation_prompts_init)
 variation_prompts_str = st.text_area(":blue[**Variation Prompts**]", value=variation_prompts_init_str, height=170, max_chars=2000,
                                      placeholder="Enter each variation as a separate line")
 
-generate_btn = st.button("Generate", type="primary", disabled=uploaded_file_name==None)
+generate_btn = st.button("Generate", type="primary")
 
 #if prompt := st.chat_input(disabled=uploaded_file_name==None):
 
@@ -211,7 +211,7 @@ if generate_btn:
     variation_prompts_lines = variation_prompts_str.split("\n")
 
     # Take only the first 6 lines
-    variation_prompts = [line.strip() for line in variation_prompts_lines[:6] if line.strip()]
+    variation_prompts = [line.strip() for line in variation_prompts_lines[:1] if line.strip()]
 
     #message_history = st.session_state.menu_img_variation_messages.copy()
     #message_history.append({"role": "user", "content": prompt})
@@ -254,22 +254,26 @@ if generate_btn:
                     col_index = i % 3
                         
                     request = {
-                            "taskType": "IMAGE_VARIATION",
-                            "imageVariationParams": {
+                            "taskType": "COLOR_GUIDED_GENERATION",
+                            "colorGuidedGenerationParams": {
                                 "text": variation_prompt,
+                                #"text": "digital painting of a girl, dreamy and ethereal, pink eyes, peaceful expression, ornate frilly dress, fantasy, intricate, elegant, rainbow bubbles, highly detailed, digital painting, artstation, concept art, smooth, sharp focus, illustration",
                                 "negativeText": opt_negative_prompt_csv,
-                                "images": [uploaded_file_base64],
-                                "similarityStrength": opt_similarity_strength,
+                                #"colors": ['#ff8080', '#ffb280', '#ffe680', '#e5ff80'],
+                                "colors": ["#ff8080", "#ffb280", "#ffe680", "#ffe680"],
+                                #"image": uploaded_file_base64,
+                                #"referenceImage": uploaded_file_base64,
+                                #"similarityStrength": opt_similarity_strength,
                             },
                             "imageGenerationConfig": {
                                 "numberOfImages": 1,
-                                "height": opt_dimensions_height,
-                                "width": opt_dimensions_width,
-                                "cfgScale": opt_config_scale,
-                                "quality": "premium", #"standard" || "premium"
-                                "seed": seed,
+                                "height": 512,
+                                "width": 512,
+                                "cfgScale": 8.0
                             }
                         }
+                    
+                    print(json.dumps(request, indent=2))
 
                     response = bedrock_runtime.invoke_model(
                         modelId = opt_model_id,
