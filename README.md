@@ -7,6 +7,7 @@ pip install --upgrade streamlit
 pip install streamlit==1.35.0
 pip install --upgrade python-dotenv
 pip install --upgrade PyJWT
+pip install --upgrade streamlit-webrtc
 
 ##### Start Application
 streamlit run app.py --server.headless=true
@@ -64,3 +65,9 @@ InputTokenCount
 LegacyModelInvocations
 OutputTokenCount
 OutputImageCount
+
+
+##### Cross Region Inference Profile #####
+
+https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
+https://docs.aws.amazon.com/bedrock/latest/userguide/throughput.html
