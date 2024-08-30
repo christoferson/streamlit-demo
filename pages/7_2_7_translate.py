@@ -184,7 +184,7 @@ col2_container.caption(":blue[Result]")
 result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_display_columns = result_container.slider("columns", value=55, min_value=50, max_value=80, step=1, label_visibility="collapsed")
+    result_display_columns = result_container.slider("columns", value=45, min_value=50, max_value=80, step=1, label_visibility="collapsed")
     result_text = st.session_state["translate_result"]
     result_text_wrapped = "\n".join(
         tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
