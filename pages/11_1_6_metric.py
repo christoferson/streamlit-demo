@@ -17,8 +17,8 @@ def list_metrics():
         st.markdown(metric)
 
 @st.cache_data(show_spinner='Loading Metrics')
-def bedrock_cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time):
-    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time)
+def bedrock_cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time, aggregate_stat="Sum"):
+    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric(metric_namespace, metric_name, start_time, end_time, aggregate_stat)
     #print(f"NextToken: {metric_data['NextToken']}")
     return metric_data
 
@@ -27,19 +27,18 @@ def bedrock_cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name,
     metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name, metric_dimensions, start_time, end_time)
     #print(f"NextToken: {metric_data['NextToken']}")
     return metric_data
-
-@st.cache_data(show_spinner='Loading Metrics')
-def bedrock_cloudwatch_get_metric_expressoin(metric_namespace, metric_name, start_time, end_time):
-    metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric_expression(metric_namespace, metric_name, start_time, end_time)
-    #print(f"NextToken: {metric_data['NextToken']}")
     return metric_data
-
 
 start_time = datetime.now() - timedelta(weeks=15) #datetime(2024, 7, 2) #datetime.now() - timedelta(days=7),
 end_time = datetime.now() #datetime(2024, 7, 11) #datetime.now() - timedelta(days=1),
 
 st.markdown(f"##### :green[{start_time} to {end_time}]")
 
+# List available metrics
+available_metrics = client.list_metrics(Namespace='AWS/Bedrock')
+print("Available metrics:")
+for metric in available_metrics['Metrics']:
+    print(f"- {metric['MetricName']}")
 
 
 # Group by week and sum the InputTokenCount
@@ -48,7 +47,7 @@ st.markdown(f"##### :green[{start_time} to {end_time}]")
 
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage", "UserInvocation"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage", "Latency", "UserInvocation"])
 
 with tab1:
     st.markdown("##### :blue[Invocations by Date]")
@@ -139,6 +138,27 @@ with tab4:
     st.bar_chart(metric_data_output_image_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
 
 with tab5:
+    st.markdown("##### :blue[Latency]")
+
+    metric_data_invocation_latency = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='InvocationLatency', start_time=start_time, end_time=end_time, aggregate_stat="Average")
+    #metric_data_output_image_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='InvocationClientErrors', start_time=start_time, end_time=end_time)
+    
+    #print(metric_data_output_image_count)
+    metric_data_invocation_latency_df = pd.DataFrame({
+        'Timestamp': metric_data_invocation_latency['Timestamps'],
+        #'Value': metric_data_invocation_latency['Values'],
+        'Value': [round(value / 1000, 2) for value in metric_data_invocation_latency['Values']],  # Convert to seconds and round to 2 decimal places 
+    })
+    #st.dataframe(metric_data_invocation_latency_df, use_container_width=True)
+
+    metric_data_invocation_latency_df['Date'] = metric_data_invocation_latency_df['Timestamp'].dt.strftime('%Y-%m-%d')
+    # Group by date and sum the values
+    metric_data_invocation_latency_by_date_df = metric_data_invocation_latency_df.groupby('Date').agg({'Value': 'mean'}).reset_index()
+    st.dataframe(metric_data_invocation_latency_by_date_df, use_container_width=True)
+    st.line_chart(metric_data_invocation_latency_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    st.bar_chart(metric_data_invocation_latency_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+
+with tab6:
    
     #metric_data_app_user_invocation_count = bedrock_cloudwatch_get_metric(metric_namespace='App/Chat', metric_name='UserInvocation', start_time=start_time, end_time=end_time)
 
