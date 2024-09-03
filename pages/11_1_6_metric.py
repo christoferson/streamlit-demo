@@ -47,7 +47,7 @@ for metric in available_metrics['Metrics']:
 
 
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage", "Latency", "UserInvocation"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Invocation", "InputToken", "OutputToken", "OutputImage", "Latency", "Errors", "UserInvocation"])
 
 with tab1:
     st.markdown("##### :blue[Invocations by Date]")
@@ -158,7 +158,48 @@ with tab5:
     st.line_chart(metric_data_invocation_latency_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
     st.bar_chart(metric_data_invocation_latency_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
 
+
+
 with tab6:
+    st.markdown("##### :blue[Errors]")
+
+    st.markdown("##### :green[Errors - Client]")
+
+    metric_data_error_client_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='InvocationClientErrors', start_time=start_time, end_time=end_time)
+    metric_data_error_client_count_df = pd.DataFrame({
+        'Timestamp': metric_data_error_client_count['Timestamps'],
+        'Value': metric_data_error_client_count['Values'],
+    })
+    #st.dataframe(metric_data_error_client_count_df, use_container_width=True)
+    metric_data_error_client_count_df['Date'] = metric_data_error_client_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+    # Group by date and sum the values
+    metric_data_error_client_count_by_date_df = metric_data_error_client_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+    #st.dataframe(metric_data_error_client_count_by_date_df, use_container_width=True)
+    #st.line_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    st.bar_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+
+
+
+    st.markdown("##### :green[Errors - Server]")
+
+    metric_data_error_server_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='InvocationServerErrors', start_time=start_time, end_time=end_time)
+    metric_data_error_server_count_df = pd.DataFrame({
+        'Timestamp': metric_data_error_server_count['Timestamps'],
+        'Value': metric_data_error_server_count['Values'],
+    })
+    st.dataframe(metric_data_error_server_count_df, use_container_width=True)
+    if not metric_data_error_server_count_df.empty:
+        metric_data_error_server_count_df['Date'] = metric_data_error_server_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+        # Group by date and sum the values
+        metric_data_error_server_count_by_date_df = metric_data_error_server_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+        st.dataframe(metric_data_error_server_count_by_date_df, use_container_width=True)
+        #st.line_chart(metric_data_error_server_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+        st.bar_chart(metric_data_error_server_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    else:
+        st.info("No data available for Errors - Server")
+
+
+with tab7:
    
     #metric_data_app_user_invocation_count = bedrock_cloudwatch_get_metric(metric_namespace='App/Chat', metric_name='UserInvocation', start_time=start_time, end_time=end_time)
 
