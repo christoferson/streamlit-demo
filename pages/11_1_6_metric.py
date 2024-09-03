@@ -22,7 +22,7 @@ def bedrock_cloudwatch_get_metric(metric_namespace, metric_name, start_time, end
     #print(f"NextToken: {metric_data['NextToken']}")
     return metric_data
 
-@st.cache_data(show_spinner='Loading Metrics')
+@st.cache_data(show_spinner='Loading Metrics with Dimensions')
 def bedrock_cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name, metric_dimensions, start_time, end_time):
     metric_data = cmn.cloudwatch_metrics_lib.cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name, metric_dimensions, start_time, end_time)
     #print(f"NextToken: {metric_data['NextToken']}")
@@ -171,12 +171,13 @@ with tab6:
         'Value': metric_data_error_client_count['Values'],
     })
     #st.dataframe(metric_data_error_client_count_df, use_container_width=True)
-    metric_data_error_client_count_df['Date'] = metric_data_error_client_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
-    # Group by date and sum the values
-    metric_data_error_client_count_by_date_df = metric_data_error_client_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
-    #st.dataframe(metric_data_error_client_count_by_date_df, use_container_width=True)
-    #st.line_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
-    st.bar_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    if not metric_data_error_client_count_df.empty:
+        metric_data_error_client_count_df['Date'] = metric_data_error_client_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+        # Group by date and sum the values
+        metric_data_error_client_count_by_date_df = metric_data_error_client_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+        #st.dataframe(metric_data_error_client_count_by_date_df, use_container_width=True)
+        #st.line_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+        st.bar_chart(metric_data_error_client_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
 
 
 
@@ -198,6 +199,24 @@ with tab6:
     else:
         st.info("No data available for Errors - Server")
 
+
+    st.markdown("##### :green[Errors - Throttle]")
+
+    metric_data_error_throttle_count = bedrock_cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='InvocationThrottles', start_time=start_time, end_time=end_time)
+    metric_data_error_throttle_count_df = pd.DataFrame({
+        'Timestamp': metric_data_error_throttle_count['Timestamps'],
+        'Value': metric_data_error_throttle_count['Values'],
+    })
+    st.dataframe(metric_data_error_throttle_count_df, use_container_width=True)
+    if not metric_data_error_throttle_count_df.empty:
+        metric_data_error_throttle_count_df['Date'] = metric_data_error_throttle_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+        # Group by date and sum the values
+        metric_data_error_throttle_count_by_date_df = metric_data_error_throttle_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+        #st.dataframe(metric_data_error_throttle_count_by_date_df, use_container_width=True)
+        #st.line_chart(metric_data_error_throttle_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+        #st.bar_chart(metric_data_error_throttle_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Value')
+    else:
+        st.info("No data available for Errors - Throttle")
 
 with tab7:
    
