@@ -35,10 +35,32 @@ end_time = datetime.now() #datetime(2024, 7, 11) #datetime.now() - timedelta(day
 st.markdown(f"##### :green[{start_time} to {end_time}]")
 
 # List available metrics
-available_metrics = client.list_metrics(Namespace='AWS/Bedrock')
-print("Available metrics:")
-for metric in available_metrics['Metrics']:
-    print(f"- {metric['MetricName']}")
+#available_metrics = client.list_metrics(Namespace='AWS/Bedrock')
+#print("Available metrics:")
+#for metric in available_metrics['Metrics']:
+#    print(f"- {metric['MetricName']}")
+
+
+opt_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "anthropic.claude-3-sonnet-20240229-v1:0",
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    #"anthropic.claude-3-opus-20240229-v1:0",
+    "us.anthropic.claude-3-haiku-20240307-v1:0",
+    "us.anthropic.claude-3-sonnet-20240229-v1:0",
+    "us.anthropic.claude-3-opus-20240229-v1:0",
+    "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
+    "cohere.command-r-plus-v1:0",
+    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
+    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
+    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
+    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
+    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
+    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
+    "mistral.mistral-small-2402-v1:0", # Mistral Small
+    "mistral.mistral-large-2402-v1:0", # Mistral Large
+]
 
 
 # Group by week and sum the InputTokenCount
@@ -235,3 +257,34 @@ with tab7:
         'Value': metric_data_app_user_invocation_count['Values'],
     })
     st.dataframe(metric_data_app_user_invocation_count_df, use_container_width=True)
+
+
+mtab1, mtab2 = st.tabs(["Invocation (M)", "Reserved"])
+
+with mtab1:
+
+    st.markdown("##### :blue[Invocations (M) by Date]")
+
+    m_model_id = st.selectbox("Select Model ID", opt_model_id_list)
+
+    metric_data_invocation_count = bedrock_cloudwatch_get_metric_with_dimensions(
+        metric_namespace='AWS/Bedrock', 
+        metric_name='Invocations', 
+        metric_dimensions=[{
+                'Name': 'ModelId',
+                'Value': m_model_id,
+        }],
+        start_time=start_time, end_time=end_time)
+    metric_data_invocation_count_df = pd.DataFrame({
+        'Timestamp': metric_data_invocation_count['Timestamps'],
+        'Value': metric_data_invocation_count['Values'],
+    })
+
+    metric_data_invocation_count_df['Date'] = metric_data_invocation_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+    # Group by date and sum the values
+    metric_data_invocation_count_by_date_df = metric_data_invocation_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
+
+
+    st.dataframe(metric_data_invocation_count_by_date_df, use_container_width=True)
+    st.line_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
+    st.bar_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
