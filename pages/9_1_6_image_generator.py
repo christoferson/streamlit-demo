@@ -109,10 +109,30 @@ variation_prompts_init = [
 variation_prompts_init = [ 
     "Bold neon accents, geometric patterns, eye-catching light pink base design for urban trendsetters", 
     "Elegant light gold metallic finish, subtle shimmer, sophisticated look for evening wear", 
-    "Nature-inspired color palette, organic textures, eco-friendly materials for environmentally conscious consumers", 
+    #"Nature-inspired color palette, organic textures, eco-friendly materials for environmentally conscious consumers", 
+    "Nature-inspired beige and olive color palette, organic textures, eco-friendly materials for environmentally conscious consumers",
     "Retro-inspired design, light blue themed vintage color blocking, nostalgic appeal for fashion enthusiasts", 
     "Minimalist monochrome style, clean lines, timeless light purple elegance for versatile wardrobes", 
     "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink" 
+]
+
+variation_prompts_init = [ 
+    "Bold neon accents, geometric patterns, eye-catching light pink base design for urban trendsetters", 
+    "Elegant light gold metallic finish, subtle shimmer, sophisticated look for evening wear", 
+    "Nature-inspired beige and olive color palette, organic textures, eco-friendly materials for environmentally conscious consumers", 
+    "Retro-inspired design, light blue-themed vintage color blocking, nostalgic appeal for fashion enthusiasts", 
+    "Minimalist monochrome style, clean lines, timeless light purple elegance for versatile wardrobes", 
+    "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink accents" 
+]
+
+variation_prompts_init = [ 
+    "Bold neon accents, geometric patterns, eye-catching light pink base design with terracotta color accents for urban trendsetters", 
+    #"Elegant light gold metallic finish, subtle shimmer, sophisticated look for evening wear", 
+    "Elegant light gold metallic finish with subtle shimmer, accented by deep sapphire blue details for a sophisticated and striking evening wear look",
+    "Nature-inspired beige and olive color palette, organic textures, eco-friendly materials for environmentally conscious consumers", 
+    "Retro-inspired design, light blue-themed vintage color blocking with orange accents, nostalgic appeal for fashion enthusiasts", 
+    "Minimalist monochrome style, clean lines, timeless light purple elegance with purple and turquoise accents for versatile wardrobes", 
+    "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink accents" 
 ]
 
 opt_model_id_list = [
