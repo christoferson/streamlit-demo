@@ -259,32 +259,58 @@ with tab7:
     st.dataframe(metric_data_app_user_invocation_count_df, use_container_width=True)
 
 
-mtab1, mtab2 = st.tabs(["Invocation (M)", "Reserved"])
+m_model_id = st.selectbox("Select Model ID", opt_model_id_list)
+
+mtab1, mtab2, mtab3 = st.tabs(["Invocation (M)", "InputToken (M)", "Reserved"])
 
 with mtab1:
 
     st.markdown("##### :blue[Invocations (M) by Date]")
 
-    m_model_id = st.selectbox("Select Model ID", opt_model_id_list)
-
     metric_data_invocation_count = bedrock_cloudwatch_get_metric_with_dimensions(
         metric_namespace='AWS/Bedrock', 
         metric_name='Invocations', 
-        metric_dimensions=[{
-                'Name': 'ModelId',
-                'Value': m_model_id,
-        }],
+        metric_dimensions=[{ 'Name': 'ModelId', 'Value': m_model_id }],
         start_time=start_time, end_time=end_time)
+
     metric_data_invocation_count_df = pd.DataFrame({
         'Timestamp': metric_data_invocation_count['Timestamps'],
         'Value': metric_data_invocation_count['Values'],
     })
 
     metric_data_invocation_count_df['Date'] = metric_data_invocation_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
-    # Group by date and sum the values
     metric_data_invocation_count_by_date_df = metric_data_invocation_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
-
 
     st.dataframe(metric_data_invocation_count_by_date_df, use_container_width=True)
     st.line_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
     st.bar_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
+
+
+with mtab2:
+
+    st.markdown("##### :blue[Input Token by Date (M)]")
+
+    metric_data_input_token_count = bedrock_cloudwatch_get_metric_with_dimensions(
+        metric_namespace='AWS/Bedrock', 
+        metric_name='InputTokenCount',
+        metric_dimensions=[{ 'Name': 'ModelId', 'Value': m_model_id }],
+        start_time=start_time, end_time=end_time)
+
+    metric_data_input_token_count_df = pd.DataFrame({
+        'Timestamp': metric_data_input_token_count['Timestamps'],
+        'InputTokenCount': metric_data_input_token_count['Values'],
+    })
+    metric_data_input_token_count_df['Date'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+    metric_data_input_token_count_by_date_df = metric_data_input_token_count_df.groupby('Date').agg({'InputTokenCount': 'sum'}).reset_index()
+
+    st.dataframe(metric_data_input_token_count_by_date_df, use_container_width=True)
+    st.line_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
+    st.bar_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
+
+
+    st.markdown("##### :blue[Input Token by Week]")
+    metric_data_input_token_count_df['Week'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%W')
+    metric_data_input_token_count_weekly_df = metric_data_input_token_count_df.groupby('Week', as_index=False)['InputTokenCount'].sum()
+    st.dataframe(metric_data_input_token_count_weekly_df, use_container_width=True)
+    st.line_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
+    st.bar_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
