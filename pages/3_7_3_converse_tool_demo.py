@@ -20,6 +20,7 @@ import uuid
 import pandas as pd
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_2 import AcronymBedrockConverseTool
+from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -48,10 +49,12 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 polly = boto3.client("polly", region_name=AWS_REGION)
 calculator_tool = CalculatorBedrockConverseTool()
 acronym_tool = AcronymBedrockConverseTool()
+url_loader_tool = UrlContentBedrockConverseTool()
 tool_config = {
         "tools": [
             calculator_tool.definition,
-            acronym_tool.definition
+            acronym_tool.definition,
+            url_loader_tool.definition
         ]
     }
 
@@ -617,6 +620,24 @@ if prompt:
                 
                 if acronym_tool.matches(tool_name):
                     expr_result = acronym_tool.invoke(tool_args_json['expression'])
+
+                    tool_result_message = {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                        "toolUseId": tool_invocation['tool_use_id'],
+                                        "content": [{"json": {"expr_result": expr_result}}]
+                                        #"status": 'error',
+                                    }
+
+                            }
+                        ]
+                    }
+                
+                #
+                if url_loader_tool.matches(tool_name):
+                    expr_result = url_loader_tool.invoke(tool_args_json['expression'])
 
                     tool_result_message = {
                         "role": "user",
