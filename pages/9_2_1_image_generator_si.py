@@ -152,6 +152,10 @@ opt_style_preset_list = [
     "line-art"
 ]
 
+opt_aspect_ratio_list = [
+    "1:1", "16:9", "21:9", "2:3", #3:2, 4:5, 5:4, 9:16, 9:21
+]
+
 opt_negative_prompt_list = [
     "ugly", "tiling", "out of frame",
     "disfigured", "deformed", "bad anatomy", "cut off", "low contrast", 
@@ -160,6 +164,10 @@ opt_negative_prompt_list = [
 
 opt_dimensions_list = [
     "1024x1024", "1152x896", "1216x832", "1344x768", "1536x640", "640x1536", "768x1344", "832x1216", "896x1152"
+]
+
+opt_image_format_list = [
+    "JPEG", "PNG"
 ]
 
 opt_style_preset_help = """
@@ -179,11 +187,13 @@ opt_negative_prompt = opt_negative_prompt_list
 opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
-    opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
-    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
+    opt_model_id = st.selectbox(label=":blue[**Model ID**]", options=opt_model_id_list, index = 0, key="model_id")
+    opt_aspect_ratio = st.selectbox(label=":blue[**Aspect Ratio**]", options=opt_aspect_ratio_list, index = 0, key="aspect_ratio")
+    opt_output_image_format = st.selectbox(label=":blue[**Output Format**]", options=opt_image_format_list, index = 0, key="output_image_format")
+    #opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+    #opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
+    #opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+    #opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
     opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
@@ -197,14 +207,11 @@ with tab_basic:
     #st.title("💬 🖌️ 🖼️ Image Generator")
     st.markdown("🖼️ Image Generator (Stable Image)")
 
-    if "menu_img_gen_messages" not in st.session_state:
-        st.session_state["menu_img_gen_messages"] = [
-            #{"role": "user", "content": "Hello there."},
-            #{"role": "assistant", "content": "How can I help you?"}
-        ]
+    if "menu_img_gen_si_messages" not in st.session_state:
+        st.session_state["menu_img_gen_si_messages"] = [ ]
 
     idx = 1
-    for msg in st.session_state.menu_img_gen_messages:
+    for msg in st.session_state.menu_img_gen_si_messages:
         idx = idx + 1
         content = msg["content"]
         with st.chat_message(msg["role"]):
@@ -212,19 +219,19 @@ with tab_basic:
                 st.write(content)
             if "assistant" == msg["role"]:
                 st.image(content)
-                st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
+                #st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
 
     if prompt := st.chat_input():
 
         st.session_state["menu_img_gen_splash"] = False
 
-        message_history = st.session_state.menu_img_gen_messages.copy()
+        message_history = st.session_state.menu_img_gen_si_messages.copy()
         message_history.append({"role": "user", "content": prompt})
         #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
 
-        opt_dimensions_width = int(opt_dimensions.split("x")[0])
-        opt_dimensions_height = int(opt_dimensions.split("x")[1])
+        #opt_dimensions_width = int(opt_dimensions.split("x")[0])
+        #opt_dimensions_height = int(opt_dimensions.split("x")[1])
         #print(f"width: {opt_dimensions_width}  height: {opt_dimensions_height}")
 
         opt_negative_prompt_elements = opt_negative_prompt_list
@@ -238,25 +245,15 @@ with tab_basic:
             seed = random.randint(0, 4294967295)
         
         logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
-
+        #{"detail":"Invalid field in request. Available fields: ['prompt', 'negative_prompt', 'mode', 'strength', 'seed', 'output_format', 'image', 'aspect_ratio']"}
         request = {
-                #"text_prompts": (
-                #    #[{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt]
-                #    [{"text": prompt, "weight": 1.0}] + [{"text": negprompt, "weight": -1.0} for negprompt in opt_negative_prompt_elements]
-                #),
-                "prompt": prompt,
+                "prompt": prompt[:10000],
+                "negative_prompt": opt_negative_prompt_csv[:10000],
                 "mode": "text-to-image",
-                "aspect_ratio": "1:1",
-                "output_format": "jpeg",
-                #"cfg_scale": opt_config_scale,
-                #"clip_guidance_preset"
-                #"width": opt_dimensions_width,
-                #"height": opt_dimensions_height,
-                #"seed": seed, #random.randint(0, 4294967295),
-                #"start_schedule": config["start_schedule"],
-                #"steps": opt_steps, # Generation step determines how many times the image is sampled. 10-50,50
-                #"style_preset": opt_style_preset,
-                #"samples": 1,
+                "aspect_ratio": opt_aspect_ratio,
+                "output_format": opt_output_image_format.lower(),
+                #"strength": 10,
+                "seed": seed,
             }
         #json.dumps(request, indent=3)
 
@@ -271,15 +268,15 @@ with tab_basic:
                     body = json.dumps(request))
                 
                 response_body = json.loads(response.get("body").read())
-                #finish_reason = response_body.get("artifacts")[0].get("finishReason")
-                #if finish_reason == 'ERROR' or finish_reason == 'CONTENT_FILTERED':
-                #    st.chat_message("system").write(f"Image generation error. Error code is {finish_reason}")
-                #else:
-                #    response_image_base64 = response_body["artifacts"][0].get("base64")
-                #    response_image:Image = base64_to_image(response_image_base64)
-                response_image_base64 = response_body["images"][0]#.get("base64")
-                response_image:Image = base64_to_image(response_image_base64)
-                    #file_extension = ".png"
+                #finish_reasons – Enum indicating whether the request was filtered or not. null will indicate that the request was successful. Current possible values: "Filter reason: prompt", "Filter reason: output image", "Filter reason: input image", "Inference error", null
+                finish_reason = response_body.get("finish_reasons")[0]
+                print(finish_reason)
+                if finish_reason != None:
+                    st.chat_message("system").write(f"Image generation error. Error code is {finish_reason}")
+                else:
+                    response_image_base64 = response_body["images"][0]#.get("base64")
+                    response_image:Image = base64_to_image(response_image_base64)
+                        #file_extension = ".png"
                     #OUTPUT_IMG_PATH = os.path.join("./output/{}-{}{}".format("img", idx, file_extension))
                     #print("OUTPUT_IMG_PATH: " + OUTPUT_IMG_PATH)
                     #response_image.save(OUTPUT_IMG_PATH)
@@ -288,17 +285,17 @@ with tab_basic:
                     current_datetime = datetime.now()
                     current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
                     st.image(response_image)
-                    st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
+                    #st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
 
-                st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
-                st.session_state.menu_img_gen_messages.append({"role": "assistant", 
+                st.session_state.menu_img_gen_si_messages.append({"role": "user", "content": prompt})
+                st.session_state.menu_img_gen_si_messages.append({"role": "assistant", 
                     "content": response_image, 
-                    "style": opt_style_preset,
-                    "seed": seed,
-                    "scale": opt_config_scale,
-                    "steps": opt_steps,
-                    "width": opt_dimensions_width,
-                    "height": opt_dimensions_height,
+                #    "style": opt_style_preset,
+                #    "seed": seed,
+                #    "scale": opt_config_scale,
+                #    "steps": opt_steps,
+                #    "width": opt_dimensions_width,
+                #    "height": opt_dimensions_height,
                 })
 
             except ClientError as err:
