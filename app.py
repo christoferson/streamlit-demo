@@ -15,7 +15,7 @@ import json
 def process_aws_oidc_data():
 
    access_token = "oidc_data"
-   headers = _get_websocket_headers()
+   headers = st.context.headers #_get_websocket_headers()
    if headers:
       #if "X-Amzn-Oidc-Identity" in headers:
       #   identity = headers["X-Amzn-Oidc-Identity"]
@@ -40,9 +40,11 @@ st.write(f"Welcome: {session_identity}")
 
 ###### AUTH START #####
 
-if not cmn_auth.check_password():
-   st.stop()
+#if not cmn_auth.check_password():
+#   st.stop()
 
 ######  AUTH END #####
 
 st.write("Hello world")
+
+#st.page_link("pages/5_2_3_kb_demo.py", label="Page 1", icon="1️⃣")

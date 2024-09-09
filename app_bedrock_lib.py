@@ -72,3 +72,25 @@ def bedrock_list_models(bedrock):
 
     for item in response["modelSummaries"]:
         print(item['modelId'])
+
+####
+
+def list_agents() -> List[str]:
+    print(".................. list_agents")
+    response = bedrock_agent.list_agents(maxResults=20) #response = bedrock_agent.list_knowledge_bases(maxResults = 5)
+
+    agent_id_list = []
+    for i, agentSummary in enumerate(response['agentSummaries']):
+        agent_id = agentSummary['agentId']
+        name = agentSummary['agentName']
+        #description = agentSummary['description']
+        status = agentSummary['agentStatus']
+        version = agentSummary['latestAgentVersion']
+        updatedAt = agentSummary['updatedAt']
+        #print(f"{i} RetrievalResult: {kb_id} {name} {description} {status} {updatedAt}")
+        agent_id_list.append(f"{agent_id} {version} {name}")
+    
+    if not agent_id_list:
+        agent_id_list = ["EMPTY EMPTY"]
+    
+    return agent_id_list
