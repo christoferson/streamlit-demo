@@ -141,6 +141,16 @@ opt_model_id_list = [
     "stability.stable-image-ultra-v1:0",
 ]
 
+opt_model_id_display_map = {
+    "stability.stable-image-core-v1:0": "Stable Image Core v1",
+    "stability.sd3-large-v1:0": "SD3 Large v1",
+    "stability.stable-image-ultra-v1:0": "Stable Image Ultra v1",
+}
+
+# Function to format the model ID for display
+def opt_model_id_display(model_id):
+    return opt_model_id_display_map.get(model_id, model_id)
+
 opt_style_preset_list = [
     "anime",
     "photographic",
@@ -187,7 +197,7 @@ opt_negative_prompt = opt_negative_prompt_list
 opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
 with st.sidebar:
-    opt_model_id = st.selectbox(label=":blue[**Model ID**]", options=opt_model_id_list, index = 0, key="model_id")
+    opt_model_id = st.selectbox(label=":blue[**Model ID**]", options=opt_model_id_list, index = 0, key="model_id", format_func=opt_model_id_display)
     opt_aspect_ratio = st.selectbox(label=":blue[**Aspect Ratio**]", options=opt_aspect_ratio_list, index = 0, key="aspect_ratio")
     opt_output_image_format = st.selectbox(label=":blue[**Output Format**]", options=opt_image_format_list, index = 0, key="output_image_format")
     #opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
