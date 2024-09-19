@@ -137,6 +137,8 @@ variation_prompts_init = [
 ]
 
 opt_model_id_list = [
+    "amazon.titan-image-generator-v1",
+    "amazon.titan-image-generator-v2:0",   
     "stability.stable-diffusion-xl-v1",
     "stability.stable-image-core-v1:0",
     "stability.sd3-large-v1:0",
@@ -208,19 +210,144 @@ with st.sidebar:
 
 
 if opt_model_id in opt_model_id_list_amz:
+    opt_steps = 1
+    opt_style_preset = "dummy"
     with st.sidebar:
         #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-        opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-        opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
-        opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+        #opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+        opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=1.1, max_value=10.0, value=8.0, step=0.1, key="config_scale", help=opt_config_scale_help)
+        #opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
         opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
         #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
         #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
-        opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
+        opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=2147483646, value=-1, step=1, key="seed")
         opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
 
 
     tab_basic, tab_reference_image = st.tabs(["Basic", "Reference Image"])
+
+
+    with tab_basic:
+
+        st.markdown("🖼️ Image Generator 7")
+
+        if "menu_img_gen_messages" not in st.session_state:
+            st.session_state["menu_img_gen_messages"] = [ ]
+
+        idx = 1
+        for msg in st.session_state.menu_img_gen_messages:
+            idx = idx + 1
+            content = msg["content"]
+            with st.chat_message(msg["role"]):
+                if "user" == msg["role"]:
+                    st.write(content)
+                if "assistant" == msg["role"]:
+                    st.image(content)
+                    st.markdown(f":blue[**style**] {msg['style']} :blue[**seed**] {msg['seed']} :blue[**scale**] {msg['scale']} :blue[**steps**] {msg['steps']} :blue[**width**] {msg['width']} :blue[**height**] {msg['height']}")
+
+        if prompt := st.chat_input():
+
+            st.session_state["menu_img_gen_splash"] = False
+
+            message_history = st.session_state.menu_img_gen_messages.copy()
+            message_history.append({"role": "user", "content": prompt})
+            #st.session_state.messages.append({"role": "user", "content": prompt})
+            st.chat_message("user").write(prompt)
+
+            opt_dimensions_width = int(opt_dimensions.split("x")[0])
+            opt_dimensions_height = int(opt_dimensions.split("x")[1])
+            #print(f"width: {opt_dimensions_width}  height: {opt_dimensions_height}")
+
+            opt_negative_prompt_elements = opt_negative_prompt_list
+            if "" != opt_negative_prompt_csv:
+                opt_negative_prompt_elements = opt_negative_prompt_csv.split(",")
+            print(opt_negative_prompt_elements)
+                
+
+            seed = opt_seed
+            if seed < 0:
+                seed = random.randint(0, 2147483646)
+            
+            logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
+
+
+            request = {
+                "taskType": "TEXT_IMAGE",
+                "textToImageParams": {
+                    "text": prompt,
+                    "negativeText": opt_negative_prompt_csv,
+                },
+                "imageGenerationConfig": {
+                    "cfgScale": opt_config_scale, #8, #Range: 1.0 (exclusive) to 10.0
+                    "seed": seed, #Range: 0 to 214783647
+                    "quality": "premium", #quality, #Options: standard/premium
+                    "width": 1024,
+                    "height": 1024,
+                    "numberOfImages": 1, #Range: 1 to 5
+                    #"stepSize": 500,
+                }
+            }
+
+            
+            print(json.dumps(request, indent=3))
+
+            with st.spinner('Generating Image...'):
+
+                try:
+
+                    response = bedrock_runtime.invoke_model(
+                        modelId = opt_model_id,
+                        contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                        accept = "application/json",
+                        body = json.dumps(request))
+                    
+                    response_body = json.loads(response.get("body").read())
+
+                    if "images" not in response_body or not response_body["images"]:
+                        st.error("No images found in the response. Full response:")
+                        st.json(response_body)
+                    else:
+                        base64_image = response_body["images"][0]
+                        image_bytes = base64.b64decode(base64_image)
+                        response_image = Image.open(io.BytesIO(image_bytes))
+
+                        error = response_body.get("error")
+                        if error:
+                            st.error(f"Image generation error: {error}")
+                        else:
+
+                            with st.chat_message("assistant"):
+                                current_datetime = datetime.now()
+                                current_datetime_str = current_datetime.strftime("%Y/%m/%d, %H:%M:%S")
+                                st.image(response_image)
+                                st.markdown(f":blue[**style**] {opt_style_preset} :blue[**seed**] {seed} :blue[**scale**] {opt_config_scale} :blue[**steps**] {opt_steps} :blue[**width**] {opt_dimensions_width} :blue[**height**] {opt_dimensions_height} :green[**{current_datetime_str}**]")
+
+                            st.session_state.menu_img_gen_messages.append({"role": "user", "content": prompt})
+                            st.session_state.menu_img_gen_messages.append({"role": "assistant", 
+                                "content": response_image, 
+                                "style": opt_style_preset,
+                                "seed": seed,
+                                "scale": opt_config_scale,
+                                "steps": opt_steps,
+                                "width": opt_dimensions_width,
+                                "height": opt_dimensions_height,
+                            })
+
+                except ClientError as err:
+                    message = err.response["Error"]["Message"]
+                    logger.error("A client error occurred: %s", message)
+                    print("A client error occured: " + format(message))
+                    st.chat_message("system").write(message)
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
+                    logger.error("An error occurred: %s", str(e))
+
+    with tab_reference_image:
+
+        st.markdown("soon")
+
+#############################################
+
 
 if opt_model_id in opt_model_id_list_sdxl:
     with st.sidebar:
