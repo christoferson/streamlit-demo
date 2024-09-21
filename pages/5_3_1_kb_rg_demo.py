@@ -156,7 +156,7 @@ for msg in st.session_state.messages:
     if idx % 2 != 0:
         chat_message = st.chat_message(msg["role"])
         chat_message.write(msg["content"])
-        chat_message.markdown(f""":blue[{st.session_state.invocation_metrics[idx]}]""")
+        #chat_message.markdown(f""":blue[{st.session_state.invocation_metrics[idx]}]""")
 
         # This is to display the reference chunks
         #st.markdown(f"menu_kb_reference_chunk_list: {st.session_state['menu_kb_reference_chunk_list']}")
@@ -199,7 +199,9 @@ if user_prompt := st.chat_input():
     reference_chunk_text_list = []
     reference_chunk_list_text = "" #"  \n\n  \n\n  Sources:  \n\n  "
     context_info = ""
+
     try:
+
 
         knowledge_base_id = opt_kb_id.split(" ", 1)[0]
         kb_retrieve_document_count = opt_kb_doc_count
@@ -228,67 +230,6 @@ if user_prompt := st.chat_input():
         if filters != None:
             print(json.dumps(filters, indent=2))
             vector_search_configuration['filter'] = filters
-
-        # response = bedrock_agent_runtime.retrieve(
-        #     knowledgeBaseId = knowledge_base_id,
-        #     retrievalQuery={
-        #         'text': prompt,
-        #     },
-        #     retrievalConfiguration=retrieval_configuration
-        # )
-
-        
-        # for i, retrievalResult in enumerate(response['retrievalResults']):
-        #     uri = retrievalResult['location']['s3Location']['uri']
-        #     text = retrievalResult['content']['text']
-        #     excerpt = text[0:75]
-        #     score = retrievalResult['score']
-        #     print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
-        #     context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
-        #     uri_name = uri.split('/')[-1]
-        #     reference_chunk_list.append(f"{score} {uri_name}")
-        #     reference_chunk_text_list.append(text)
-        #     reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
-
-    except Exception as e:
-        logging.error(traceback.format_exc())
-        st.chat_message("system").write(e)
-
-    #####
-    
-    kb_system_message = f"""Use the following context information to answer the user question.
-    <context>{context_info}</context>
-    Human: {user_prompt}
-    """
-
-    kb_system_message = f"""Please answer the question with the provided context while following instructions provided.
-    <context>{context_info}
-    </context>
-    <instructions>
-    - Do not reformat, or convert any numeric values. Inserting commas is allowed for readability. 
-    - If the unit of measure of the question does not match that of the source document, convert the input to the same unit of measure as the source first before deciding. 
-    - When encountering geographic locations in user questions, first establish the administrative division specified in the source document. If the input location differs from this specified division (e.g., the source document uses prefectures or provinces while the user mentions cities), determine the corresponding administrative division (e.g., prefecture or province) where the mentioned city is situated. Use this determined administrative division to answer the question in accordance with the criteria outlined in the source document.  
-    - When the source information is a table data, display the table data as markdown. Otherwise, do not reformat the source data.
-    </instructions>
-    <question>{user_prompt}</question>
-    """
-
-
-    kb_messages = []
-    kb_messages.append({"role": "user", "content": kb_system_message})
-
-    request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "temperature": opt_temperature,
-        "top_p": opt_top_p,
-        "top_k": opt_top_k,
-        "max_tokens": opt_max_tokens,
-        "system": kb_system_message, #opt_system_msg,
-        "messages": kb_messages, #message_history #st.session_state.messages
-    }
-    json.dumps(request, indent=3)
-
-    try:
 
         session_id = st.session_state.menu_kb_rg_session_id
 
