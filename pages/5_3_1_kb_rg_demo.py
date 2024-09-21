@@ -38,13 +38,15 @@ st.set_page_config(
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 
+
 opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
-opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options(["hr-titan", "legal-titan", "concur-titan"])
+#opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options(["hr-titan", "legal-titan", "concur-titan"])
+opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options(["hr-titan"])
 print(opt_bedrock_kb_list)
 
 def knowledge_base_format_func(text):
@@ -144,6 +146,11 @@ if "messages" not in st.session_state:
 if "invocation_metrics" not in st.session_state:
     st.session_state["invocation_metrics"] = []
 
+if "menu_kb_rg_session_id" not in st.session_state:
+    st.session_state["menu_kb_rg_session_id"] = None
+
+
+
 idx = 0
 for msg in st.session_state.messages:
     if idx % 2 != 0:
@@ -222,26 +229,26 @@ if user_prompt := st.chat_input():
             print(json.dumps(filters, indent=2))
             vector_search_configuration['filter'] = filters
 
-        response = bedrock_agent_runtime.retrieve(
-            knowledgeBaseId = knowledge_base_id,
-            retrievalQuery={
-                'text': prompt,
-            },
-            retrievalConfiguration=retrieval_configuration
-        )
+        # response = bedrock_agent_runtime.retrieve(
+        #     knowledgeBaseId = knowledge_base_id,
+        #     retrievalQuery={
+        #         'text': prompt,
+        #     },
+        #     retrievalConfiguration=retrieval_configuration
+        # )
 
         
-        for i, retrievalResult in enumerate(response['retrievalResults']):
-            uri = retrievalResult['location']['s3Location']['uri']
-            text = retrievalResult['content']['text']
-            excerpt = text[0:75]
-            score = retrievalResult['score']
-            print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
-            context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
-            uri_name = uri.split('/')[-1]
-            reference_chunk_list.append(f"{score} {uri_name}")
-            reference_chunk_text_list.append(text)
-            reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
+        # for i, retrievalResult in enumerate(response['retrievalResults']):
+        #     uri = retrievalResult['location']['s3Location']['uri']
+        #     text = retrievalResult['content']['text']
+        #     excerpt = text[0:75]
+        #     score = retrievalResult['score']
+        #     print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
+        #     context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
+        #     uri_name = uri.split('/')[-1]
+        #     reference_chunk_list.append(f"{score} {uri_name}")
+        #     reference_chunk_text_list.append(text)
+        #     reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
 
     except Exception as e:
         logging.error(traceback.format_exc())
@@ -282,108 +289,49 @@ if user_prompt := st.chat_input():
     json.dumps(request, indent=3)
 
     try:
-        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-        response = bedrock_runtime.invoke_model_with_response_stream(
-            modelId = opt_model_id, #bedrock_model_id, 
-            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-            accept = "application/json",
-            body = json.dumps(request))
 
-        #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-        result_text = ""
-        invocation_metrics = ""
+        session_id = st.session_state.menu_kb_rg_session_id
+
+        params = {
+            "input" : {
+                'text': prompt,
+            },
+            "retrieveAndGenerateConfiguration" : {
+                'type': 'KNOWLEDGE_BASE',
+                'knowledgeBaseConfiguration': {
+                    'knowledgeBaseId': knowledge_base_id,
+                    'modelArn': opt_model_id,
+                    'retrievalConfiguration': {
+                        'vectorSearchConfiguration': {
+                            'numberOfResults': 3, #kb_retrieve_document_count,  #Minimum value of 1. Maximum value of 100
+                            #'overrideSearchType': 'HYBRID'|'SEMANTIC'
+                        }
+                    }
+                }
+            },
+        }
+
+        if session_id != "" and session_id is not None:
+            params["sessionId"] = session_id #session_id=84219eab-2060-4a8f-a481-3356d66b8586
+            #st.session_state.menu_kb_rg_session_id
+
+        
+        response = bedrock_agent_runtime.retrieve_and_generate(**params)
+
+        result_text = response['output']['text']
+        
         with st.chat_message("assistant"):
-            result_area = st.empty()
-            sources_area = st.empty()
-            result_container = st.container(border=True)
-            stream = response["body"]
-            for event in stream:
-                
-                if event["chunk"]:
-
-                    chunk = json.loads(event["chunk"]["bytes"])
-
-                    if chunk['type'] == 'message_start':
-                        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                        #result_container.write(opts)
-
-                    elif chunk['type'] == 'message_delta':
-                        #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
-                        #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
-                        #print(f"Output tokens: {chunk['usage']['output_tokens']}")
-                        pass
-
-                    elif chunk['type'] == 'content_block_delta':
-                        if chunk['delta']['type'] == 'text_delta':
-                            text = chunk['delta']['text']
-                            #await msg.stream_token(f"{text}")
-                            result_text += f"{text}"
-                            result_area.write(result_text)
-
-                    elif chunk['type'] == 'message_stop':
-                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                        input_token_count = invocation_metrics["inputTokenCount"]
-                        output_token_count = invocation_metrics["outputTokenCount"]
-                        latency = invocation_metrics["invocationLatency"]
-                        lag = invocation_metrics["firstByteLatency"]
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        #await msg.stream_token(f"\n\n{stats}")
-                        #result_text += f"\n\n{stats}"
-                        #result_area.write(result_text)
-                        #result_container.write(stats)
-                        invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        #result_container.markdown(f""":blue[{invocation_metrics}]""")
-                        #result_area.markdown(f"{invocation_metrics} {result_text} ")
-                        result_text_final = f"""{result_text}   \n\n\n
-                        {reference_chunk_list_text}
-                        """
-                        #result_text += f"{reference_chunk_list_text}"
-                        #result_area.write(f"{result_text_final}")
-                        #result_container.markdown()
-                        result_area.write(f"{result_text} \n\n  ")
-                        #result_container.markdown(f"""{reference_chunk_list_text}""")
-                        #with st.expander("Sources"):
-                            #st.write(f"{reference_chunk_list_text}")
-                        #    for idx, reference_chunk in reference_chunk_list:
-                        #        st.write(f"{reference_chunk}")
-                        sources_area.markdown("  \n\n")
-                        idx = 1
-                        for reference_chunk in reference_chunk_list:
-                            with st.expander(f"""[{idx}] :green[{reference_chunk}]"""):
-                                st.markdown(f""":gray[{reference_chunk_text_list[idx-1]}]""")
-                            idx += 1
-                        st.session_state["menu_kb_reference_chunk_list"] = reference_chunk_list
-
-                elif "internalServerException" in event:
-                    exception = event["internalServerException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "modelStreamErrorException" in event:
-                    exception = event["modelStreamErrorException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "modelTimeoutException" in event:
-                    exception = event["modelTimeoutException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "throttlingException" in event:
-                    exception = event["throttlingException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                elif "validationException" in event:
-                    exception = event["validationException"]
-                    result_text += f"\n\{exception}"
-                    result_area.write(result_text)
-                else:
-                    result_text += f"\n\nUnknown Token"
-                    result_area.write(result_text)
+            st.write(result_text)
         
 
         ####
+        
+        st.session_state["menu_kb_rg_session_id"] = response['sessionId']
+
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
-        st.session_state.invocation_metrics.append("") # No Metrics for User Query
-        st.session_state.invocation_metrics.append(invocation_metrics) # Metric for AI Response
+        #st.session_state.invocation_metrics.append("") # No Metrics for User Query
+        #st.session_state.invocation_metrics.append(invocation_metrics) # Metric for AI Response
 
         
     except ClientError as err:
