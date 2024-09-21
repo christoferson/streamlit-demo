@@ -259,11 +259,30 @@ if user_prompt := st.chat_input():
         
         response = bedrock_agent_runtime.retrieve_and_generate(**params)
 
-        result_text = response['output']['text']
-        
         with st.chat_message("assistant"):
+            result_text = response['output']['text']
             st.write(result_text)
-        
+
+        # Process and display citations
+        if 'citations' in response:
+            st.write("Sources:")
+            for idx, citation in enumerate(response['citations'], 1):
+                if 'retrievedReferences' in citation:
+                    for ref in citation['retrievedReferences']:
+                        with st.expander(f"Source {idx}"):
+                            if 'content' in ref and 'text' in ref['content']:
+                                st.write(f"**Content:** {ref['content']['text'][:200]}...")  # Display first 200 characters
+                            if 'location' in ref:
+                                location = ref['location']
+                                if 's3Location' in location:
+                                    st.write(f"**S3 Location:** {location['s3Location']['uri']}")
+                                elif 'webLocation' in location:
+                                    st.write(f"**Web Location:** {location['webLocation']['url']}")
+                                # Add other location types as needed
+                            if 'metadata' in ref:
+                                st.write("**Metadata:**")
+                                for key, value in ref['metadata'].items():
+                                    st.write(f"- {key}: {value}")  
 
         ####
         
