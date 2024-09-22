@@ -117,7 +117,6 @@ def medatata_create_filter_condition(application_options):
 
     return filter
 
-
 with st.sidebar:
     st.markdown(":blue[Settings]")
     opt_kb_id = st.selectbox(label="Knowledge Base", options=opt_bedrock_kb_list, index = 0, key="kb_id", format_func=knowledge_base_format_func)
@@ -127,13 +126,14 @@ with st.sidebar:
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p", help=cmn_constants.opt_help_top_p)
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k", help=cmn_constants.opt_help_top_k)
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
+    opt_query_transformation = st.selectbox(label="Query Transformation", options=["NONE", "QUERY_DECOMPOSITION"], index = 0, key="query_transformation")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot - Knowledge Base 2-2-6")
-st.markdown("Vector Search then LLM Query")
+st.markdown("💬 Chatbot - Knowledge Base 2-2-6")
+#st.markdown("Vector Search then LLM Query")
 
 
 
@@ -235,19 +235,14 @@ if user_prompt := st.chat_input():
 
         params = {
             "input" : {
-                'text': prompt,
+                'text': prompt.strip(),
             },
             "retrieveAndGenerateConfiguration" : {
                 'type': 'KNOWLEDGE_BASE',
                 'knowledgeBaseConfiguration': {
                     'knowledgeBaseId': knowledge_base_id,
                     'modelArn': opt_model_id,
-                    'retrievalConfiguration': {
-                        'vectorSearchConfiguration': {
-                            'numberOfResults': 3, #kb_retrieve_document_count,  #Minimum value of 1. Maximum value of 100
-                            #'overrideSearchType': 'HYBRID'|'SEMANTIC'
-                        }
-                    }
+                    'retrievalConfiguration': retrieval_configuration,
                 }
             },
         }
@@ -256,6 +251,14 @@ if user_prompt := st.chat_input():
             params["sessionId"] = session_id #session_id=84219eab-2060-4a8f-a481-3356d66b8586
             #st.session_state.menu_kb_rg_session_id
 
+        if opt_query_transformation == "QUERY_DECOMPOSITION":
+            params["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]["orchestrationConfiguration"] = {
+                "queryTransformationConfiguration": {
+                    "type": "QUERY_DECOMPOSITION"
+                }
+            }
+
+        st.json(params, expanded=False)
         
         response = bedrock_agent_runtime.retrieve_and_generate(**params)
 
@@ -263,26 +266,26 @@ if user_prompt := st.chat_input():
             result_text = response['output']['text']
             st.write(result_text)
 
-        # Process and display citations
-        if 'citations' in response:
-            st.write("Sources:")
-            for idx, citation in enumerate(response['citations'], 1):
-                if 'retrievedReferences' in citation:
-                    for ref in citation['retrievedReferences']:
-                        with st.expander(f"Source {idx}"):
-                            if 'content' in ref and 'text' in ref['content']:
-                                st.write(f"**Content:** {ref['content']['text'][:200]}...")  # Display first 200 characters
-                            if 'location' in ref:
-                                location = ref['location']
-                                if 's3Location' in location:
-                                    st.write(f"**S3 Location:** {location['s3Location']['uri']}")
-                                elif 'webLocation' in location:
-                                    st.write(f"**Web Location:** {location['webLocation']['url']}")
-                                # Add other location types as needed
-                            if 'metadata' in ref:
-                                st.write("**Metadata:**")
-                                for key, value in ref['metadata'].items():
-                                    st.write(f"- {key}: {value}")  
+            # Process and display citations
+            if 'citations' in response and len(response['citations']) > 0:
+                st.write("Sources:")
+                for idx, citation in enumerate(response['citations'], 1):
+                    if 'retrievedReferences' in citation:
+                        for ref_idx, ref in enumerate(citation['retrievedReferences'], 1):
+                            with st.expander(f"Source {idx} (Reference {ref_idx})"):
+                                if 'content' in ref and 'text' in ref['content']:
+                                    st.write(f"**Content:** {ref['content']['text'][:200]}...")  # Display first 200 characters
+                                if 'location' in ref:
+                                    location = ref['location']
+                                    if 's3Location' in location:
+                                        st.write(f"**S3 Location:** {location['s3Location']['uri']}")
+                                    elif 'webLocation' in location:
+                                        st.write(f"**Web Location:** {location['webLocation']['url']}")
+                                    # Add other location types as needed
+                                if 'metadata' in ref:
+                                    st.write("**Metadata:**")
+                                    for key, value in ref['metadata'].items():
+                                        st.write(f"- {key}: {value}")  
 
         ####
         
@@ -293,12 +296,15 @@ if user_prompt := st.chat_input():
         #st.session_state.invocation_metrics.append("") # No Metrics for User Query
         #st.session_state.invocation_metrics.append(invocation_metrics) # Metric for AI Response
 
-        
+            
     except ClientError as err:
         message = err.response["Error"]["Message"]
-        logger.error("A client error occurred: %s", message)
-        print("A client error occured: " + format(message))
-        st.chat_message("system").write(message)
+        logger.error("A client error occurred: %s\n%s", message, traceback.format_exc())
+        st.chat_message("system").write(f"An error occurred: {message}")
+    except Exception as e:
+        message = str(e)
+        logger.error("An unexpected error occurred: %s\n%s", message, traceback.format_exc())
+        st.chat_message("system").write(f"An unexpected error occurred: {message}")
 
 
 
