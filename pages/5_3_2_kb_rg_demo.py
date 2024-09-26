@@ -8,6 +8,7 @@ import cmn_auth
 import cmn_settings
 import cmn_constants
 import app_bedrock_lib
+from datetime import datetime
 
 from botocore.exceptions import ClientError
 
@@ -207,18 +208,31 @@ if user_prompt := st.chat_input():
         kb_retrieve_document_count = opt_kb_doc_count
 
         application_options = dict (
-            #retrieve_search_type = settings["RetrieveSearchType"],
-            #metadata_year = settings["MetadataYear"],
             metadata_category = document_category,
-
-            #option_terse = settings["Terse"],
-            #option_strict = settings["Strict"],
-            #option_source_table_markdown_display = settings["SourceTableMarkdown"],
         )
+
+        # Get the current timestamp
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         prompt = f"""\n\nHuman: {user_prompt[0:900]}
         Assistant:
         """
+
+        # Create the custom prompt with the current time and user query
+        custom_prompt = f"""
+        Human: You are a helpful assistant. The current time is {current_time}. Please answer the question with the provided context while following instructions provided:
+
+        Question: $query$
+
+        Instructions:
+        - Only answer if you know the answer with certainty and is evident from the provided context.
+        - Do not reformat, or convert any numeric values. Inserting commas is allowed for readability.
+        - Present source data in tabular form as markdown. 
+
+        Context:
+        $search_results$
+
+        $output_format_instructions$"""
 
         retrieval_configuration={
             'vectorSearchConfiguration': {
@@ -243,8 +257,31 @@ if user_prompt := st.chat_input():
                     'knowledgeBaseId': knowledge_base_id,
                     'modelArn': opt_model_id,
                     'retrievalConfiguration': retrieval_configuration,
-                }
+                    'generationConfiguration': {
+                        #'additionalModelRequestFields': {
+                        #    'string': {...}|[...]|123|123.4|'string'|True|None
+                        #},
+                        #'guardrailConfiguration': {
+                        #    'guardrailId': 'string',
+                        #    'guardrailVersion': 'string'
+                        #},
+                        'inferenceConfig': {
+                            'textInferenceConfig': {
+                                'maxTokens': opt_max_tokens,
+                                #'stopSequences': [
+                                #    'string',
+                                #],
+                                'temperature': opt_temperature,
+                                'topP': opt_top_p
+                            }
+                        },
+                        'promptTemplate': {
+                            'textPromptTemplate': custom_prompt
+                        }
+                    },
+                },  
             },
+            
         }
 
         if session_id != "" and session_id is not None:

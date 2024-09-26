@@ -1,6 +1,7 @@
 import streamlit as st
 import boto3
 import cmn_settings
+import cmn_constants
 import json
 import logging
 import cmn_auth
@@ -19,10 +20,10 @@ import base64
 import uuid
 import pandas as pd
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 
 AWS_REGION = cmn_settings.AWS_REGION
-MAX_MESSAGES = 100 * 2
+MAX_MESSAGES = 80 * 2
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -61,50 +62,7 @@ st.set_page_config(
 
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
-st.markdown(
-    """
-    <style>
-    button[kind="primary"] {
-        background: none!important;
-        border: none;
-        padding: 0!important;
-        margin: 0;
-        color: black !important;
-        text-decoration: none;
-        cursor: pointer;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        text-decoration: none;
-        color: black !important;
-    }
-    button[kind="primary"]:focus {
-        outline: none !important;
-        box-shadow: none !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Play Audio Button stAudio
-st.markdown(
-    """
-    <style>
-    #.stAudio {
-    #    max-width: 70px;
-    #    max-height: 50px;
-    #}
-    #audio::-webkit-media-controls-time-remaining-display,
-    #audio::-webkit-media-controls-current-time-display {
-    #    max-width: 50%;
-    #    max-height: 20px;
-    #}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -133,59 +91,6 @@ mime_mapping_document = {
     "application/vnd.ms-excel": "csv",
     "application/pdf": "pdf",
 }
-
-
-
-def recite_button_clicked(text):
-    try:
-        # Request speech synthesis
-        response = polly.synthesize_speech(Text=text, OutputFormat="mp3", VoiceId="Joanna")
-    except (BotoCoreError, ClientError) as error:
-        print(error)
-        return
-
-    if "AudioStream" in response:
-        # Note: Closing the stream is important because the service throttles on the
-        # number of parallel connections. Here we are using contextlib.closing to
-        # ensure the close method of the stream object will be called automatically
-        # at the end of the with statement's scope.
-            with closing(response["AudioStream"]) as stream:
-                output = os.path.join(gettempdir(), "speech.mp3")
-                try:
-                    # Open a file for writing the output as a binary stream
-                    sound = stream.read()
-                    with open(output, "wb") as file:
-                        file.write(sound)
-                    
-                    st.session_state['audio_stream'] = sound
-
-                    #data = open(output, 'rb').read()
-                    #song = AudioSegment.from_file(BytesIO(data), format="mp3")
-                    #play(song)
-                except IOError as error:
-                    # Could not write to file, exit gracefully
-                    print(error)
-                    #sys.exit(-1)
-                    st.session_state['audio_stream'] = ""
-                    return
-                
-                print("**********************************************************************")
-                try:                 
-                    print(f"/n/n---------------------------------------------------------/n{output}")   
-                    #data = open(output, 'rb').read()
-                    #print("------")
-                    #song = AudioSegment.from_file(BytesIO(data), format="mp3")
-                    #print("------")
-                    #play(song)
-                except IOError as error:
-                    print(error)
-                    return                
-
-    else:
-        # The response didn't contain audio data, exit gracefully
-        print("Could not stream audio")
-        #sys.exit(-1)
-        return
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
@@ -209,13 +114,25 @@ opt_model_id_list = [
     "mistral.mistral-large-2402-v1:0", # Mistral Large
 ]
 
+# "You are a question and answering chatbot"
+# - Maintaining a helpful and courteous tone throughout the interaction.
+opt_system_msg_int = """You are a smart and helpful Assistant. Your tasks include:
+- Providing detailed, step-by-step, and professional responses to user queries.
+- Ensuring accuracy and depth in your explanations.
+- Adapting your language and complexity to suit the user's level of understanding.
+- Offering relevant examples or analogies to clarify complex concepts.
+- Citing reliable sources when appropriate to support your information.
+Please think through each step carefully before responding to ensure clarity, completeness, and coherence in your answer. 
+If any part of the query is unclear, don't hesitate to ask for clarification to provide the most accurate and helpful response possible.
+"""
+
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
+    opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
 
 
 
@@ -224,8 +141,6 @@ st.markdown("💬 Converse 3-5-3")
 if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
 
-#if "audio_stream" not in st.session_state:
-#    st.session_state["audio_stream"] = ""
 
 st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
 
@@ -305,6 +220,11 @@ if uploaded_file:
 
 if prompt:
     
+    # menu_converse_messages = st.session_state.menu_converse_messages
+    # menu_converse_messages_len = len(menu_converse_messages)
+    # if menu_converse_messages_len > MAX_MESSAGES:
+    #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
+
     st.session_state["audio_stream"] = ""
 
     message_history = st.session_state.menu_converse_messages.copy()
@@ -469,6 +389,11 @@ if prompt:
             logger.error("A client error occurred: %s", message)
             print("A client error occured: " + format(message))
             st.chat_message("system").write(message)
+        except ReadTimeoutError as err:
+            logger.error("A client error occurred: %s", err)  # Log the error directly
+            print("A client error occurred: " + str(err))     # Print the error as a string
+            st.chat_message("system").write(str(err))         # Use str() to display in chat message
+
 
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])
