@@ -136,7 +136,20 @@ variation_prompts_init = [
 ]
 
 opt_model_id_list = [
+    "stability.stable-diffusion-xl-v1",
+    "stability.stable-image-core-v1:0",
+    "stability.sd3-large-v1:0",
+    "stability.stable-image-ultra-v1:0",
+]
+
+opt_model_id_list_sdxl = [
     "stability.stable-diffusion-xl-v1"
+]
+
+opt_model_id_list_sd3 = [
+    "stability.stable-image-core-v1:0",
+    "stability.sd3-large-v1:0",
+    "stability.stable-image-ultra-v1:0",
 ]
 
 opt_style_preset_list = [
@@ -148,6 +161,14 @@ opt_style_preset_list = [
     "enhance",
     "isometric",
     "line-art"
+]
+
+opt_aspect_ratio_list = [
+    "1:1", "16:9", "21:9", "2:3", #3:2, 4:5, 5:4, 9:16, 9:21
+]
+
+opt_image_format_list = [
+    "JPEG", "PNG"
 ]
 
 opt_negative_prompt_list = [
@@ -177,15 +198,27 @@ opt_negative_prompt = opt_negative_prompt_list
 opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
 with st.sidebar:
-    #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
-    opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
-    opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
-    opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
-    #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
-    #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
-    opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
-    opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
+    opt_model_id = st.selectbox(label=":blue[**Model ID**]", options=opt_model_id_list, index = 0, key="model_id")
+
+if opt_model_id in opt_model_id_list_sdxl:
+    with st.sidebar:
+        #opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
+        opt_style_preset = st.selectbox(label=":blue[**Style Presets**]", options=opt_style_preset_list, index = 0, key="style_preset", help=opt_style_preset_help)
+        opt_config_scale = st.slider(label=":blue[**Config Scale**] - Loose vs Strict", min_value=0, max_value=35, value=10, step=1, key="config_scale", help=opt_config_scale_help)
+        opt_steps = st.slider(label=":blue[**Steps**]", min_value=10, max_value=50, value=30, step=1, key="steps", help=opt_steps_help)
+        opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 0, key="dimensions")
+        #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
+        #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
+        opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
+        opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
+
+if opt_model_id in opt_model_id_list_sd3:
+    with st.sidebar:
+        opt_aspect_ratio = st.selectbox(label=":blue[**Aspect Ratio**]", options=opt_aspect_ratio_list, index = 0, key="aspect_ratio")
+        opt_output_image_format = st.selectbox(label=":blue[**Output Format**]", options=opt_image_format_list, index = 0, key="output_image_format")
+        opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
+        opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
+
 
 tab_basic, tab_reference_image = st.tabs(["Basic", "Reference Image"])
 
