@@ -19,6 +19,7 @@ import io
 import base64
 import uuid
 import pandas as pd
+from cmn.bedrock_models import FoundationModel
 
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 
@@ -137,6 +138,7 @@ with st.sidebar:
     opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
 
 
+opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
 
 st.markdown("💬 Converse 3-5-3")
 
@@ -170,14 +172,25 @@ for msg in st.session_state.menu_converse_messages:
 if "menu_converse_uploader_key" not in st.session_state:
     st.session_state.menu_converse_uploader_key = 0
 
-# #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
-uploaded_file = st.file_uploader(
-        "Attach Image",
-        type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
-        accept_multiple_files=False,
-        label_visibility="collapsed",
-        key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
-    )
+#st.write(f"""{opt_fm.isFeatureSupported("document_chat")}   {opt_fm.isFeatureSupported("vision")}""")
+
+uploaded_file_type_list = []
+if opt_fm.isFeatureSupported("document_chat"):
+    uploaded_file_type_list.extend(["txt", "csv", "pdf", "md"])
+if opt_fm.isFeatureSupported("vision"):
+    uploaded_file_type_list.extend(["png", "jpg", "jpeg"])
+
+if uploaded_file_type_list:
+    # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
+    uploaded_file = st.file_uploader(
+            "Attach Image",
+            type=uploaded_file_type_list,
+            accept_multiple_files=False,
+            label_visibility="collapsed",
+            key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
+        )
+else:
+    uploaded_file = None
 
 prompt = st.chat_input()
 
