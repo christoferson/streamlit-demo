@@ -71,3 +71,18 @@ OutputImageCount
 
 https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
 https://docs.aws.amazon.com/bedrock/latest/userguide/throughput.html
+
+
+
+##### Errors & Troubleshooting
+
+##### Error: The provided model doesn't support on-demand throughput.
+If you are using a cross region model, e.g. llama, make sure you are using the cross region endpoint.
+
+When using LLama, using the following model id will result to an error:
+meta.llama3-2-11b-instruct-v1:0
+Instead, you should use the following:
+us.meta.llama3-2-11b-instruct-v1:0
+us.meta.llama3-2-90b-instruct-v1:0
+Note, make sure to replace 'us' with the correct region. Refer to the followng for the list of model id.
+https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference-support.html
