@@ -239,7 +239,7 @@ if prompt:
     # menu_converse_messages_len = len(menu_converse_messages)
     # if menu_converse_messages_len > MAX_MESSAGES:
     #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
-
+    #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
     st.session_state["audio_stream"] = ""
 
     message_history = st.session_state.menu_converse_messages.copy()
@@ -252,7 +252,7 @@ if prompt:
                     "image": {
                         "format": mime_mapping_image[uploaded_file_type],
                         "source": {
-                            "bytes": uploaded_file_bytes,
+                            "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
                         }
                     },
                 }
@@ -271,6 +271,8 @@ if prompt:
                     },
                 }
             )
+        else:
+            st.write(f"Not supported file type: {uploaded_file.type}")
     message_history.append(message_user_latest)
     #print(f"******{message_user_latest}")
     st.chat_message("user").write(prompt)
