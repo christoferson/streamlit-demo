@@ -1,4 +1,17 @@
+class InferenceParameter:
+    def __init__(self, name, min_value, default_value, max_value, supported=True):
+        self.Name = name
+        self.MinValue = min_value
+        self.DefaultValue = default_value
+        self.MaxValue = max_value
+        self._supported = supported
+
+    def isSupported(self):
+        return self._supported
+
+
 class FoundationModel:
+
     def __init__(self, provider, model_id, converse, converse_stream, system_prompts, document_chat, vision, tool_use, streaming_tool_use, guardrails):
         self.provider = provider
         self.model_id = model_id
@@ -12,12 +25,59 @@ class FoundationModel:
             'streaming_tool_use': streaming_tool_use,
             'guardrails': guardrails
         }
+        self.InferenceParameter = self._set_inference_parameters()
 
     def isFeatureSupported(self, feature_id):
         return self.features.get(feature_id, False)
 
     def get_provider(self):
         return self.provider
+
+    def _set_inference_parameters(self):
+        if self.provider == "Anthropic":
+            return {
+                "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 0, 2048, 4096),
+                "Temperature": InferenceParameter("Temperature", 0, 1, 1),
+                "TopP": InferenceParameter("TopP", 0, 1, 1),
+                "TopK": InferenceParameter("TopK", 0, 250, 500)
+            }
+        elif self.provider == "Meta":
+            return {
+                "MaxTokensToSample": InferenceParameter("MaxGenLen", 1, 1024, 2048),
+                "Temperature": InferenceParameter("Temperature", 0, 0.5, 1),
+                "TopP": InferenceParameter("TopP", 0, 0.9, 1),
+                "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
+            }
+        elif self.provider == "Mistral":
+            if self.model_id in ["mistral.mistral-large-2402-v1:0", "mistral.mistral-large-2402-v1", 
+                                 "mistral.mistral-small-2402-v1:0", "mistral.mistral-small-2402-v1"]:
+                return {
+                    "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 4098, 8192),
+                    "Temperature": InferenceParameter("Temperature", 0, 0.7, 1),
+                    "TopP": InferenceParameter("TopP", 0, 1, 1),
+                    "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
+                }
+            else:  # For other Mistral models (e.g., Mistral 7B Instruct, Mixtral 8X7B Instruct)
+                return {
+                    "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 512, 8192),
+                    "Temperature": InferenceParameter("Temperature", 0, 0.5, 1),
+                    "TopP": InferenceParameter("TopP", 0, 0.9, 1),
+                    "TopK": InferenceParameter("TopK", 0, 50, 50)
+                }
+        elif self.provider == "Cohere":
+            return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
+                "TopP": InferenceParameter("p", 0, 0.75, 1),
+                "TopK": InferenceParameter("k", 0, 0, 500)
+            }
+        else:
+            return {
+                "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 0, 2048, 4096),
+                "Temperature": InferenceParameter("Temperature", 0, 1, 1),
+                "TopP": InferenceParameter("TopP", 0, 1, 1),
+                "TopK": InferenceParameter("TopK", 0, 250, 500)
+            }
 
     @staticmethod
     def find(model_id):
