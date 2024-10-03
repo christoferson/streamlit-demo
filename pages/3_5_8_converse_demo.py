@@ -192,6 +192,7 @@ if uploaded_file_type_list:
 else:
     uploaded_file = None
 
+
 prompt = st.chat_input()
 
 uploaded_file_key = None
@@ -349,7 +350,7 @@ if prompt:
                             total_token_count = metadata['usage']['totalTokens']
                         if 'metrics' in event['metadata']:
                             latency = metadata['metrics']['latencyMs']
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
                         result_container.write(stats)
 
                     if "internalServerException" in event:
