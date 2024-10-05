@@ -7,17 +7,10 @@ import logging
 import cmn_auth
 import os
 from io import BytesIO
-import sys
-import subprocess
-from contextlib import closing
-from tempfile import gettempdir
 
-from pydub import AudioSegment
-from pydub.playback import play
 from PIL import Image
 import io
 import base64
-import uuid
 import pandas as pd
 from cmn.bedrock_models import FoundationModel
 
@@ -131,14 +124,22 @@ If any part of the query is unclear, don't hesitate to ask for clarification to 
 
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
-
 
 opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
+
+opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
+opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+
+with st.sidebar:
+    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    if opt_fm_top_k.isSupported():
+        opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    else:
+        opt_top_k = 0
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
+    opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
+
 
 st.markdown("💬 Converse 3-5-3")
 
@@ -241,7 +242,7 @@ if prompt:
     # if menu_converse_messages_len > MAX_MESSAGES:
     #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
     #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
-    st.session_state["audio_stream"] = ""
+    #st.session_state["audio_stream"] = ""
 
     message_history = st.session_state.menu_converse_messages.copy()
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
@@ -287,13 +288,22 @@ if prompt:
         #stopSequences 
     }
 
-    additional_model_fields = {"top_k": opt_top_k}
-    if opt_model_id.startswith("cohere"):
+    additional_model_fields = {}
+
+    if opt_fm_top_k.isSupported():
+        additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+    
+    # If additional_model_fields is an empty dictionary, set it to None
+    if additional_model_fields == {}:
         additional_model_fields = None
-    if opt_model_id.startswith("meta") or opt_model_id.startswith("us.meta"):
-        additional_model_fields = None
-    if opt_model_id.startswith("mistral"):
-        additional_model_fields = None
+
+    # additional_model_fields = {"top_k": opt_top_k}
+    # if opt_model_id.startswith("cohere"):
+    #     additional_model_fields = None
+    # if opt_model_id.startswith("meta") or opt_model_id.startswith("us.meta"):
+    #     additional_model_fields = None
+    # if opt_model_id.startswith("mistral"):
+    #     additional_model_fields = None
 
 
 
@@ -413,6 +423,6 @@ if prompt:
             st.chat_message("system").write(str(err))         # Use str() to display in chat message
 
 
-if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
-    audio_bytes = BytesIO(st.session_state['audio_stream'])
-    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+#if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
+#    audio_bytes = BytesIO(st.session_state['audio_stream'])
+#    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
