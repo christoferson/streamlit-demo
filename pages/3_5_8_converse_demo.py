@@ -63,6 +63,11 @@ def image_to_base64(image,mime_type:str):
     image.save(buffer, format=mime_type)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+def get_conversation_download():
+    conversation = st.session_state.menu_converse_messages
+    conversation_json = json.dumps(conversation, indent=2)
+    return BytesIO(conversation_json.encode())
+
 mime_mapping = {
     "image/png": "png",
     "image/jpeg": "jpeg",
@@ -426,3 +431,13 @@ if prompt:
 #if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+
+
+if st.button("Download Conversation"):
+    conversation_file = get_conversation_download()
+    st.download_button(
+        label="Download JSON",
+        data=conversation_file,
+        file_name="conversation.json",
+        mime="application/json"
+    )
