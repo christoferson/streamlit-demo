@@ -329,18 +329,18 @@ with st.sidebar:
 
 
 
-st.markdown("💬 Converse 3-5-3")
+st.markdown("💬 Converse Tool 371")
 
-if "menu_converse_messages" not in st.session_state:
-    st.session_state["menu_converse_messages"] = []
+if "menu_converse_tool_messages" not in st.session_state:
+    st.session_state["menu_converse_tool_messages"] = []
 
 #if "audio_stream" not in st.session_state:
 #    st.session_state["audio_stream"] = ""
 
-st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+st.markdown(f"{len(st.session_state.menu_converse_tool_messages)}/{MAX_MESSAGES}")
 
 idx = 1
-for msg in st.session_state.menu_converse_messages:
+for msg in st.session_state.menu_converse_tool_messages:
     idx = idx + 1
     contents = msg["content"]
     with st.chat_message(msg["role"]):
@@ -360,8 +360,8 @@ for msg in st.session_state.menu_converse_messages:
             #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
             st.markdown(f"{content_text}")
     
-if "menu_converse_uploader_key" not in st.session_state:
-    st.session_state.menu_converse_uploader_key = 0
+if "menu_converse_tool_uploader_key" not in st.session_state:
+    st.session_state.menu_converse_tool_uploader_key = 0
 
 # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
 uploaded_file = st.file_uploader(
@@ -369,8 +369,10 @@ uploaded_file = st.file_uploader(
         type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
         accept_multiple_files=False,
         label_visibility="collapsed",
-        key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
+        key=f"menu_converse_tool_uploader_key_{st.session_state.menu_converse_tool_uploader_key}"
     )
+
+st.markdown(f"Tools: Calculator")
 
 prompt = st.chat_input()
 
@@ -417,7 +419,7 @@ if prompt:
     
     st.session_state["audio_stream"] = ""
 
-    message_history = st.session_state.menu_converse_messages.copy()
+    message_history = st.session_state.menu_converse_tool_messages.copy()
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
     if uploaded_file_name:
         content = message_user_latest['content']
@@ -627,19 +629,19 @@ if prompt:
             message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
 
-            st.session_state.menu_converse_messages.append(message_user_latest)
-            st.session_state.menu_converse_messages.append(message_assistant_latest)
+            st.session_state.menu_converse_tool_messages.append(message_user_latest)
+            st.session_state.menu_converse_tool_messages.append(message_assistant_latest)
 
             
             # Trim message History
-            menu_converse_messages = st.session_state.menu_converse_messages
-            menu_converse_messages_len = len(menu_converse_messages)
-            if menu_converse_messages_len > MAX_MESSAGES:
-                del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-            #print(f"menu_converse_messages_len={menu_converse_messages_len}")
+            menu_converse_tool_messages = st.session_state.menu_converse_tool_messages
+            menu_converse_tool_messages_len = len(menu_converse_tool_messages)
+            if menu_converse_tool_messages_len > MAX_MESSAGES:
+                del menu_converse_tool_messages[0 : (menu_converse_tool_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
+            #print(f"menu_converse_tool_messages_len={menu_converse_tool_messages_len}")
 
             if uploaded_file_name:
-                st.session_state.menu_converse_uploader_key += 1
+                st.session_state.menu_converse_tool_uploader_key += 1
 
             #print(json.dumps(message_user_latest, indent=2))
             #print(message_user_latest)
