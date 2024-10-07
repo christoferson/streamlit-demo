@@ -68,6 +68,46 @@ def get_conversation_download():
     conversation_json = json.dumps(conversation, indent=2)
     return BytesIO(conversation_json.encode())
 
+def clear_conversation():
+    st.session_state.menu_converse_messages = []
+    st.session_state.menu_converse_uploader_key = 0
+
+def upload_conversation(uploaded_file):
+    try:
+        # Read the uploaded JSON file
+        content = uploaded_file.getvalue().decode("utf-8")
+        conversation = json.loads(content)
+
+        # Validate the structure of the uploaded conversation
+        if not isinstance(conversation, list):
+            raise ValueError("Invalid conversation format: expected a list")
+
+        for message in conversation:
+            if not isinstance(message, dict) or "role" not in message or "content" not in message:
+                raise ValueError("Invalid message format: expected 'role' and 'content' keys")
+
+            if message["role"] not in ["user", "assistant", "system"]:
+                raise ValueError(f"Invalid role: {message['role']}")
+
+            if not isinstance(message["content"], list):
+                raise ValueError("Invalid content format: expected a list")
+
+            for content_item in message["content"]:
+                if not isinstance(content_item, dict) or "text" not in content_item:
+                    raise ValueError("Invalid content item: expected 'text' key")
+
+        # If validation passes, update the session state
+        st.session_state.menu_converse_messages = conversation
+        #st.success("Conversation uploaded successfully!")
+        #st.rerun()
+
+    except json.JSONDecodeError:
+        st.error("Invalid JSON file. Please upload a valid JSON conversation file.")
+    except ValueError as e:
+        st.error(f"Error in conversation structure: {str(e)}")
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {str(e)}")
+
 mime_mapping = {
     "image/png": "png",
     "image/jpeg": "jpeg",
@@ -433,11 +473,27 @@ if prompt:
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
 
-if st.button("Download Conversation"):
-    conversation_file = get_conversation_download()
-    st.download_button(
-        label="Download JSON",
-        data=conversation_file,
-        file_name="conversation.json",
-        mime="application/json"
-    )
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("Download Conversation"):
+        conversation_file = get_conversation_download()
+        st.download_button(
+            label="Download JSON",
+            data=conversation_file,
+            file_name="conversation.json",
+            mime="application/json"
+        )
+
+with col2:
+    # if st.button("Upload JSON File"):
+    #     uploaded_file = st.file_uploader("Choose a JSON file", type=["json"], key="json_uploader")
+    #     if uploaded_file is not None:
+    #         upload_conversation(uploaded_file)
+    #         st.rerun()
+    pass
+
+with col3:
+    if st.button("Clear Conversation"):
+        clear_conversation()
+        st.rerun()
