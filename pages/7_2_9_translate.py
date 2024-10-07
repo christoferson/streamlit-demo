@@ -71,11 +71,17 @@ st.markdown(
 st.markdown(
     """
     <style>
+    div.stCode {
+        background-color: white;
+    }
+    div.stCode pre {
+        background-color: white;
+    }
     div.stCodeBlock {
-        background-color: transparent;
+        background-color: white;
     }
     div.stCodeBlock > pre {
-        background-color: transparent;
+        background-color: white;
     }
     code.language-wiki {
         font-size: 16px;
@@ -88,7 +94,7 @@ st.markdown(
         white-space: pre-line;
         overflow-wrap: anywhere;
         color: blue;
-        background-color: transparent;
+        background-color: white;
     }
     code.language-wiki > span {
         font-size: 16px;;
@@ -100,8 +106,8 @@ st.markdown(
         word-break: break-all;
         white-space: pre-line;
         overflow-wrap: anywhere;
-        color: blue;
-        background-color: transparent;
+        color: black;
+        background-color: white;
     }
 
     code.language-markdown {
@@ -115,7 +121,7 @@ st.markdown(
         white-space: pre-line;
         overflow-wrap: anywhere;
         color: orange;
-        background-color: transparent;
+        background-color: white;
     }
 
     
@@ -185,20 +191,21 @@ col2_container.caption(":blue[Result]")
 result_container = col2_container.container()
 result_area = result_container.empty()
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
-    result_display_columns = result_container.slider("columns", value=45, min_value=50, max_value=80, step=1, label_visibility="collapsed")
+    #result_display_columns = result_container.slider("columns", value=45, min_value=50, max_value=80, step=1, label_visibility="collapsed")
     result_text = st.session_state["translate_result"]
-    result_text_wrapped = "\n".join(
-        tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
-    )
+    #result_text_wrapped = "\n".join(
+    #    tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
+    #)
     result_area.markdown(result_text)
+    result_container.code(result_text, language="wiki", wrap_lines=True)
 
-    result_container.code(result_text_wrapped, language="markdown", line_numbers=False)
+    #result_container.code(result_text_wrapped, language="markdown", line_numbers=False)
 
-    markdown_display = result_container.checkbox("Markdown", value=True)
-    if markdown_display:
-        result_container.markdown(result_text)
-    else:
-        result_container.code(result_text, language="wiki", wrap_lines=True)
+    #markdown_display = result_container.checkbox("Markdown", value=True)
+    #if markdown_display:
+    #    result_container.markdown(result_text)
+    #else:
+    #    result_container.code(result_text, language="wiki", wrap_lines=True)
 
 
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
