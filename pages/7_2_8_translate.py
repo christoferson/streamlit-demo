@@ -191,12 +191,14 @@ if "translate_result" in st.session_state and st.session_state["translate_result
         tw.wrap(result_text, width=result_display_columns, drop_whitespace=True, replace_whitespace=False)
     )
     result_area.markdown(result_text)
-    result_container.code(result_text_wrapped, language="markdown")
+
+    result_container.code(result_text_wrapped, language="markdown", line_numbers=False)
+
     markdown_display = result_container.checkbox("Markdown", value=True)
     if markdown_display:
         result_container.markdown(result_text)
     else:
-        result_container.code(result_text, language="wiki")
+        result_container.code(result_text, language="wiki", wrap_lines=True)
 
 
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
@@ -205,10 +207,11 @@ if "translate_result" in st.session_state and st.session_state["translate_result
     result_columns[1].download_button(key="save_button", label='📩 Save', type='primary', file_name="result.txt", data=st.session_state["translate_result"], mime='text/csv', use_container_width=True)
     result_columns[2].button(key="recite_button", label='Play', type='primary', on_click=on_recite_button_clicked, args=[st.session_state["translate_result"]], help="Text to Speech")
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != None:
-    audio_bytes = BytesIO(st.session_state['audio_stream'])
-    if "result_text_language" in st.session_state and st.session_state['result_text_language'] != None:
-        result_container.markdown(st.session_state['result_text_language'])
-    result_container.audio(audio_bytes, format='audio/mp3', autoplay=False)
+    if st.session_state['audio_stream'] != "":
+        audio_bytes = BytesIO()
+        if "result_text_language" in st.session_state and st.session_state['result_text_language'] != None:
+            result_container.markdown(st.session_state['result_text_language'])
+        result_container.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
 
 
