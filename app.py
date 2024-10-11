@@ -54,7 +54,12 @@ st.write(f"Welcome: {session_identity}")
 #    st.title("Main Tab")
 #    st.write("Hello world")
 #    #st.page_link("pages/5_2_3_kb_demo.py", label="Page 1", icon="1️⃣")
-
+# Initialize session state
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+if 'font_size' not in st.session_state:
+    st.session_state.font_size = 'medium'
+    
 # with tab2:
 st.title("Settings")
 # Theme settings
