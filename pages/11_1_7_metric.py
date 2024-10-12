@@ -56,6 +56,8 @@ opt_model_id_list = [
     "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
     "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
     "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
+    "us.meta.llama3-2-11b-instruct-v1:0", # Vision
+    "us.meta.llama3-2-90b-instruct-v1:0", # Vision
     #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
     #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
     "mistral.mistral-small-2402-v1:0", # Mistral Small
