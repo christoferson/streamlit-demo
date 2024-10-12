@@ -51,12 +51,46 @@ st.set_page_config(
         'Get Help': None,
         'Report a bug': None,
         'About': None
-    }
+    },
 )
+
 
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
+
+
+# st.markdown(
+#         """
+#         <style>
+#         .stAppViewMain {
+#             color: white;
+#             background-color: #1E1E1E;
+#         }
+#         .stChatMessage {
+#             color: white;
+#             background-color: #1E1E1E;
+#         }
+#         .stVerticalBlockBorderWrapper {
+#             color: white;
+#             background-color: #1E1E1E;
+#         }
+#         .stCode {
+#             color: white;
+#             background-color: #1E1E1E;
+#         }
+#         .stMarkdown {
+#             color: white;
+#         }
+#         .stButton>button {
+#             color: #4CAF50;
+#             background-color: #2E2E2E;
+#             border: 2px solid #4CAF50;
+#         }
+#         </style>
+#         """,
+#         unsafe_allow_html=True
+#     )
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -191,6 +225,9 @@ st.markdown("💬 Converse 3-5-3")
 if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
 
+# Add this to store feedback
+if "menu_converse_messages_feedback" not in st.session_state:
+    st.session_state["menu_converse_messages_feedback"] = {}
 
 st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
 
@@ -214,6 +251,20 @@ for msg in st.session_state.menu_converse_messages:
             #with assistant_cmd_panel_col2:
             #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
             st.markdown(f"{content_text}")
+
+            # Add feedback mechanism using st.feedback
+            feedback_key = f"feedback_{idx}"
+            feedback = st.feedback(
+                options="stars",
+                key=feedback_key,
+                on_change=lambda: st.session_state.menu_converse_messages_feedback.update({idx: st.session_state[feedback_key]})
+            )
+
+            # Display existing feedback if available
+            if idx in st.session_state["menu_converse_messages_feedback"]:
+                previous_feedback = st.session_state["menu_converse_messages_feedback"][idx]
+                st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
+
     
 if "menu_converse_uploader_key" not in st.session_state:
     st.session_state.menu_converse_uploader_key = 0
@@ -438,7 +489,6 @@ if prompt:
                 #    pass
             
             message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
-
 
             st.session_state.menu_converse_messages.append(message_user_latest)
             st.session_state.menu_converse_messages.append(message_assistant_latest)
