@@ -29,8 +29,18 @@ def bedrock_cloudwatch_get_metric_with_dimensions(metric_namespace, metric_name,
     return metric_data
     return metric_data
 
-start_time = datetime.now() - timedelta(weeks=15) #datetime(2024, 7, 2) #datetime.now() - timedelta(days=7),
-end_time = datetime.now() #datetime(2024, 7, 11) #datetime.now() - timedelta(days=1),
+# Add this at the very top of your script
+week_options = list(range(8, 25))  # Creates a list from 8 to 24
+num_weeks = st.selectbox(
+    "Select number of weeks to show",
+    options=week_options,
+    index=week_options.index(15),  # Default to 15 weeks
+    key="num_weeks_selector"
+)
+
+# Update the start_time calculation
+start_time = datetime.now() - timedelta(weeks=num_weeks)
+end_time = datetime.now()
 
 st.markdown(f"##### :green[{start_time} to {end_time}]")
 
