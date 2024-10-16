@@ -142,6 +142,12 @@ def upload_conversation(uploaded_file):
     except Exception as e:
         st.error(f"An error occurred while processing the file: {str(e)}")
 
+def delete_message_pair(index):
+    if index < len(st.session_state.menu_converse_messages):
+        del st.session_state.menu_converse_messages[index:index+2]
+    if f"feedback_{index+1}" in st.session_state.menu_converse_messages_feedback:
+        del st.session_state.menu_converse_messages_feedback[f"feedback_{index+1}"]
+
 mime_mapping = {
     "image/png": "png",
     "image/jpeg": "jpeg",
@@ -245,7 +251,13 @@ for msg in st.session_state.menu_converse_messages:
                 if "document" in content_1:
                     content_1_document = content_1["document"]
                     document_name = content_1_document["name"]
-            st.markdown(f"{content_text} \n\n:green[Document: {document_name}]")
+            st.write(f"{content_text} \n\n:green[Document: {document_name}]")
+
+            del_idx = idx - 2
+            if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
+                delete_message_pair(del_idx)
+                st.rerun()
+
         if "assistant" == msg["role"]:
             #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
             #with assistant_cmd_panel_col2:
