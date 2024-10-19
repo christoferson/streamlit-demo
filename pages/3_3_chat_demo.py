@@ -16,6 +16,8 @@ from pydub import AudioSegment
 from pydub.playback import play
 
 from botocore.exceptions import BotoCoreError, ClientError
+import cmn.cloudwatch_metrics_lib
+import random
 
 AWS_REGION = cmn_settings.AWS_REGION
 AWS_BEDROCK_GUARDRAIL_IDENTIFIER = cmn_settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER
@@ -30,6 +32,8 @@ logging.basicConfig(level=logging.INFO)
 #   st.stop()
 
 ######  AUTH END #####
+
+dummy_user_list = ["Tom", "Fred"]
 
 ####################################################################################
 
@@ -182,6 +186,9 @@ if "messages" not in st.session_state:
 #if "audio_stream" not in st.session_state:
 #    st.session_state["audio_stream"] = ""
 
+st.chat_message("system").markdown(""":red[Hi, Enter your questions.
+                                It can be a simple question or complex one.]""")
+
 idx = 1
 for msg in st.session_state.messages:
     idx = idx + 1
@@ -310,11 +317,27 @@ if prompt := st.chat_input():
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.messages.append({"role": "assistant", "content": result_text})
 
+
     except ClientError as err:
         message = err.response["Error"]["Message"]
         logger.error("A client error occurred: %s", message)
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
+
+    
+    try:
+        cmn.cloudwatch_metrics_lib.cloudwatch_put_metric(
+            metric_namespace='App/Chat', 
+            metric_name='UserInvocation', 
+            metric_value=1,
+            dimensions=[{
+                'Name': 'User',
+                'Value': random.choice(dummy_user_list),
+            }])
+    except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            print("A client error occured: " + format(message))
 
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])
