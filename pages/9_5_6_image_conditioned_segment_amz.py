@@ -81,6 +81,41 @@ variation_prompts_init = [
     "Produce Acme runners with metallic silver upper, black sole. White laces, gunmetal heel. Black tongue, silver logo. Red midsole accent. Keep Acme logo design. Ultra-realistic, dramatic lighting."
 ]
 
+variation_prompts_init = [
+    "Render Acme shoes with neon yellow upper, black sole. Gray laces, white heel. Black tongue, yellow logo. Green midsole accent. Preserve original Acme logo. Photorealistic, high-contrast lighting.",
+    "Create Acme sneakers with gradient blue upper (light to dark), white sole. Navy laces, sky blue heel. White tongue, dark blue logo. Light blue midsole accent. Keep Acme logo unchanged. 8K detail, studio lighting.",
+    "Generate Acme runners with deep burgundy upper, tan sole. Brown laces, cream heel. Tan tongue, gold logo. Maroon midsole accent. Original Acme logo colors. Rich, warm lighting setup.",
+    "Produce Acme shoes with mint green upper, light gray sole. White laces, dark green heel. Gray tongue, mint logo. Seafoam midsole accent. Maintain Acme logo design. Fresh, airy photorealistic render.",
+    "Visualize Acme sneakers with coral upper, white sole. Light pink laces, peach heel. White tongue, coral logo. Soft orange midsole accent. Preserve original Acme logo. Vibrant, summery lighting.",
+    "Render Acme runners with slate gray upper, navy sole. Black laces, light gray heel. Navy tongue, white logo. Steel blue midsole accent. Keep Acme logo as is. Professional, clean studio setup.",
+    "Create Acme shoes with holographic silver upper, clear sole. White laces, iridescent heel. Clear tongue, rainbow logo. Prismatic midsole accent. Original Acme logo intact. Futuristic, high-tech lighting.",
+    "Generate Acme sneakers with deep purple upper, gum sole. Black laces, lavender heel. Gum tongue, gold logo. Violet midsole accent. Preserve Acme logo colors. Rich, luxurious rendering.",
+    "Produce Acme runners with camo print upper (greens and browns), black sole. Olive laces, tan heel. Black tongue, olive logo. Brown midsole accent. Keep Acme logo design. Outdoor, natural lighting."
+]
+
+variation_prompts_init = [
+    "Render Acme runner: ultra-fine red mesh upper, black synthetic logo overlays. White collar, light gray knit. Thick white midsole, black outsole. Red laces, black tongue, white logo. Yellow sole accent. Preserve Acme design. Photorealistic, studio lit, emphasizing modern mesh texture.",
+    "Create Acme shoe: high-tech forest green fine mesh, white logo overlays. Black collar, olive knit. White midsole, gum outsole. Green laces, white tongue, green logo. Orange sole accent. Keep Acme structure. 8K detail, outdoor lighting, showcasing advanced mesh.",
+    "Generate Acme sneaker: cutting-edge orange micro-mesh, navy overlays. White collar, light orange knit. Gray midsole, black outsole. White laces, navy tongue, orange logo. Blue sole accent. Original Acme design. High-contrast render, highlighting intricate mesh pattern.",
+    "Produce Acme runner: state-of-the-art light gray fine mesh, black overlays. Gray collar, white knit. Neon yellow midsole, dark gray outsole. Black laces, yellow tongue, gray logo. Red sole accent. Maintain Acme form. Clean, minimalist lighting, accentuating modern mesh.",
+    "Visualize Acme shoe: advanced purple micro-mesh, silver overlays. Black collar, lavender knit. White midsole, purple outsole. White laces, black tongue, silver logo. Green sole accent. Preserve Acme style. Dramatic, low-key lighting, emphasizing mesh intricacy.",
+    "Render Acme sneaker: innovative teal fine mesh, white overlays. Navy collar, light blue knit. Navy midsole, white outsole. Teal laces, white tongue, navy logo. Orange sole accent. Keep Acme design. Bright, energetic studio setup, showcasing modern mesh texture.",
+    "Create Acme runner: high-tech yellow micro-mesh, black overlays. Yellow collar, white knit. Black midsole, yellow outsole. Black laces, white tongue, yellow logo. Purple sole accent. Original Acme structure. Vibrant, high-key lighting, highlighting advanced mesh.",
+    "Generate Acme shoe: futuristic charcoal fine mesh, neon green overlays. Black collar, dark gray knit. White midsole, neon green outsole. White laces, black tongue, green logo. Red sole accent. Preserve Acme form. Futuristic, cool-toned lighting, emphasizing mesh detail.",
+    "Produce Acme sneaker: cutting-edge coral micro-mesh, white overlays. Light gray collar, peach knit. Light gray midsole, coral outsole. White laces, coral tongue, gray logo. Teal sole accent. Keep Acme style. Soft, warm lighting setup, showcasing intricate mesh pattern."
+]
+
+variation_prompts_init = [
+    "Render Acme runner: ultra-fine red mesh upper (tiny, barely visible holes), black synthetic logo overlays. White collar, light gray smooth knit (micro-perforated). Thick white midsole, black outsole. Red laces, black tongue, white logo. Yellow sole accent. Preserve Acme design. Photorealistic, studio lit, emphasizing modern textures.",
+    "Create Acme shoe: high-tech forest green fine mesh (imperceptible perforations), white logo overlays. Black collar, olive smooth knit (minute ventilation). White midsole, gum outsole. Green laces, white tongue, green logo. Orange sole accent. Keep Acme structure. 8K detail, outdoor lighting, showcasing advanced materials.",
+    "Generate Acme sneaker: cutting-edge orange micro-mesh (seamless appearance), navy overlays. White collar, light orange smooth knit (nearly solid look). Gray midsole, black outsole. White laces, navy tongue, orange logo. Blue sole accent. Original Acme design. High-contrast render, highlighting intricate patterns.",
+    "Produce Acme runner: state-of-the-art light gray fine mesh (uniform, tight weave), black overlays. Gray collar, white smooth knit (subtle texture). Neon yellow midsole, dark gray outsole. Black laces, yellow tongue, gray logo. Red sole accent. Maintain Acme form. Clean, minimalist lighting, accentuating modern materials.",
+    "Visualize Acme shoe: advanced purple micro-mesh (non-porous look), silver overlays. Black collar, lavender smooth knit (fine, even surface). White midsole, purple outsole. White laces, black tongue, silver logo. Green sole accent. Preserve Acme style. Dramatic, low-key lighting, emphasizing material intricacy.",
+    "Render Acme sneaker: innovative teal fine mesh (sleek, solid appearance), white overlays. Navy collar, light blue smooth knit (microscopic ventilation). Navy midsole, white outsole. Teal laces, white tongue, navy logo. Orange sole accent. Keep Acme design. Bright, energetic studio setup, showcasing modern textures.",
+    "Create Acme runner: high-tech yellow micro-mesh (almost invisible holes), black overlays. Yellow collar, white smooth knit (seamless look). Black midsole, yellow outsole. Black laces, white tongue, yellow logo. Purple sole accent. Original Acme structure. Vibrant, high-key lighting, highlighting advanced materials.",
+    "Generate Acme shoe: futuristic charcoal fine mesh (precision-woven), neon green overlays. Black collar, dark gray smooth knit (uniform texture). White midsole, neon green outsole. White laces, black tongue, green logo. Red sole accent. Preserve Acme form. Futuristic, cool-toned lighting, emphasizing material detail.",
+    "Produce Acme sneaker: cutting-edge coral micro-mesh (smooth surface), white overlays. Light gray collar, peach smooth knit (fine, even weave). Light gray midsole, coral outsole. White laces, coral tongue, gray logo. Teal sole accent. Keep Acme style. Soft, warm lighting setup, showcasing intricate material patterns."
+]
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
 opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
