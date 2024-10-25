@@ -36,10 +36,10 @@ class FoundationModel:
     def _set_inference_parameters(self):
         if self.provider == "Anthropic":
             return {
-                "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 0, 2048, 4096),
-                "Temperature": InferenceParameter("Temperature", 0, 1, 1),
-                "TopP": InferenceParameter("TopP", 0, 1, 1),
-                "TopK": InferenceParameter("TopK", 0, 250, 500)
+                "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1),
+                "TopK": InferenceParameter("top_k", 0, 250, 500)
             }
         elif self.provider == "Meta":
             return {
@@ -88,6 +88,7 @@ foundation_models = {
     "anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-haiku-20240307-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-haiku-20240307-v1:0", True, True, True, True, True, True, True, True),
+    "anthropic.claude-3-5-sonnet-20241022-v2:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20241022-v2:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-haiku-20240307-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-haiku-20240307-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-opus-20240229-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-opus-20240229-v1:0", True, True, True, True, True, True, True, True),

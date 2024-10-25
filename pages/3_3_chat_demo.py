@@ -38,6 +38,7 @@ dummy_user_list = ["Tom", "Fred"]
 ####################################################################################
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
 polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
@@ -162,6 +163,7 @@ opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
 ]
 
 with st.sidebar:
@@ -226,15 +228,30 @@ if prompt := st.chat_input():
     json.dumps(request, indent=3)
 
     try:
-        #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-        response = bedrock_runtime.invoke_model_with_response_stream(
-            modelId = opt_model_id, #bedrock_model_id, 
-            contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-            accept = "application/json",
-            body = json.dumps(request),
-            #trace="ENABLED",
-            guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
-            guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION)
+
+        if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+            #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+            #st.chat_message("system").write(f"Invoke anthropic.claude-3-5-sonnet-20241022-v2:0 bedrock_runtime_us_west_2")
+            response = bedrock_runtime_us_west_2.invoke_model_with_response_stream(
+                modelId = opt_model_id, #bedrock_model_id, 
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request),
+                #trace="ENABLED",
+                guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION) 
+            # The provided request is not valid
+            
+        else:
+            #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+            response = bedrock_runtime.invoke_model_with_response_stream(
+                modelId = opt_model_id, #bedrock_model_id, 
+                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                accept = "application/json",
+                body = json.dumps(request),
+                #trace="ENABLED",
+                guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION)
 
         #with st.chat_message("assistant", avatar=setAvatar("assistant")):
         result_text = ""

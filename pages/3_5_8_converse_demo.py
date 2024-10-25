@@ -38,6 +38,7 @@ logging.basicConfig(level=logging.INFO)
 ####################################################################################
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
 polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
@@ -176,11 +177,13 @@ opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
     #"anthropic.claude-3-opus-20240229-v1:0",
     "us.anthropic.claude-3-haiku-20240307-v1:0",
     "us.anthropic.claude-3-sonnet-20240229-v1:0",
     "us.anthropic.claude-3-opus-20240229-v1:0",
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+    
     "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
     "cohere.command-r-plus-v1:0",
     "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
@@ -422,13 +425,23 @@ if prompt:
 
         try:
             
-            response = bedrock_runtime.converse_stream(
-                modelId=opt_model_id,
-                messages=message_history,
-                system=system_prompts,
-                inferenceConfig=inference_config,
-                additionalModelRequestFields=additional_model_fields
-            )
+            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+                    response = bedrock_runtime_us_west_2.converse_stream(
+                    modelId=opt_model_id,
+                    messages=message_history,
+                    system=system_prompts,
+                    inferenceConfig=inference_config,
+                    additionalModelRequestFields=additional_model_fields
+                )
+            else:
+                response = bedrock_runtime.converse_stream(
+                    modelId=opt_model_id,
+                    messages=message_history,
+                    system=system_prompts,
+                    inferenceConfig=inference_config,
+                    additionalModelRequestFields=additional_model_fields
+                )
+            
 
             #with st.chat_message("assistant", avatar=setAvatar("assistant")):
             result_text = ""
