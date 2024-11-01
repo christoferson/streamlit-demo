@@ -83,13 +83,60 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
+mime_mapping_image = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/jpg": "jpeg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+
+SYSTEM_PROMPT = """You are an advanced AI assistant specialized in image analysis and interpretation. Your capabilities include:
+
+1. Detailed Image Description:
+- Provide comprehensive descriptions of image content, including objects, people, scenes, colors, and compositions.
+- Identify and describe key elements, focal points, and notable details within the image.
+
+2. Visual Question Answering:
+- Accurately answer specific questions about the contents, context, or details of the provided image.
+- Provide clear, concise responses based solely on the visual information present in the image.
+
+3. Text Extraction and OCR:
+- Identify and extract any visible text within the image, including signs, labels, captions, or documents.
+- Transcribe the extracted text accurately, maintaining original formatting where possible.
+
+4. Object Detection and Recognition:
+- Identify and list all significant objects, people, or elements present in the image.
+- Provide approximate counts or quantities of repeated objects when relevant.
+
+5. Scene Understanding and Context Analysis:
+- Interpret the overall context, setting, or environment depicted in the image.
+- Infer potential locations, time periods, or situations based on visual cues.
+
+6. Emotional and Aesthetic Analysis:
+- Describe the mood, atmosphere, or emotional tone conveyed by the image.
+- Comment on artistic elements, composition, or photographic techniques if applicable.
+
+7. Comparative Analysis:
+- When multiple images are provided, compare and contrast their contents, highlighting similarities and differences.
+
+Guidelines for your responses:
+- Provide clear, detailed, and objective descriptions or answers.
+- Use precise language and technical terms when appropriate, but explain them if they might be unfamiliar.
+- If any part of the image or query is unclear, state your uncertainty and provide the best possible interpretation.
+- Respect privacy by avoiding identification of specific individuals unless explicitly requested.
+- When extracting text, clearly differentiate between direct quotes and paraphrased content.
+- If asked about elements not present in the image, clearly state that they are not visible or detectable.
+
+Always base your responses solely on the content of the provided image(s) and the specific query. If additional context or clarification is needed, please ask for it before proceeding with your analysis."""
+
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
-    opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
+    opt_system_msg = st.text_area(label="System Message", value=SYSTEM_PROMPT, key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
@@ -172,146 +219,152 @@ with col1:
     if prompt := st.chat_input():
 
         message_history = st.session_state.menu_image_query_messages.copy()
-        content =  [
-                        {
-                            "type": "text",
-                            "text": f"{prompt}"
-                        }
-                    ]
 
+        message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
         if uploaded_file_name:
-            content.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": uploaded_file_type,
-                        "data": uploaded_file_base64,
-                    },
-                }
-            )
+            content = message_user_latest['content']
+            if uploaded_file_type in mime_mapping_image:
+                content.append(
+                    {
+                        "image": {
+                            "format": mime_mapping_image[uploaded_file_type],
+                            "source": {
+                                "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
+                            }
+                        },
+                    }
+                )
+            else:
+                st.write(f"Not supported file type: {uploaded_file.type}")
+        message_history.append(message_user_latest)
+
+        # content =  [
+        #                 {
+        #                     "type": "text",
+        #                     "text": f"{prompt}"
+        #                 }
+        #             ]
+
+        # if uploaded_file_name:
+        #     content.append(
+        #         {
+        #             "type": "image",
+        #             "source": {
+        #                 "type": "base64",
+        #                 "media_type": uploaded_file_type,
+        #                 "data": uploaded_file_base64,
+        #             },
+        #         }
+        #     )
             
-        message_history.append({"role": "user", "content": content})
+        # message_history.append({"role": "user", "content": content})
         #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
 
         #user_message =  {"role": "user", "content": f"{prompt}"}
         #messages = [st.session_state.messages]
-        print(f"messages={st.session_state.menu_image_query_messages}")
+        #print(f"messages={st.session_state.menu_image_query_messages}")
 
-        request = {
-            "anthropic_version": "bedrock-2023-05-31",
+        system_prompts = [{"text" : opt_system_msg}]
+    
+        inference_config = {
             "temperature": opt_temperature,
-            "top_p": opt_top_p,
-            "top_k": opt_top_k,
-            "max_tokens": opt_max_tokens,
-            "system": opt_system_msg,
-            "messages": message_history #st.session_state.messages
+            "maxTokens": opt_max_tokens,
+            "topP": opt_top_p,
+            #stopSequences 
         }
-        json.dumps(request, indent=3)
 
-        try:
+        additional_model_fields = {}
+        
 
-            #if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
-            # Invocation of model ID anthropic.claude-3-5-sonnet-20241022-v2:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.
-            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
-                response = bedrock_runtime.invoke_model_with_response_stream(
-                    modelId = opt_model_id, #bedrock_model_id, 
-                    contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-                    accept = "application/json",
-                    body = json.dumps(request))
-            else:
-                #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-                response = bedrock_runtime.invoke_model_with_response_stream(
-                    modelId = opt_model_id, #bedrock_model_id, 
-                    contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-                    accept = "application/json",
-                    body = json.dumps(request))
+        with st.spinner('Processing...'):
 
-            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-            result_text = ""
-            with st.chat_message("assistant"):
-                result_container = st.container(border=True)
-                result_area = st.empty()
-                stream = response["body"]
-                for event in stream:
-                    
-                    if event["chunk"]:
-
-                        chunk = json.loads(event["chunk"]["bytes"])
-
-                        if chunk['type'] == 'message_start':
-                            opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-                            #result_text += f"{opts}\n\n"
-                            #result_area.write(result_text)
-                            #result_container.write(opts)
-                            #pass
-
-                        elif chunk['type'] == 'message_delta':
-                            #print(f"\nStop reason: {chunk['delta']['stop_reason']}")
-                            #print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
-                            #print(f"Output tokens: {chunk['usage']['output_tokens']}")
-                            pass
-
-                        elif chunk['type'] == 'content_block_delta':
-                            if chunk['delta']['type'] == 'text_delta':
-                                text = chunk['delta']['text']
-                                #await msg.stream_token(f"{text}")
-                                result_text += f"{text}"
-                                result_area.write(result_text)
-
-                        elif chunk['type'] == 'message_stop':
-                            invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                            input_token_count = invocation_metrics["inputTokenCount"]
-                            output_token_count = invocation_metrics["outputTokenCount"]
-                            latency = invocation_metrics["invocationLatency"]
-                            lag = invocation_metrics["firstByteLatency"]
-                            stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                            #result_container.write(stats)
-
-                            invocation_metrics = f"token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                            #result_container.markdown(f""":blue[{invocation_metrics}]""")
-                            #result_area.markdown(f"{invocation_metrics} {result_text} ")
-                            result_text_final = f"""{result_text}  \n\n:blue[{invocation_metrics}]"""
-                            #result_text += f"{reference_chunk_list_text}"
-                            #result_area.write(f"{result_text_final}")
-                            #result_container.markdown()
-                            result_area.write(f"{result_text_final}")
-
-                    elif "internalServerException" in event:
-                        exception = event["internalServerException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    elif "modelStreamErrorException" in event:
-                        exception = event["modelStreamErrorException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    elif "modelTimeoutException" in event:
-                        exception = event["modelTimeoutException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    elif "throttlingException" in event:
-                        exception = event["throttlingException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    elif "validationException" in event:
-                        exception = event["validationException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    else:
-                        result_text += f"\n\nUnknown Token"
-                        result_area.write(result_text)
-
-                #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
+            try:
+                
+                if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+                        response = bedrock_runtime_us_west_2.converse_stream(
+                        modelId=opt_model_id,
+                        messages=message_history,
+                        system=system_prompts,
+                        inferenceConfig=inference_config,
+                        additionalModelRequestFields=additional_model_fields
+                    )
+                else:
+                    response = bedrock_runtime.converse_stream(
+                        modelId=opt_model_id,
+                        messages=message_history,
+                        system=system_prompts,
+                        inferenceConfig=inference_config,
+                        additionalModelRequestFields=additional_model_fields
+                    )
                 
 
-            st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
-            st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
+                #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+                result_text = ""
+                with st.chat_message("assistant"):
+                    result_container = st.container(border=True)
+                    result_area = st.empty()
+                    stream = response.get('stream')
+                    for event in stream:
+                        
+                        if 'messageStart' in event:
+                            #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                            #result_container.write(opts)                    
+                            pass
+
+                        if 'contentBlockDelta' in event:
+                            text = event['contentBlockDelta']['delta']['text']
+                            result_text += f"{text}"
+                            result_area.write(result_text)
+
+                        if 'messageStop' in event:
+                            #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                            stop_reason = event['messageStop']['stopReason']
+                            if stop_reason == 'end_turn':
+                                pass
+                            else:
+                                stop_reason_display = stop_reason
+                                if stop_reason == 'max_tokens':
+                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                                result_area.write(result_text_error)
+
+                        if 'metadata' in event:
+                            metadata = event['metadata']
+                            if 'usage' in metadata:
+                                input_token_count = metadata['usage']['inputTokens']
+                                output_token_count = metadata['usage']['outputTokens']
+                                total_token_count = metadata['usage']['totalTokens']
+                            if 'metrics' in event['metadata']:
+                                latency = metadata['metrics']['latencyMs']
+                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
+                            result_container.write(stats)
+
+                        if "internalServerException" in event:
+                            exception = event["internalServerException"]
+                            result_text += f"\n\{exception}"
+                            result_area.write(result_text)
+                        if "modelStreamErrorException" in event:
+                            exception = event["modelStreamErrorException"]
+                            result_text += f"\n\{exception}"
+                            result_area.write(result_text)
+                        if "throttlingException" in event:
+                            exception = event["throttlingException"]
+                            result_text += f"\n\{exception}"
+                            result_area.write(result_text)
+                        if "validationException" in event:
+                            exception = event["validationException"]
+                            result_text += f"\n\{exception}"
+                            result_area.write(result_text)
+
+                st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
+                st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
 
             
-            
-        except ClientError as err:
-            message = err.response["Error"]["Message"]
-            logger.error("A client error occurred: %s", message)
-            print("A client error occured: " + format(message))
-            st.chat_message("system").write(message)
+                
+            except ClientError as err:
+                message = err.response["Error"]["Message"]
+                logger.error("A client error occurred: %s", message)
+                print("A client error occured: " + format(message))
+                st.chat_message("system").write(message)
+       
