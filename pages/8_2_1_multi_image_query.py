@@ -224,15 +224,26 @@ with col1:
 
     idx = 1
     for msg in st.session_state.menu_image_query_messages:
-        idx = idx + 1
-        content = msg["content"]
         with st.chat_message(msg["role"]):
-            st.write(content)
-            if "assistant" == msg["role"]:
-                #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
-                #with assistant_cmd_panel_col2:
-                #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
-                pass
+            contents = msg["content"]
+            if isinstance(contents, list) and contents:
+                content = contents[0]
+                if isinstance(content, dict) and "text" in content:
+                    content_text = content["text"]
+                else:
+                    content_text = str(content)
+            else:
+                content_text = str(contents)
+
+            if msg["role"] == "user":
+                image_info = ""
+                if isinstance(contents, list) and len(contents) > 1:
+                    image_count = sum(1 for item in contents[1:] if "image" in item)
+                    if image_count > 0:
+                        image_info = f"\n\n:camera: {image_count} image{'s' if image_count > 1 else ''} uploaded"
+                st.write(f"{content_text}{image_info}")
+            else:  # assistant
+                st.markdown(content_text)
 
 
     if prompt := st.chat_input():
