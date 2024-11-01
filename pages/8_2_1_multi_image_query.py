@@ -1,5 +1,6 @@
 import streamlit as st
 import boto3
+from botocore.config import Config
 import cmn_settings
 import json
 import logging
@@ -8,6 +9,8 @@ import pyperclip
 import io
 import base64
 from PIL import Image
+import urllib3
+
 
 from botocore.exceptions import ClientError
 
@@ -15,6 +18,14 @@ AWS_REGION = cmn_settings.AWS_REGION
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Add these configurations when creating the boto3 clients
+config = Config(
+    connect_timeout=5,  # Connection timeout in seconds
+    read_timeout=30,    # Read timeout in seconds
+    retries={'max_attempts': 3}  # Retry configuration
+)
+
 
 ###### AUTH START #####
 
@@ -138,8 +149,8 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=SYSTEM_PROMPT, key="system_msg")
 
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
-bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
+bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION, config=config)
+bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2", config=config)
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 st.title("💬 Image Query 8.1.6")
@@ -149,51 +160,59 @@ col1, col2 = st.columns([2, 1])
 
 with col2:
 
-    uploaded_file  = st.file_uploader(
+    uploaded_files = st.file_uploader(
         "",
         type=["PNG", "JPEG"],
-        accept_multiple_files=False,
+        accept_multiple_files=True,  # Changed to True to accept multiple files
         label_visibility="collapsed",
     )
 
-    uploaded_file_name = None
-    if uploaded_file:
-        uploaded_file_bytes = uploaded_file.getvalue()
-        image = Image.open(uploaded_file)
-        uploaded_file_name = uploaded_file.name
-        uploaded_file_type = uploaded_file.type
-        #uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-        st.image(
-            image, caption='upload images',
-            use_column_width=True
-        )
-        print(uploaded_file_type)
-        #uploaded_file_bytes = uploaded_file.read()
-        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
-        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes)
-
-        response = rekognition.detect_labels(
-            Image={'Bytes': uploaded_file_bytes},
-            #MaxLabels=123,
-            #MinConfidence=...,
-            Features=[
-                'IMAGE_PROPERTIES',
-            ],
-            Settings={
-                'ImageProperties': {
-                    'MaxDominantColors': 5
-                }
+    uploaded_images = []
+    if uploaded_files:
+        for uploaded_file in uploaded_files[:2]:  # Limit to first 2 files
+            uploaded_file_bytes = uploaded_file.getvalue()
+            image = Image.open(uploaded_file)
+            file_info = {
+                'name': uploaded_file.name,
+                'type': uploaded_file.type,
+                'bytes': uploaded_file_bytes,
+                'image': image
             }
-        )
+            uploaded_images.append(file_info)
+            st.image(
+                image, 
+                caption=f'Uploaded image: {uploaded_file.name}',
+                use_column_width=True
+            )
 
-        print(response)
-        st.write(response)
+    if uploaded_images and st.button("Analyze Images with Rekognition"):
+        with st.spinner('Analyzing images...'):
+            try:
+                for img_info in uploaded_images:
+                    st.write(f"### Analysis for {img_info['name']}")
 
-        img_properties = response['ImageProperties']
-        fg_dominant_colors = img_properties['Foreground']['DominantColors']
-        st.write(fg_dominant_colors)
+                    with st.expander(f"View detailed analysis for {img_info['name']}"):
+                        response = rekognition.detect_labels(
+                            Image={'Bytes': img_info['bytes']},
+                            Features=['IMAGE_PROPERTIES'],
+                            Settings={
+                                'ImageProperties': {
+                                    'MaxDominantColors': 5
+                                }
+                            }
+                        )
 
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+                        st.write("Full Rekognition Response:")
+                        st.json(response)
+
+                        if 'ImageProperties' in response:
+                            img_properties = response['ImageProperties']
+                            if 'Foreground' in img_properties:
+                                fg_dominant_colors = img_properties['Foreground']['DominantColors']
+                                st.write("Dominant Colors:")
+                                st.write(fg_dominant_colors)
+            except Exception as e:
+                st.error(f"An error occurred during analysis: {str(e)}")
 
 ######
 
@@ -220,45 +239,27 @@ with col1:
 
         message_history = st.session_state.menu_image_query_messages.copy()
 
-        message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
-        if uploaded_file_name:
-            content = message_user_latest['content']
-            if uploaded_file_type in mime_mapping_image:
-                content.append(
-                    {
-                        "image": {
-                            "format": mime_mapping_image[uploaded_file_type],
-                            "source": {
-                                "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
-                            }
-                        },
-                    }
-                )
-            else:
-                st.write(f"Not supported file type: {uploaded_file.type}")
+        message_user_latest = {"role": "user", "content": [{"text": prompt}]}
+
+        # Add images to the message if they exist
+        if uploaded_images:
+            for img_info in uploaded_images:
+                if img_info['type'] in mime_mapping_image:
+                    message_user_latest['content'].append(
+                        {
+                            "image": {
+                                "format": mime_mapping_image[img_info['type']],
+                                "source": {
+                                    "bytes": img_info['bytes'],
+                                }
+                            },
+                        }
+                    )
+                else:
+                    st.write(f"Not supported file type: {img_info['type']}")
+
         message_history.append(message_user_latest)
 
-        # content =  [
-        #                 {
-        #                     "type": "text",
-        #                     "text": f"{prompt}"
-        #                 }
-        #             ]
-
-        # if uploaded_file_name:
-        #     content.append(
-        #         {
-        #             "type": "image",
-        #             "source": {
-        #                 "type": "base64",
-        #                 "media_type": uploaded_file_type,
-        #                 "data": uploaded_file_base64,
-        #             },
-        #         }
-        #     )
-            
-        # message_history.append({"role": "user", "content": content})
-        #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
 
         #user_message =  {"role": "user", "content": f"{prompt}"}
@@ -304,67 +305,84 @@ with col1:
                 with st.chat_message("assistant"):
                     result_container = st.container(border=True)
                     result_area = st.empty()
-                    stream = response.get('stream')
-                    for event in stream:
-                        
-                        if 'messageStart' in event:
-                            #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                            #result_container.write(opts)                    
-                            pass
 
-                        if 'contentBlockDelta' in event:
-                            text = event['contentBlockDelta']['delta']['text']
-                            result_text += f"{text}"
-                            result_area.write(result_text)
-
-                        if 'messageStop' in event:
-                            #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                            stop_reason = event['messageStop']['stopReason']
-                            if stop_reason == 'end_turn':
+                    try:
+                        stream = response.get('stream')
+                        for event in stream:
+                            
+                            if 'messageStart' in event:
+                                #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                                #result_container.write(opts)                    
                                 pass
-                            else:
-                                stop_reason_display = stop_reason
-                                if stop_reason == 'max_tokens':
-                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                                result_area.write(result_text_error)
 
-                        if 'metadata' in event:
-                            metadata = event['metadata']
-                            if 'usage' in metadata:
-                                input_token_count = metadata['usage']['inputTokens']
-                                output_token_count = metadata['usage']['outputTokens']
-                                total_token_count = metadata['usage']['totalTokens']
-                            if 'metrics' in event['metadata']:
-                                latency = metadata['metrics']['latencyMs']
-                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
-                            result_container.write(stats)
+                            if 'contentBlockDelta' in event:
+                                text = event['contentBlockDelta']['delta']['text']
+                                result_text += f"{text}"
+                                result_area.write(result_text)
 
-                        if "internalServerException" in event:
-                            exception = event["internalServerException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "modelStreamErrorException" in event:
-                            exception = event["modelStreamErrorException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "throttlingException" in event:
-                            exception = event["throttlingException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "validationException" in event:
-                            exception = event["validationException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
+                            if 'messageStop' in event:
+                                #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                                stop_reason = event['messageStop']['stopReason']
+                                if stop_reason == 'end_turn':
+                                    pass
+                                else:
+                                    stop_reason_display = stop_reason
+                                    if stop_reason == 'max_tokens':
+                                        stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                                    result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                                    result_area.write(result_text_error)
 
-                st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
-                st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
+                            if 'metadata' in event:
+                                metadata = event['metadata']
+                                if 'usage' in metadata:
+                                    input_token_count = metadata['usage']['inputTokens']
+                                    output_token_count = metadata['usage']['outputTokens']
+                                    total_token_count = metadata['usage']['totalTokens']
+                                if 'metrics' in event['metadata']:
+                                    latency = metadata['metrics']['latencyMs']
+                                #stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
+                                stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} "
+                                result_container.write(stats)
 
-            
+                            if "internalServerException" in event:
+                                exception = event["internalServerException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "modelStreamErrorException" in event:
+                                exception = event["modelStreamErrorException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "throttlingException" in event:
+                                exception = event["throttlingException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "validationException" in event:
+                                exception = event["validationException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+
+                    except urllib3.exceptions.ReadTimeoutError:
+                        error_message = "The request timed out while waiting for the response. Please try again."
+                        st.error(error_message)
+                        logger.error(error_message)
+
+                    except Exception as e:
+                        error_message = f"An error occurred while processing the stream: {str(e)}"
+                        st.error(error_message)
+                        logger.error(error_message)
                 
+                message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+
+                st.session_state.menu_image_query_messages.append(message_user_latest)
+                st.session_state.menu_image_query_messages.append(message_assistant_latest)
+                
+
             except ClientError as err:
                 message = err.response["Error"]["Message"]
                 logger.error("A client error occurred: %s", message)
-                print("A client error occured: " + format(message))
-                st.chat_message("system").write(message)
-       
+                st.error(f"A client error occurred: {message}")
+
+            except Exception as e:
+                error_message = f"An unexpected error occurred: {str(e)}"
+                logger.error(error_message)
+                st.error(error_message)
