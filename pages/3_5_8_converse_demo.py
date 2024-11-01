@@ -183,6 +183,7 @@ opt_model_id_list = [
     "us.anthropic.claude-3-sonnet-20240229-v1:0",
     "us.anthropic.claude-3-opus-20240229-v1:0",
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     
     "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
     "cohere.command-r-plus-v1:0",
@@ -425,7 +426,7 @@ if prompt:
 
         try:
             
-            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
                     response = bedrock_runtime_us_west_2.converse_stream(
                     modelId=opt_model_id,
                     messages=message_history,
