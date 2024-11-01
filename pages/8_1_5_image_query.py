@@ -77,6 +77,7 @@ mime_mapping = {
     }
 
 opt_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0"
@@ -91,6 +92,7 @@ with st.sidebar:
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
 st.title("💬 Image Query 8.1.3")
@@ -210,12 +212,22 @@ with col1:
         json.dumps(request, indent=3)
 
         try:
-            #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-            response = bedrock_runtime.invoke_model_with_response_stream(
-                modelId = opt_model_id, #bedrock_model_id, 
-                contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
-                accept = "application/json",
-                body = json.dumps(request))
+
+            #if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+            # Invocation of model ID anthropic.claude-3-5-sonnet-20241022-v2:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.
+            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+                response = bedrock_runtime.invoke_model_with_response_stream(
+                    modelId = opt_model_id, #bedrock_model_id, 
+                    contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                    accept = "application/json",
+                    body = json.dumps(request))
+            else:
+                #bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+                response = bedrock_runtime.invoke_model_with_response_stream(
+                    modelId = opt_model_id, #bedrock_model_id, 
+                    contentType = "application/json", #guardrailIdentifier  guardrailVersion=DRAFT, trace=ENABLED | DISABLED
+                    accept = "application/json",
+                    body = json.dumps(request))
 
             #with st.chat_message("assistant", avatar=setAvatar("assistant")):
             result_text = ""
