@@ -149,8 +149,8 @@ col1, col2 = st.columns([2, 1])
 
 with col2:
 
-    uploaded_file  = st.file_uploader(
-        "",
+    uploaded_file = st.file_uploader(
+        "Image Upload",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
         label_visibility="collapsed",
@@ -168,30 +168,47 @@ with col2:
             use_column_width=True
         )
         print(uploaded_file_type)
-        #uploaded_file_bytes = uploaded_file.read()
-        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes).decode("utf-8")
-        #uploaded_file_base64 = base64.b64encode(uploaded_file_bytes)
 
-        response = rekognition.detect_labels(
-            Image={'Bytes': uploaded_file_bytes},
-            #MaxLabels=123,
-            #MinConfidence=...,
-            Features=[
-                'IMAGE_PROPERTIES',
-            ],
-            Settings={
-                'ImageProperties': {
-                    'MaxDominantColors': 5
+
+        # response = rekognition.detect_labels(
+        #     Image={'Bytes': uploaded_file_bytes},
+        #     #MaxLabels=123,
+        #     #MinConfidence=...,
+        #     Features=[
+        #         'IMAGE_PROPERTIES',
+        #     ],
+        #     Settings={
+        #         'ImageProperties': {
+        #             'MaxDominantColors': 5
+        #         }
+        #     }
+        # )
+
+        # print(response)
+        # st.write(response)
+
+        # img_properties = response['ImageProperties']
+        # fg_dominant_colors = img_properties['Foreground']['DominantColors']
+        # st.write(fg_dominant_colors)
+
+# Add a button to trigger Rekognition analysis
+        if st.button("Analyze Image"):
+            response = rekognition.detect_labels(
+                Image={'Bytes': uploaded_file_bytes},
+                Features=['IMAGE_PROPERTIES'],
+                Settings={
+                    'ImageProperties': {
+                        'MaxDominantColors': 5
+                    }
                 }
-            }
-        )
+            )
 
-        print(response)
-        st.write(response)
+            print(response)
+            st.write(response)
 
-        img_properties = response['ImageProperties']
-        fg_dominant_colors = img_properties['Foreground']['DominantColors']
-        st.write(fg_dominant_colors)
+            img_properties = response['ImageProperties']
+            fg_dominant_colors = img_properties['Foreground']['DominantColors']
+            st.write(fg_dominant_colors)
 
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
 
@@ -206,15 +223,15 @@ with col1:
     idx = 1
     for msg in st.session_state.menu_image_query_messages:
         idx = idx + 1
-        content = msg["content"]
         with st.chat_message(msg["role"]):
-            st.write(content)
-            if "assistant" == msg["role"]:
-                #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
-                #with assistant_cmd_panel_col2:
-                #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
-                pass
-
+            if isinstance(msg["content"], list):
+                # For messages with list content (like those with images)
+                for content_item in msg["content"]:
+                    if isinstance(content_item, dict) and "text" in content_item:
+                        st.write(content_item["text"])
+            else:
+                # For simple text messages
+                st.write(msg["content"])
 
     if prompt := st.chat_input():
 
@@ -238,32 +255,7 @@ with col1:
                 st.write(f"Not supported file type: {uploaded_file.type}")
         message_history.append(message_user_latest)
 
-        # content =  [
-        #                 {
-        #                     "type": "text",
-        #                     "text": f"{prompt}"
-        #                 }
-        #             ]
-
-        # if uploaded_file_name:
-        #     content.append(
-        #         {
-        #             "type": "image",
-        #             "source": {
-        #                 "type": "base64",
-        #                 "media_type": uploaded_file_type,
-        #                 "data": uploaded_file_base64,
-        #             },
-        #         }
-        #     )
-            
-        # message_history.append({"role": "user", "content": content})
-        #st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
-
-        #user_message =  {"role": "user", "content": f"{prompt}"}
-        #messages = [st.session_state.messages]
-        #print(f"messages={st.session_state.menu_image_query_messages}")
 
         system_prompts = [{"text" : opt_system_msg}]
     
@@ -282,7 +274,7 @@ with col1:
             try:
                 
                 if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
-                        response = bedrock_runtime_us_west_2.converse_stream(
+                    response = bedrock_runtime_us_west_2.converse_stream(
                         modelId=opt_model_id,
                         messages=message_history,
                         system=system_prompts,
@@ -337,7 +329,8 @@ with col1:
                                 total_token_count = metadata['usage']['totalTokens']
                             if 'metrics' in event['metadata']:
                                 latency = metadata['metrics']['latencyMs']
-                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
+                            #stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
+                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} "
                             result_container.write(stats)
 
                         if "internalServerException" in event:
@@ -357,14 +350,19 @@ with col1:
                             result_text += f"\n\{exception}"
                             result_area.write(result_text)
 
-                st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
-                st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
+                #st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
+                #st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
 
+                # When storing messages in session state, modify the format:
+                st.session_state.menu_image_query_messages.append({"role": "user", "content": [{"text": prompt}]})
+                st.session_state.menu_image_query_messages.append({"role": "assistant", "content": [{"text": result_text}]})
             
-                
             except ClientError as err:
                 message = err.response["Error"]["Message"]
                 logger.error("A client error occurred: %s", message)
-                print("A client error occured: " + format(message))
-                st.chat_message("system").write(message)
-       
+                st.error(f"A client error occurred: {message}")
+
+            except Exception as e:
+                error_message = f"An unexpected error occurred: {str(e)}"
+                logger.error(error_message)
+                st.error(error_message)
