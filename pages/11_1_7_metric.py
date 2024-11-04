@@ -52,10 +52,12 @@ st.markdown(f"##### :green[{start_time} to {end_time}]")
 
 
 opt_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
     #"anthropic.claude-3-opus-20240229-v1:0",
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     "us.anthropic.claude-3-haiku-20240307-v1:0",
     "us.anthropic.claude-3-sonnet-20240229-v1:0",
     "us.anthropic.claude-3-opus-20240229-v1:0",
@@ -72,6 +74,12 @@ opt_model_id_list = [
     #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
     "mistral.mistral-small-2402-v1:0", # Mistral Small
     "mistral.mistral-large-2402-v1:0", # Mistral Large
+    "anthropic.claude-v2:1",
+    "anthropic.claude-v2",
+    "amazon.titan-embed-text-v1",
+    "amazon.titan-embed-text-v2:0",
+    "amazon.titan-embed-image-v1",
+    "cohere.embed-multilingual-v3"
 ]
 
 
@@ -277,7 +285,7 @@ mtab1, mtab2, mtab3 = st.tabs(["Invocation (M)", "InputToken (M)", "Reserved"])
 
 with mtab1:
 
-    st.markdown("##### :blue[Invocations (M) by Date]")
+    st.markdown(f"##### :blue[Invocations (M) by Date] - {AWS_REGION} {m_model_id}")
 
     metric_data_invocation_count = bedrock_cloudwatch_get_metric_with_dimensions(
         metric_namespace='AWS/Bedrock', 
@@ -289,14 +297,16 @@ with mtab1:
         'Timestamp': metric_data_invocation_count['Timestamps'],
         'Value': metric_data_invocation_count['Values'],
     })
+    #st.dataframe(metric_data_invocation_count_df)
+    if not metric_data_invocation_count_df.empty:
+        metric_data_invocation_count_df['Date'] = metric_data_invocation_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+        metric_data_invocation_count_by_date_df = metric_data_invocation_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
 
-    metric_data_invocation_count_df['Date'] = metric_data_invocation_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
-    metric_data_invocation_count_by_date_df = metric_data_invocation_count_df.groupby('Date').agg({'Value': 'sum'}).reset_index()
-
-    st.dataframe(metric_data_invocation_count_by_date_df, use_container_width=True)
-    st.line_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
-    st.bar_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
-
+        st.dataframe(metric_data_invocation_count_by_date_df, use_container_width=True)
+        st.line_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
+        st.bar_chart(metric_data_invocation_count_by_date_df, x='Date', y='Value', color=["#FF0000"], x_label='Date', y_label='Count')
+    else:
+         st.info("No data available for Invocations (M) by Date")
 
 with mtab2:
 
@@ -312,17 +322,20 @@ with mtab2:
         'Timestamp': metric_data_input_token_count['Timestamps'],
         'InputTokenCount': metric_data_input_token_count['Values'],
     })
-    metric_data_input_token_count_df['Date'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
-    metric_data_input_token_count_by_date_df = metric_data_input_token_count_df.groupby('Date').agg({'InputTokenCount': 'sum'}).reset_index()
+    if not metric_data_input_token_count_df.empty:
+        metric_data_input_token_count_df['Date'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%m-%d')
+        metric_data_input_token_count_by_date_df = metric_data_input_token_count_df.groupby('Date').agg({'InputTokenCount': 'sum'}).reset_index()
 
-    st.dataframe(metric_data_input_token_count_by_date_df, use_container_width=True)
-    st.line_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
-    st.bar_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
+        st.dataframe(metric_data_input_token_count_by_date_df, use_container_width=True)
+        st.line_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
+        st.bar_chart(metric_data_input_token_count_by_date_df, x='Date', y='InputTokenCount', color=["#FF0000"], x_label='Date', y_label='InputTokenCount')
 
 
-    st.markdown("##### :blue[Input Token by Week]")
-    metric_data_input_token_count_df['Week'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%W')
-    metric_data_input_token_count_weekly_df = metric_data_input_token_count_df.groupby('Week', as_index=False)['InputTokenCount'].sum()
-    st.dataframe(metric_data_input_token_count_weekly_df, use_container_width=True)
-    st.line_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
-    st.bar_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
+        st.markdown("##### :blue[Input Token by Week]")
+        metric_data_input_token_count_df['Week'] = metric_data_input_token_count_df['Timestamp'].dt.strftime('%Y-%W')
+        metric_data_input_token_count_weekly_df = metric_data_input_token_count_df.groupby('Week', as_index=False)['InputTokenCount'].sum()
+        st.dataframe(metric_data_input_token_count_weekly_df, use_container_width=True)
+        st.line_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
+        st.bar_chart(metric_data_input_token_count_weekly_df, x='Week', y='InputTokenCount', color=["#FF0000"], x_label='Week', y_label='InputTokenCount')
+    else:
+         st.info("No data available for Input Token by Date (M)")
