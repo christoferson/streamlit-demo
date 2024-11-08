@@ -77,7 +77,7 @@ def copy_button_clicked(text):
     pyperclip.copy(text)
     #st.session_state.button = not st.session_state.button
 
-def image_to_base64(image,mime_type:str):
+def image_to_base64(image:Image, mime_type:str):
     buffer = io.BytesIO()
     image.save(buffer, format=mime_type)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
@@ -91,7 +91,8 @@ opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    
 ]
 
 mime_mapping_image = {
@@ -219,11 +220,11 @@ with col2:
 
 with col1:
 
-    if "menu_image_query_messages" not in st.session_state:
-        st.session_state["menu_image_query_messages"] = []
+    if "menu_multi_image_query_messages" not in st.session_state:
+        st.session_state["menu_multi_image_query_messages"] = []
 
     idx = 1
-    for msg in st.session_state.menu_image_query_messages:
+    for msg in st.session_state.menu_multi_image_query_messages:
         with st.chat_message(msg["role"]):
             contents = msg["content"]
             if isinstance(contents, list) and contents:
@@ -248,7 +249,7 @@ with col1:
 
     if prompt := st.chat_input():
 
-        message_history = st.session_state.menu_image_query_messages.copy()
+        message_history = st.session_state.menu_multi_image_query_messages.copy()
 
         message_user_latest = {"role": "user", "content": [{"text": prompt}]}
 
@@ -275,7 +276,7 @@ with col1:
 
         #user_message =  {"role": "user", "content": f"{prompt}"}
         #messages = [st.session_state.messages]
-        #print(f"messages={st.session_state.menu_image_query_messages}")
+        #print(f"messages={st.session_state.menu_multi_image_query_messages}")
 
         system_prompts = [{"text" : opt_system_msg}]
     
@@ -384,8 +385,8 @@ with col1:
                 
                 message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
-                st.session_state.menu_image_query_messages.append(message_user_latest)
-                st.session_state.menu_image_query_messages.append(message_assistant_latest)
+                st.session_state.menu_multi_image_query_messages.append(message_user_latest)
+                st.session_state.menu_multi_image_query_messages.append(message_assistant_latest)
                 
 
             except ClientError as err:
