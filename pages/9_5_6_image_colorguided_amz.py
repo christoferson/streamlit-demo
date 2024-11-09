@@ -201,6 +201,12 @@ variation_prompts_init_str = "\n".join(variation_prompts_init)
 variation_prompts_str = st.text_area(":blue[**Variation Prompts**]", value=variation_prompts_init_str, height=170, max_chars=2000,
                                      placeholder="Enter each variation as a separate line")
 
+#["#ff8080", "#ffb280", "#ffe680", "#ffe680"]
+opt_color_1 = st.color_picker("Pick A Color", "#ff8080", key="menu_image_colorguided_opt_color_1")
+opt_color_2 = st.color_picker("Pick A Color", "#ffb280", key="menu_image_colorguided_opt_color_2")
+opt_color_3 = st.color_picker("Pick A Color", "#ffe680", key="menu_image_colorguided_opt_color_3")
+opt_color_4 = st.color_picker("Pick A Color", "#ffe680", key="menu_image_colorguided_opt_color_4")
+
 generate_btn = st.button("Generate", type="primary")
 
 #if prompt := st.chat_input(disabled=uploaded_file_name==None):
@@ -260,16 +266,17 @@ if generate_btn:
                                 #"text": "digital painting of a girl, dreamy and ethereal, pink eyes, peaceful expression, ornate frilly dress, fantasy, intricate, elegant, rainbow bubbles, highly detailed, digital painting, artstation, concept art, smooth, sharp focus, illustration",
                                 "negativeText": opt_negative_prompt_csv,
                                 #"colors": ['#ff8080', '#ffb280', '#ffe680', '#e5ff80'],
-                                "colors": ["#ff8080", "#ffb280", "#ffe680", "#ffe680"],
+                                "colors": [opt_color_1, opt_color_2, opt_color_3, opt_color_4],
                                 #"image": uploaded_file_base64,
                                 #"referenceImage": uploaded_file_base64,
                                 #"similarityStrength": opt_similarity_strength,
                             },
                             "imageGenerationConfig": {
                                 "numberOfImages": 1,
-                                "height": 512,
-                                "width": 512,
-                                "cfgScale": 8.0
+                                "height": opt_dimensions_height, #1024,
+                                "width": opt_dimensions_width, #1024,
+                                "cfgScale": opt_config_scale,
+                                "seed": seed,
                             }
                         }
                     
