@@ -13,6 +13,7 @@ import io
 import base64
 import pandas as pd
 from cmn.bedrock_models import FoundationModel
+from datetime import datetime
 
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 
@@ -39,6 +40,7 @@ logging.basicConfig(level=logging.INFO)
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
+cloudwatch_logs = boto3.client('logs', region_name=AWS_REGION)
 polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
@@ -106,6 +108,59 @@ def get_conversation_download():
 def clear_conversation():
     st.session_state.menu_converse_messages = []
     st.session_state.menu_converse_uploader_key = 0
+
+
+# Get the top 10 users with the most tokens in a given period (e.g., past 3 months):
+# fields @timestamp, @message
+# | parse @message '{"user_name":"*","input_tokens":*,"output_tokens":*,"total_tokens":*,"event_time":"*"}' as user_name, input_tokens, output_tokens, total_tokens, event_time
+# | filter ispresent(total_tokens) and event_time > '2023-03-01T00:00:00' and event_time < '2023-06-01T00:00:00'
+# | stats sum(total_tokens) as total_tokens_used by user_name
+# | sort total_tokens_used desc
+# | limit 10
+#Get the total tokens used by a particular user for the whole period:
+# fields @timestamp, @message
+# | parse @message '{"user_name":"*","input_tokens":*,"output_tokens":*,"total_tokens":*,"event_time":"*"}' as user_name, input_tokens, output_tokens, total_tokens, event_time
+# | filter user_name = 'specific_user_name' and ispresent(total_tokens)
+# | stats sum(total_tokens) as total_tokens_used by user_name
+def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
+    log_group_name = "/app/openai/metrics/invocations"
+    log_stream_name = datetime.now().strftime("%Y-%m-%d")
+
+    # Ensure the log group exists
+    try:
+        cloudwatch_logs.create_log_group(logGroupName=log_group_name)
+    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException as e:
+        #logger.error(f"Failed to create log group to CloudWatch: {str(e)}")
+        pass
+
+    # Ensure the log stream exists
+    try:
+        cloudwatch_logs.create_log_stream(logGroupName=log_group_name, logStreamName=log_stream_name)
+    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException as e:
+        #logger.error(f"Failed to create log stream to CloudWatch: {str(e)}")
+        pass
+
+    # Create the log entry as a JSON object
+    log_entry = {
+        'timestamp': int(datetime.now().timestamp() * 1000),
+        'message': json.dumps({
+            'user_name': user_name,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'total_tokens': total_tokens,
+            'event_time': datetime.now().isoformat()
+        })
+    }
+
+    # Push the log entry to CloudWatch
+    try:
+        cloudwatch_logs.put_log_events(
+            logGroupName=log_group_name,
+            logStreamName=log_stream_name,
+            logEvents=[log_entry]
+        )
+    except Exception as e:
+        logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
 def upload_conversation(uploaded_file):
     try:
@@ -484,6 +539,11 @@ if prompt:
                             latency = metadata['metrics']['latencyMs']
                         stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
                         result_container.write(stats)
+                        user_name = "default_user"  # Replace with actual user name if available
+                        try:
+                            push_to_cloudwatch(user_name, input_token_count, output_token_count, total_token_count)
+                        except Exception as e:
+                            logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
                     if "internalServerException" in event:
                         exception = event["internalServerException"]
