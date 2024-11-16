@@ -80,7 +80,9 @@ opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    "meta.llama3-2-11b-instruct-v1:0", #OK
+    "meta.llama3-2-90b-instruct-v1:0", #A client error occurred: Invocation of model ID meta.llama3-2-90b-instruct-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.
 ]
 
 mime_mapping_image = {
