@@ -7,6 +7,17 @@ AWS_REGION = cmn_settings.AWS_REGION
 
 cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
 
+# def list_available_models(namespace='AWS/Bedrock', metric_name='Invocations'):
+#     paginator = cloudwatch.get_paginator('list_metrics')
+#     models = set()
+#     for page in paginator.paginate(Namespace=namespace, MetricName=metric_name):
+#         for metric in page['Metrics']:
+#             for dimension in metric['Dimensions']:
+#                 if dimension['Name'] == 'ModelId':
+#                     models.add(dimension['Value'])
+#     return list(models)
+
+
 def cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='Invocations', 
                           start_time:datetime=datetime.now() - timedelta(days=7),
                           end_time:datetime=datetime.now(), aggregate_stat="Sum"):
@@ -14,15 +25,20 @@ def cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='Invocatio
     metric_data = {
         'Values': [],
         'Timestamps': [],
-        'NextToken': None
+        'NextToken': None,
+        #'Labels': [],
     }
         
     get_metric_data_response = _call(metric_namespace, metric_name, start_time, end_time, next_token="", aggregate_stat=aggregate_stat)
+    #print("Response structure:")
+    #print(json.dumps(get_metric_data_response, indent=2, default=str))
     metric_data_list = get_metric_data_response['MetricDataResults']
     metric_data_values = metric_data_list[0]['Values']
     metric_data_timestamps = metric_data_list[0]['Timestamps']
+    #metric_data_labels = metric_data_list[0].get('Labels', [])
     metric_data['Values'].extend(metric_data_values)
     metric_data['Timestamps'].extend(metric_data_timestamps)
+    #metric_data['Labels'].extend(metric_data_labels)
     next_token = ""
     if 'NextToken' in get_metric_data_response:
         next_token = get_metric_data_response['NextToken']
@@ -32,8 +48,10 @@ def cloudwatch_get_metric(metric_namespace='AWS/Bedrock', metric_name='Invocatio
             metric_data_list = get_metric_data_response['MetricDataResults']
             metric_data_values = metric_data_list[0]['Values']
             metric_data_timestamps = metric_data_list[0]['Timestamps']
+            #metric_data_labels = metric_data_list[0].get('Labels', [])
             metric_data['Values'].extend(metric_data_values)
             metric_data['Timestamps'].extend(metric_data_timestamps)
+            #metric_data['Labels'].extend(metric_data_labels)
             next_token = ""
             if 'NextToken' in get_metric_data_response:
                 next_token = get_metric_data_response['NextToken']
@@ -50,10 +68,18 @@ def _call(metric_namespace, metric_name, start_time, end_time, next_token = "", 
                         'Namespace': metric_namespace,
                         'MetricName': metric_name,
                         'Dimensions': [
-                            #{
-                            #    'Name': 'ModelId',
-                            #    'Value': 'anthropic.claude-3-sonnet-20240229-v1:0'
-                            #},
+                            # {
+                            #     'Name': 'ModelId',
+                            #     'Value': 'anthropic.claude-3-sonnet-20240229-v1:0'
+                            # },
+                            # {
+                            #     'Name': 'ModelId',
+                            #     'Value': 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+                            # },
+                            # {
+                            #     'Name': 'ModelId',
+                            #     'Value': 'stability.stable-diffusion-xl-v1'
+                            # },
                         ]
                     },
                     'Period': 86400, #Seconds
@@ -67,6 +93,8 @@ def _call(metric_namespace, metric_name, start_time, end_time, next_token = "", 
                 #'AccountId': 'string'
             },
         ]
+    
+    
     if next_token != "":
         get_metric_data_response = cloudwatch.get_metric_data(
             MetricDataQueries=metric_data_query_list,
@@ -304,3 +332,7 @@ def _cloudwatch_get_metric_expression(
     print(get_metric_data_response_json)
 
     return get_metric_data_response
+
+
+
+#-------------------
