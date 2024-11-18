@@ -3,6 +3,11 @@ import cmn_settings
 from datetime import datetime, timedelta, timezone
 import json
 
+
+#import boto3
+import time
+#from datetime import datetime, timedelta
+
 AWS_REGION = cmn_settings.AWS_REGION
 
 cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
@@ -336,3 +341,87 @@ def _cloudwatch_get_metric_expression(
 
 
 #-------------------
+
+
+
+def query_cloudwatch_logs_insights(
+    log_group_name,
+    query_string,
+    start_time:datetime=None,
+    end_time:datetime=None,
+    max_attempts=60,  # Maximum number of retry attempts
+    timeout_seconds=300,  # 5 minutes timeout
+    poll_interval=1  # Time between polling attempts in seconds
+):
+    """
+    Execute CloudWatch Logs Insights query and retrieve results with timeout and retry limits
+
+    Parameters:
+    - log_group_name: Name of the CloudWatch Log Group
+    - query_string: The query to execute
+    - start_time: Start time for the query (defaults to 24 hours ago)
+    - end_time: End time for the query (defaults to now)
+    - max_attempts: Maximum number of retry attempts
+    - timeout_seconds: Maximum time to wait for results in seconds
+    - poll_interval: Time to wait between polling attempts in seconds
+
+    Returns:
+    - JSON object containing query results and statistics
+
+    Raises:
+    - TimeoutError: If query exceeds timeout period
+    - Exception: For other errors during query execution
+    """
+    try:
+        client = boto3.client('logs', region_name=AWS_REGION)
+
+        # Set default time range if not provided
+        if not end_time:
+            end_time = int(datetime.now().timestamp())
+        elif isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
+
+        if not start_time:
+            start_time = end_time - 24 * 3600  # 24 hours ago
+        elif isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+
+        # Ensure start_time and end_time are integers
+        start_time = int(start_time)
+        end_time = int(end_time)
+
+        # Start the query
+        start_query_response = client.start_query(
+            logGroupName=log_group_name,
+            startTime=start_time,
+            endTime=end_time,
+            queryString=query_string
+        )
+
+        query_id = start_query_response['queryId']
+        attempts = 0
+        start_time = time.time()
+
+        while attempts < max_attempts:
+            # Check for timeout
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError(f"Query exceeded timeout of {timeout_seconds} seconds")
+
+            # Get query results
+            response = client.get_query_results(queryId=query_id)
+            status = response['status']
+
+            if status == 'Complete':
+                return response  # Returns complete response object
+            elif status in ['Failed', 'Cancelled']:
+                raise Exception(f"Query failed with status: {status}")
+
+            attempts += 1
+            time.sleep(poll_interval)
+
+        raise Exception(f"Query exceeded maximum attempts: {max_attempts}")
+
+    except TimeoutError:
+        raise
+    except Exception as e:
+        raise Exception(f"Error executing query: {str(e)}")
