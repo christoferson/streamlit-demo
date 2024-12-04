@@ -41,6 +41,13 @@ class FoundationModel:
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
             }
+        elif self.provider == "Amazon":
+            return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1),
+                "TopK": InferenceParameter("top_k", 0, 250, 500, supported=False)
+            }
         elif self.provider == "Meta":
             return {
                 "MaxTokensToSample": InferenceParameter("MaxGenLen", 1, 1024, 2048),
@@ -94,6 +101,7 @@ foundation_models = {
     "us.anthropic.claude-3-opus-20240229-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-opus-20240229-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20241022-v2:0", True, True, True, True, True, True, True, True),
+    "amazon.nova-pro-v1:0": FoundationModel("Amazon", "amazon.nova-pro-v1:0", True, True, True, True, True, True, True, True),
     "cohere.command-r-v1:0": FoundationModel("Cohere", "cohere.command-r-v1:0", True, True, True, True, False, True, True, False),
     "cohere.command-r-plus-v1:0": FoundationModel("Cohere", "cohere.command-r-plus-v1:0", True, True, True, True, False, True, True, False),
     "meta.llama2-13b-chat-v1": FoundationModel("Meta", "meta.llama2-13b-chat-v1", True, True, True, True, False, False, False, True),
