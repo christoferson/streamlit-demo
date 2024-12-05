@@ -51,7 +51,8 @@ opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
     #"anthropic.claude-3-5-sonnet-20241022-v2:0", #The provided model is not supported for EXTERNAL_SOURCES RetrieveAndGenerateType. Update the model arn then retry your request.
     #"anthropic.claude-3-5-sonnet-20240620-v1:0", #The provided model is not supported for EXTERNAL_SOURCES RetrieveAndGenerateType. Update the model arn then retry your request.
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    "us.amazon.nova-pro-v1:0",
 ]
 
 opt_top_k = 250
