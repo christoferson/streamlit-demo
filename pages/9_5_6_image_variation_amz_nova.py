@@ -79,7 +79,7 @@ variation_prompts_init = [
 ]
 
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-image.html
-opt_model_id_list = [ "amazon.titan-image-generator-v2:0" ]
+opt_model_id_list = [ "amazon.nova-canvas-v1:0" ]
 
 opt_style_preset_list = [
     "anime",
@@ -115,7 +115,7 @@ opt_steps_help = """
 Generation step determines how many times the image is sampled. More steps can result in a more accurate result.
 """
 
-opt_model_id = "amazon.titan-image-generator-v2:0"
+opt_model_id = "amazon.nova-canvas-v1:0"
 opt_negative_prompt = opt_negative_prompt_list
 opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
@@ -128,7 +128,7 @@ with st.sidebar:
     opt_dimensions = st.selectbox(label=":blue[**Dimensions - Width x Height**]", options=opt_dimensions_list, index = 1, key="dimensions")
     #opt_negative_prompt = st.multiselect(label="Negative Prompt", options=opt_negative_prompt_list, default=opt_negative_prompt_list, key="negative_prompt")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
-    opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=4294967295, value=-1, step=1, key="seed")
+    opt_seed = st.slider(label=":blue[**Seed**]", min_value=-1, max_value=2147483646, value=-1, step=1, key="seed")
     opt_negative_prompt_csv = st.text_area(label=":blue[**Negative Prompts**]", value=opt_negative_prompt_csv_init, placeholder="Things you don't want to see in the generated image. Input comma separated values. e.g. ugly,disfigured,low contrast,underexposed,overexposed,blurry,grainy", max_chars=256, key="negative_prompts")
 
 
@@ -228,7 +228,7 @@ if generate_btn:
 
     seed = opt_seed
     if seed < 0:
-        seed = random.randint(0, 4294967295)
+        seed = random.randint(0, 2147483646)
     
     #logger.info(f"prompt={prompt} negative={opt_negative_prompt_csv}")
 
