@@ -289,6 +289,45 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
 
+with st.sidebar:
+    st.divider()
+    st.markdown(":blue[**Conversation**]")
+    # Add this after your existing sidebar elements
+    uploaded_conversation = st.file_uploader(
+        "Upload Previous Conversation",
+        type=["json"],
+        help="Upload a previously downloaded conversation file"
+    )
+
+    if uploaded_conversation is not None:
+        try:
+            # Read and parse the uploaded JSON file
+            content = uploaded_conversation.getvalue().decode("utf-8")
+            loaded_conversation = json.loads(content)
+
+            # Validate the conversation structure
+            if isinstance(loaded_conversation, list):
+                valid_conversation = True
+                for message in loaded_conversation:
+                    if not isinstance(message, dict) or "role" not in message or "content" not in message:
+                        valid_conversation = False
+                        break
+                    if message["role"] not in ["user", "assistant", "system"]:
+                        valid_conversation = False
+                        break
+
+                if valid_conversation:
+                    if st.button("Load Conversation"):
+                        st.session_state.menu_converse_messages = loaded_conversation
+                        st.rerun()
+                else:
+                    st.error("Invalid conversation format")
+            else:
+                st.error("Invalid JSON format")
+        except json.JSONDecodeError:
+            st.error("Invalid JSON file")
+        except Exception as e:
+            st.error(f"Error loading conversation: {str(e)}")
 
 st.markdown("💬 Converse 3-5-3")
 
