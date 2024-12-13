@@ -100,15 +100,84 @@ def image_to_base64(image,mime_type:str):
     image.save(buffer, format=mime_type)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+def trim_conversation_history(messages):
+    """Ensure conversation doesn't exceed maximum length"""
+    messages_len = len(messages)
+    if messages_len > MAX_MESSAGES:
+        # Remove oldest messages while keeping pairs together
+        return messages[-(MAX_MESSAGES * 2):]
+    return messages
+
+def validate_conversation_structure(conversation):
+    """Validate the structure of uploaded conversation data"""
+    if not isinstance(conversation, list):
+        raise ValueError("Invalid format: expected a list of messages")
+
+    if len(conversation) > MAX_MESSAGES:
+        raise ValueError(f"Conversation exceeds maximum length of {MAX_MESSAGES} messages")
+
+    for message in conversation:
+        if not isinstance(message, dict):
+            raise ValueError("Invalid message format: expected a dictionary")
+
+        if "role" not in message or "content" not in message:
+            raise ValueError("Message missing required fields: 'role' and 'content'")
+
+        if message["role"] not in ["user", "assistant", "system"]:
+            raise ValueError(f"Invalid role: {message['role']}")
+
+        if not isinstance(message["content"], list):
+            raise ValueError("Invalid content format: expected a list")
+
+        for content_item in message["content"]:
+            if not isinstance(content_item, dict) or "text" not in content_item:
+                raise ValueError("Invalid content item: expected 'text' key")
+
 def get_conversation_download():
-    conversation = st.session_state.menu_converse_messages
-    conversation_json = json.dumps(conversation, indent=2)
+    """Download conversation with metadata"""
+    if not st.session_state.menu_converse_messages:
+        raise ValueError("No conversation to download")
+
+    export_data = {
+        "version": "1.0",
+        "timestamp": datetime.now().isoformat(),
+        "messages": trim_conversation_history(st.session_state.menu_converse_messages)
+    }
+    conversation_json = json.dumps(export_data, indent=2)
     return BytesIO(conversation_json.encode())
 
 def clear_conversation():
+    """Clear conversation state"""
     st.session_state.menu_converse_messages = []
     st.session_state.menu_converse_uploader_key = 0
 
+def upload_conversation(uploaded_file):
+    """Upload and validate conversation data"""
+    try:
+        # Read and parse the uploaded file
+        content = uploaded_file.getvalue().decode("utf-8")
+        data = json.loads(content)
+
+        # Handle both new format (with metadata) and old format (just messages)
+        conversation = data["messages"] if isinstance(data, dict) and "messages" in data else data
+
+        # Validate the conversation structure
+        validate_conversation_structure(conversation)
+
+        # Update session state
+        st.session_state.menu_converse_messages = conversation
+        st.session_state.menu_converse_uploader_key = 0
+
+        st.success("Conversation uploaded successfully!")
+        return True
+
+    except json.JSONDecodeError:
+        st.error("Invalid JSON file. Please upload a valid JSON conversation file.")
+    except ValueError as e:
+        st.error(f"Error in conversation structure: {str(e)}")
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {str(e)}")
+    return False
 
 # Get the top 10 users with the most tokens in a given period (e.g., past 3 months):
 # fields @timestamp, @message
@@ -162,41 +231,6 @@ def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
     except Exception as e:
         logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
-def upload_conversation(uploaded_file):
-    try:
-        # Read the uploaded JSON file
-        content = uploaded_file.getvalue().decode("utf-8")
-        conversation = json.loads(content)
-
-        # Validate the structure of the uploaded conversation
-        if not isinstance(conversation, list):
-            raise ValueError("Invalid conversation format: expected a list")
-
-        for message in conversation:
-            if not isinstance(message, dict) or "role" not in message or "content" not in message:
-                raise ValueError("Invalid message format: expected 'role' and 'content' keys")
-
-            if message["role"] not in ["user", "assistant", "system"]:
-                raise ValueError(f"Invalid role: {message['role']}")
-
-            if not isinstance(message["content"], list):
-                raise ValueError("Invalid content format: expected a list")
-
-            for content_item in message["content"]:
-                if not isinstance(content_item, dict) or "text" not in content_item:
-                    raise ValueError("Invalid content item: expected 'text' key")
-
-        # If validation passes, update the session state
-        st.session_state.menu_converse_messages = conversation
-        #st.success("Conversation uploaded successfully!")
-        #st.rerun()
-
-    except json.JSONDecodeError:
-        st.error("Invalid JSON file. Please upload a valid JSON conversation file.")
-    except ValueError as e:
-        st.error(f"Error in conversation structure: {str(e)}")
-    except Exception as e:
-        st.error(f"An error occurred while processing the file: {str(e)}")
 
 def delete_message_pair(index):
     if index < len(st.session_state.menu_converse_messages):
@@ -292,42 +326,17 @@ with st.sidebar:
 with st.sidebar:
     st.divider()
     st.markdown(":blue[**Conversation**]")
-    # Add this after your existing sidebar elements
+    st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
     uploaded_conversation = st.file_uploader(
-        "Upload Previous Conversation",
+        ":green[**Upload Conversation**]",
         type=["json"],
         help="Upload a previously downloaded conversation file"
     )
 
     if uploaded_conversation is not None:
-        try:
-            # Read and parse the uploaded JSON file
-            content = uploaded_conversation.getvalue().decode("utf-8")
-            loaded_conversation = json.loads(content)
-
-            # Validate the conversation structure
-            if isinstance(loaded_conversation, list):
-                valid_conversation = True
-                for message in loaded_conversation:
-                    if not isinstance(message, dict) or "role" not in message or "content" not in message:
-                        valid_conversation = False
-                        break
-                    if message["role"] not in ["user", "assistant", "system"]:
-                        valid_conversation = False
-                        break
-
-                if valid_conversation:
-                    if st.button("Load Conversation"):
-                        st.session_state.menu_converse_messages = loaded_conversation
-                        st.rerun()
-                else:
-                    st.error("Invalid conversation format")
-            else:
-                st.error("Invalid JSON format")
-        except json.JSONDecodeError:
-            st.error("Invalid JSON file")
-        except Exception as e:
-            st.error(f"Error loading conversation: {str(e)}")
+        if st.button("Load Conversation"):
+            if upload_conversation(uploaded_conversation):
+                st.rerun()
 
 st.markdown("💬 Converse 3-5-3")
 
@@ -657,13 +666,20 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("Download Conversation"):
-        conversation_file = get_conversation_download()
-        st.download_button(
-            label="Download JSON",
-            data=conversation_file,
-            file_name="conversation.json",
-            mime="application/json"
-        )
+        if not st.session_state.menu_converse_messages:
+            st.error("No conversation to download")
+        else:
+            try:
+                conversation_file = get_conversation_download()
+                st.download_button(
+                    label="Download JSON",
+                    data=conversation_file,
+                    file_name=f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    key="download_button"
+                )
+            except Exception as e:
+                st.error(f"Error downloading conversation: {str(e)}")
 
 with col2:
     # if st.button("Upload JSON File"):
@@ -674,6 +690,22 @@ with col2:
     pass
 
 with col3:
+    if "clear_conversation_clicked" not in st.session_state:
+        st.session_state.clear_conversation_clicked = False
+
     if st.button("Clear Conversation"):
-        clear_conversation()
-        st.rerun()
+        st.session_state.clear_conversation_clicked = True
+
+    if st.session_state.clear_conversation_clicked:
+        st.warning("Are you sure you want to clear the conversation?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes"):
+                clear_conversation()
+                st.session_state.clear_conversation_clicked = False
+                st.success("Conversation cleared successfully!")
+                st.rerun()
+        with col2:
+            if st.button("No"):
+                st.session_state.clear_conversation_clicked = False
+                st.rerun()
