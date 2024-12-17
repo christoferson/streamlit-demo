@@ -305,6 +305,13 @@ Please think through each step carefully before responding to ensure clarity, co
 If any part of the query is unclear, don't hesitate to ask for clarification to provide the most accurate and helpful response possible.
 """
 
+if "menu_converse_messages" not in st.session_state:
+    st.session_state["menu_converse_messages"] = []
+
+# Add this to store feedback
+if "menu_converse_messages_feedback" not in st.session_state:
+    st.session_state["menu_converse_messages_feedback"] = {}
+    
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
 
@@ -340,12 +347,7 @@ with st.sidebar:
 
 st.markdown("💬 Converse 3-5-3")
 
-if "menu_converse_messages" not in st.session_state:
-    st.session_state["menu_converse_messages"] = []
 
-# Add this to store feedback
-if "menu_converse_messages_feedback" not in st.session_state:
-    st.session_state["menu_converse_messages_feedback"] = {}
 
 st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
 
