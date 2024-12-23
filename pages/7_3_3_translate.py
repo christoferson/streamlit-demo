@@ -126,7 +126,9 @@ st.markdown(
 
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "amazon.nova-pro-v1:0",
 ]
 
 system_message = """You are a highly skilled translator with expertise in many languages. 
@@ -195,7 +197,7 @@ if "translate_result" in st.session_state and st.session_state["translate_result
     if markdown_display:
         result_container.markdown(result_text)
     else:
-        result_container.code(result_text, language="wiki")
+        result_container.code(result_text, language="wiki", wrap_lines=True)
 
 result_columns = result_container.columns([1,1,1,1,1,1,1,1,1,1,1,1,1], gap="small")
 if "translate_result" in st.session_state and st.session_state["translate_result"] != None:
@@ -328,8 +330,8 @@ def on_button_translate_clicked():
         st.chat_message("system").write(message)
 
 
-button_panel = col1.columns([1,1,1,1,1,1,1,1,1], gap="small") #gap ("small", "medium", or "large")
-button_panel[8].button("Translate", on_click=on_button_translate_clicked, use_container_width=True)
-button_panel[7].button("⎚ Clear", on_click=on_button_clear_clicked, use_container_width=True)
+button_panel = col1.columns([1,1,1,1,1,1,1,2,2], gap="small") #gap ("small", "medium", or "large")
+button_panel[8].button("GO", on_click=on_button_translate_clicked, use_container_width=True, icon=":material/translate:")
+button_panel[7].button("DEL", on_click=on_button_clear_clicked, use_container_width=True, icon=":material/ink_eraser:")
 
 
