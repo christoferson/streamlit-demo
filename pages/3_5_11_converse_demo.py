@@ -62,39 +62,6 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 
-
-# st.markdown(
-#         """
-#         <style>
-#         .stAppViewMain {
-#             color: white;
-#             background-color: #1E1E1E;
-#         }
-#         .stChatMessage {
-#             color: white;
-#             background-color: #1E1E1E;
-#         }
-#         .stVerticalBlockBorderWrapper {
-#             color: white;
-#             background-color: #1E1E1E;
-#         }
-#         .stCode {
-#             color: white;
-#             background-color: #1E1E1E;
-#         }
-#         .stMarkdown {
-#             color: white;
-#         }
-#         .stButton>button {
-#             color: #4CAF50;
-#             background-color: #2E2E2E;
-#             border: 2px solid #4CAF50;
-#         }
-#         </style>
-#         """,
-#         unsafe_allow_html=True
-#     )
-
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
     image.save(buffer, format=mime_type)
@@ -333,7 +300,7 @@ with st.sidebar:
 with st.sidebar:
     st.divider()
     st.markdown(":blue[**Conversation**]")
-    st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+    #st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
     uploaded_conversation = st.file_uploader(
         ":green[**Upload Conversation**]",
         type=["json"],
@@ -341,14 +308,14 @@ with st.sidebar:
     )
 
     if uploaded_conversation is not None:
-        if st.button("Load Conversation"):
+        if st.button("Load Conversation", type="secondary", icon=":material/upload:", use_container_width=False):
             if upload_conversation(uploaded_conversation):
                 st.rerun()
 
 st.markdown("💬 Converse 3-5-3")
 
 
-
+#:markdown/forum:
 st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
 
 idx = 1
@@ -663,13 +630,14 @@ if prompt:
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
-
+#st.markdown("Conversation")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("Download Conversation"):
+    #st.markdown("Conversation: ")
+    if st.button("Download Conversation", type="secondary", icon=":material/download:", use_container_width=False):
         if not st.session_state.menu_converse_messages:
-            st.error("No conversation to download")
+            st.error("No data to download!")
         else:
             try:
                 conversation_file = get_conversation_download()
@@ -689,25 +657,28 @@ with col2:
     #     if uploaded_file is not None:
     #         upload_conversation(uploaded_file)
     #         st.rerun()
-    pass
+    
+    st.markdown(f"💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+    #st.info(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}", icon=":material/forum:")
 
 with col3:
     if "clear_conversation_clicked" not in st.session_state:
         st.session_state.clear_conversation_clicked = False
 
-    if st.button("Clear Conversation"):
+    if st.button("Clear Conversation", type="secondary", icon=":material/clear_all:", use_container_width=False):
         st.session_state.clear_conversation_clicked = True
 
     if st.session_state.clear_conversation_clicked:
-        st.warning("Are you sure you want to clear the conversation?")
+        #st.warning("Are you sure you want to clear the conversation?")
+        st.warning("Clear ALL conversation?")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Yes"):
+            if st.button("Yes", use_container_width=True):
                 clear_conversation()
                 st.session_state.clear_conversation_clicked = False
                 st.success("Conversation cleared successfully!")
                 st.rerun()
         with col2:
-            if st.button("No"):
+            if st.button("No", use_container_width=True):
                 st.session_state.clear_conversation_clicked = False
                 st.rerun()
