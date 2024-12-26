@@ -139,12 +139,14 @@ opt_model_id_list = [
     "stability.stable-image-core-v1:0",
     "stability.sd3-large-v1:0",
     "stability.stable-image-ultra-v1:0",
+    "stability.sd3-5-large-v1:0",
 ]
 
 opt_model_id_display_map = {
     "stability.stable-image-core-v1:0": "Stable Image Core v1",
     "stability.sd3-large-v1:0": "SD3 Large v1",
     "stability.stable-image-ultra-v1:0": "Stable Image Ultra v1",
+    "stability.sd3-5-large-v1:0": "SD3.5",
 }
 
 # Function to format the model ID for display
