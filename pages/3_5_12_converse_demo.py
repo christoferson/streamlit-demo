@@ -2,10 +2,9 @@ import streamlit as st
 import boto3
 import cmn_settings
 import cmn_constants
+import cmn_security
 import json
 import logging
-import cmn_auth
-import os
 from io import BytesIO
 
 from PIL import Image
@@ -15,7 +14,7 @@ import pandas as pd
 from cmn.bedrock_models import FoundationModel
 from datetime import datetime
 
-from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
+from botocore.exceptions import ClientError, ReadTimeoutError
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 80 * 2
@@ -101,17 +100,15 @@ def validate_conversation_structure(conversation):
                 raise ValueError("Invalid content item: expected 'text' key")
 
 def get_conversation_download():
-    """Download conversation with metadata"""
+    """Download conversation with security signature"""
     if not st.session_state.menu_converse_messages:
         raise ValueError("No conversation to download")
 
-    export_data = {
-        "version": "1.0",
-        "timestamp": datetime.now().isoformat(),
-        "messages": trim_conversation_history(st.session_state.menu_converse_messages)
-    }
-    conversation_json = json.dumps(export_data, indent=2)
-    return BytesIO(conversation_json.encode())
+    security = cmn_security.ConversationSecurity()
+    secure_package = security.secure_conversation(
+        trim_conversation_history(st.session_state.menu_converse_messages)
+    )
+    return BytesIO(json.dumps(secure_package, indent=2).encode())
 
 def clear_conversation():
     """Clear conversation state"""
@@ -119,31 +116,36 @@ def clear_conversation():
     st.session_state.menu_converse_uploader_key = 0
 
 def upload_conversation(uploaded_file):
-    """Upload and validate conversation data"""
+    """Upload and verify conversation integrity"""
     try:
+        security = cmn_security.ConversationSecurity()
+
         # Read and parse the uploaded file
         content = uploaded_file.getvalue().decode("utf-8")
-        data = json.loads(content)
+        conversation_package = json.loads(content)
 
-        # Handle both new format (with metadata) and old format (just messages)
-        conversation = data["messages"] if isinstance(data, dict) and "messages" in data else data
+        # Verify integrity
+        if not security.verify_conversation(conversation_package):
+            st.error("Security verification failed. The conversation may have been tampered with.")
+            return False
 
-        # Validate the conversation structure
-        validate_conversation_structure(conversation)
+        # Validate structure
+        validate_conversation_structure(conversation_package["messages"])
 
         # Update session state
-        st.session_state.menu_converse_messages = conversation
+        st.session_state.menu_converse_messages = conversation_package["messages"]
         st.session_state.menu_converse_uploader_key = 0
 
-        st.success("Conversation uploaded successfully!")
+        st.success("Conversation uploaded and verified successfully!")
         return True
 
     except json.JSONDecodeError:
-        st.error("Invalid JSON file. Please upload a valid JSON conversation file.")
+        st.error("Invalid JSON file format")
     except ValueError as e:
         st.error(f"Error in conversation structure: {str(e)}")
     except Exception as e:
-        st.error(f"An error occurred while processing the file: {str(e)}")
+        st.error(f"An error occurred: {str(e)}")
+        logging.error(f"Upload error: {str(e)}", exc_info=True)
     return False
 
 # Get the top 10 users with the most tokens in a given period (e.g., past 3 months):
@@ -312,7 +314,7 @@ with st.sidebar:
             if upload_conversation(uploaded_conversation):
                 st.rerun()
 
-st.markdown("💬 Converse 3-5-3")
+st.markdown("💬 Converse 3-5-12")
 
 
 #:markdown/forum:
@@ -332,8 +334,11 @@ for msg in st.session_state.menu_converse_messages:
                 if "document" in content_1:
                     content_1_document = content_1["document"]
                     document_name = content_1_document["name"]
-            st.write(f"{content_text} \n\n:green[Document: {document_name}]")
-
+            if document_name:
+                st.write(f"{content_text} \n\n:green[Document: {document_name}]")
+            else:
+                st.write(f"{content_text}")
+            
             del_idx = idx - 2
             if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
                 delete_message_pair(del_idx)
@@ -398,7 +403,7 @@ if uploaded_file:
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
         uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-        st.image(image, caption='upload images', use_column_width=True)
+        st.image(image, caption='upload images', use_container_width=True)
     elif uploaded_file.type in mime_mapping_document:
         uploaded_file_key = uploaded_file.name.replace(".", "_").replace(" ", "_")
         uploaded_file_name = uploaded_file.name
