@@ -299,7 +299,7 @@ with st.sidebar:
 
 with st.sidebar:
     st.divider()
-    st.markdown(":blue[**Conversation**]")
+    st.markdown(":blue[**Conversation 511**]")
     #st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
     uploaded_conversation = st.file_uploader(
         ":green[**Upload Conversation**]",
@@ -312,7 +312,7 @@ with st.sidebar:
             if upload_conversation(uploaded_conversation):
                 st.rerun()
 
-st.markdown("💬 Converse 3-5-3")
+st.markdown("💬 Converse 3-5-11")
 
 
 #:markdown/forum:
