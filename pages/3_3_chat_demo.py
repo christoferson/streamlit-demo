@@ -164,6 +164,7 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "amazon.nova-pro-v1:0",
 ]
 
 with st.sidebar:
@@ -225,8 +226,7 @@ if prompt := st.chat_input():
         "system": opt_system_msg,
         "messages": message_history #st.session_state.messages
     }
-    json.dumps(request, indent=3)
-
+    #json.dumps(request, indent=3)
     try:
 
         if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
@@ -238,8 +238,9 @@ if prompt := st.chat_input():
                 accept = "application/json",
                 body = json.dumps(request),
                 #trace="ENABLED",
-                guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
-                guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION) 
+                #guardrailIdentifier=AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                #guardrailVersion=AWS_BEDROCK_GUARDRAIL_VERSION
+                ) 
             # The provided request is not valid
             
         else:
