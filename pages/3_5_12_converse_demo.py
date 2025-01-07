@@ -619,6 +619,7 @@ if prompt:
 
             #print(json.dumps(message_user_latest, indent=2))
             #print(message_user_latest)
+            #st.rerun()
 
         except ClientError as err:
             message = err.response["Error"]["Message"]
@@ -635,7 +636,8 @@ if prompt:
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
-#st.markdown("Conversation")
+#st.markdown(f"Entry: 💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+st.markdown(f":violet[**Entry: {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]")
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -663,27 +665,11 @@ with col2:
     #         upload_conversation(uploaded_file)
     #         st.rerun()
     
-    st.markdown(f"💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+    #st.markdown(f"💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
     #st.info(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}", icon=":material/forum:")
-
+    pass
 with col3:
-    if "clear_conversation_clicked" not in st.session_state:
-        st.session_state.clear_conversation_clicked = False
-
     if st.button("Clear Conversation", type="secondary", icon=":material/clear_all:", use_container_width=False):
-        st.session_state.clear_conversation_clicked = True
-
-    if st.session_state.clear_conversation_clicked:
-        #st.warning("Are you sure you want to clear the conversation?")
-        st.warning("Clear ALL conversation?")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Yes", use_container_width=True):
-                clear_conversation()
-                st.session_state.clear_conversation_clicked = False
-                st.success("Conversation cleared successfully!")
-                st.rerun()
-        with col2:
-            if st.button("No", use_container_width=True):
-                st.session_state.clear_conversation_clicked = False
-                st.rerun()
+        clear_conversation()
+        #st.success("Conversation cleared successfully!")
+        st.rerun()
