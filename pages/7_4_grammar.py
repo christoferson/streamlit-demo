@@ -4,6 +4,7 @@ import settings
 import json
 import logging
 import cmn_auth
+import cmn_constants
 from cmn.bedrock_models import FoundationModel
 
 from botocore.exceptions import ClientError
@@ -21,37 +22,14 @@ logging.basicConfig(level=logging.INFO)
 ######  AUTH END #####
 
 
-st.markdown(
-    """
-    <style>
-    button[kind="primary"] {
-        background: none!important;
-        border: none;
-        padding: 0!important;
-        margin: 0;
-        color: black !important;
-        text-decoration: none;
-        cursor: pointer;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        text-decoration: none;
-        color: black !important;
-    }
-    button[kind="primary"]:focus {
-        outline: none !important;
-        box-shadow: none !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 
 
 opt_model_id_list = [
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    "amazon.nova-pro-v1:0",
 ]
 
 system_message = """Your task is to take the text provided and rewrite it into a clear, grammatically correct version while preserving the original meaning as closely as possible. Correct any spelling mistakes, punctuation errors, verb tense issues, word choice problems, and other grammatical mistakes.
@@ -98,17 +76,26 @@ Please provide your analysis in a well-structured format, maintaining the same l
     return analysis_prompt
 
 
+# "Text Analysis" (most aligned with your current naming pattern)
+# "Text Review"
+# "Text Improve"
+# "Text Check"
+# "Text Enhance"
+
 # Main content
-st.title("Text Analysis and Improvement Assistant")
+st.markdown("Text Analysis")
 
 # Text input area
 user_text = st.text_area(
-    "Enter your text for analysis",
+    "Enter text to analyze",
     height=200,
     placeholder="Paste or type your text here..."
 )
 
-if user_text:
+# Add analyze button
+analyze_button = st.button("Analyze Text", type="secondary")
+
+if user_text and analyze_button:  # Only analyze when button is clicked
     with st.spinner('Analyzing text...'):
         try:
             # Create the analysis prompt
@@ -166,20 +153,6 @@ if user_text:
                             # Log usage statistics
                             st.caption(f"Analysis statistics: {total_token_count} total tokens used")
 
-                           
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
             logger.error(f"Analysis error: {str(e)}", exc_info=True)
-
-# Add helpful instructions or tips
-with st.expander("How to use this tool"):
-    st.markdown("""
-    1. Enter or paste your text in the input area above
-    2. The tool will automatically analyze your text for:
-        - Spelling and grammar errors
-        - Clarity and readability issues
-        - Structure and flow improvements
-        - Contradicting statements
-        - Word choice suggestions
-    3. Review the analysis results and implement suggested improvements
-    """)
