@@ -232,7 +232,7 @@ mime_mapping_document = {
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
-
+    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
 
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -260,6 +260,7 @@ opt_model_id_list = [
     #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
     "mistral.mistral-small-2402-v1:0", # Mistral Small
     "mistral.mistral-large-2402-v1:0", # Mistral Large
+    "us.mistral.pixtral-large-2502-v1:0",
 ]
 
 # "You are a question and answering chatbot"

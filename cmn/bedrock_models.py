@@ -35,12 +35,21 @@ class FoundationModel:
 
     def _set_inference_parameters(self):
         if self.provider == "Anthropic":
-            return {
-                "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
+            
+            if self.model_id in ["us.anthropic.claude-3-7-sonnet-20250219-v1:0"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 2048, 4096, 10000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1),
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
-            }
+                }
+            else:
+                return {
+                    "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
+                    "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                    "TopP": InferenceParameter("top_p", 0, 1, 1),
+                    "TopK": InferenceParameter("top_k", 0, 250, 500)
+                }
         elif self.provider == "Amazon":
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
@@ -56,12 +65,20 @@ class FoundationModel:
                 "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
             }
         elif self.provider == "Mistral":
-            if self.model_id in ["mistral.mistral-large-2402-v1:0", "mistral.mistral-large-2402-v1", 
+            if self.model_id in ["mistral.pixtral-large-2502-v1:0", 
+                                 "mistral.mistral-large-2402-v1:0", "mistral.mistral-large-2402-v1", 
                                  "mistral.mistral-small-2402-v1:0", "mistral.mistral-small-2402-v1"]:
                 return {
                     "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 4098, 8192),
                     "Temperature": InferenceParameter("Temperature", 0, 0.7, 1),
                     "TopP": InferenceParameter("TopP", 0, 1, 1),
+                    "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
+                }
+            elif self.model_id in ["us.mistral.pixtral-large-2502-v1:0"]:
+                return {
+                    "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 512, 8192),
+                    "Temperature": InferenceParameter("Temperature", 0, 0.5, 1),
+                    "TopP": InferenceParameter("TopP", 0, 1, 1, supported=False),  # disabled
                     "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
                 }
             else:  # For other Mistral models (e.g., Mistral 7B Instruct, Mixtral 8X7B Instruct)
@@ -92,6 +109,7 @@ class FoundationModel:
 
 # Dictionary to store FoundationModel instances
 foundation_models = {
+    "us.anthropic.claude-3-7-sonnet-20250219-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-haiku-20240307-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-haiku-20240307-v1:0", True, True, True, True, True, True, True, True),
@@ -112,6 +130,8 @@ foundation_models = {
     "us.meta.llama3-2-90b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-2-90b-instruct-v1:0", True, True, True, True, True, True, False, True),
     "mistral.mistral-small-2402-v1:0": FoundationModel("Mistral", "mistral.mistral-small-2402-v1:0", True, True, True, False, False, True, False, True),
     "mistral.mistral-large-2402-v1:0": FoundationModel("Mistral", "mistral.mistral-large-2402-v1:0", True, True, True, True, False, True, False, True),
+    "mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
+    "us.mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "us.mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
 
     # Models defined in the documentation but not in opt_model_id_list
     "AI21 Jamba-Instruct": FoundationModel("AI21", "AI21 Jamba-Instruct", True, True, True, False, False, False, False, False),
