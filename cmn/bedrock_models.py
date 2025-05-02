@@ -128,6 +128,8 @@ foundation_models = {
     "meta.llama3-8b-instruct-v1:0": FoundationModel("Meta", "meta.llama3-8b-instruct-v1:0", True, True, True, True, False, True, False, True),
     "meta.llama3-70b-instruct-v1:0": FoundationModel("Meta", "meta.llama3-70b-instruct-v1:0", True, True, True, True, False, True, False, True),
     "us.meta.llama3-2-11b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-2-11b-instruct-v1:0", True, True, True, True, True, True, False, True),
+    "us.meta.llama4-maverick-17b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama4-maverick-17b-instruct-v1:0", True, True, True, True, True, True, False, True),
+    "us.meta.llama4-scout-17b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama4-scout-17b-instruct-v1:0", True, True, True, True, True, True, False, True),
     "us.meta.llama3-2-90b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-2-90b-instruct-v1:0", True, True, True, True, True, True, False, True),
     "mistral.mistral-small-2402-v1:0": FoundationModel("Mistral", "mistral.mistral-small-2402-v1:0", True, True, True, False, False, True, False, True),
     "mistral.mistral-large-2402-v1:0": FoundationModel("Mistral", "mistral.mistral-large-2402-v1:0", True, True, True, True, False, True, False, True),
