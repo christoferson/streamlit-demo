@@ -120,6 +120,7 @@ foundation_models = {
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20241022-v2:0", True, True, True, True, True, True, True, True),
     "amazon.nova-pro-v1:0": FoundationModel("Amazon", "amazon.nova-pro-v1:0", True, True, True, True, True, True, True, True),
+    "us.amazon.nova-premier-v1:0": FoundationModel("Amazon", "us.amazon.nova-premier-v1:0", True, True, True, True, True, True, True, True),
     "cohere.command-r-v1:0": FoundationModel("Cohere", "cohere.command-r-v1:0", True, True, True, True, False, True, True, False),
     "cohere.command-r-plus-v1:0": FoundationModel("Cohere", "cohere.command-r-plus-v1:0", True, True, True, True, False, True, True, False),
     "meta.llama2-13b-chat-v1": FoundationModel("Meta", "meta.llama2-13b-chat-v1", True, True, True, True, False, False, False, True),
