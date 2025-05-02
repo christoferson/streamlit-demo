@@ -261,6 +261,7 @@ opt_model_id_list = [
     "mistral.mistral-small-2402-v1:0", # Mistral Small
     "mistral.mistral-large-2402-v1:0", # Mistral Large
     "us.mistral.pixtral-large-2502-v1:0",
+    "us.amazon.nova-premier-v1:0",
 ]
 
 # "You are a question and answering chatbot"
