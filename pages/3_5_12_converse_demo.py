@@ -264,7 +264,7 @@ opt_model_id_list = [
     "us.amazon.nova-premier-v1:0",
     "us.meta.llama4-scout-17b-instruct-v1:0",
     "us.meta.llama4-maverick-17b-instruct-v1:0",
-    
+    "us.writer.palmyra-x4-v1:0",
 ]
 
 # "You are a question and answering chatbot"
@@ -512,8 +512,8 @@ if prompt:
     with st.spinner('Processing...'):
 
         try:
-            
-            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+            use_us_west_2 = "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "writer.palmyra" in opt_model_id
+            if use_us_west_2:
                     response = bedrock_runtime_us_west_2.converse_stream(
                     modelId=opt_model_id,
                     messages=message_history,

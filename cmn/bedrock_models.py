@@ -135,6 +135,7 @@ foundation_models = {
     "mistral.mistral-large-2402-v1:0": FoundationModel("Mistral", "mistral.mistral-large-2402-v1:0", True, True, True, True, False, True, False, True),
     "mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
     "us.mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "us.mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
+    "us.writer.palmyra-x4-v1:0": FoundationModel("Writer", "us.writer.palmyra-x4-v1:0", True, True, True, True, False, True, False, True),
 
     # Models defined in the documentation but not in opt_model_id_list
     "AI21 Jamba-Instruct": FoundationModel("AI21", "AI21 Jamba-Instruct", True, True, True, False, False, False, False, False),
