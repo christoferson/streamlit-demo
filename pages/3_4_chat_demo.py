@@ -171,9 +171,9 @@ opt_model_id_list = [
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "deepseek.r1-v1:0", #NG
     "meta.llama3-70b-instruct-v1:0",
-    "meta.llama3-1-70b-instruct-v1:0",
-    "meta.llama3-2-90b-instruct-v1:0,"
-    "meta.llama3-3-70b-instruct-v1:0",
+    "meta.llama3-1-70b-instruct-v1:0", #NG
+    "meta.llama3-2-90b-instruct-v1:0", #NG
+    "meta.llama3-3-70b-instruct-v1:0", #NG
     "meta.llama4-maverick-17b-instruct-v1:0", #NG
     "meta.llama4-scout-17b-instruct-v1:0", #NG
     "writer.palmyra-x4-v1:0", #NG
@@ -275,8 +275,34 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
             request["system"] = [{"text": opt_system_msg}]
     elif "meta.llama" in opt_model_id:
         # Meta Llama models
-        # Implement Llama-specific request format
-        pass
+        # Construct conversation history in Llama format
+        formatted_prompt = "<|begin_of_text|>"
+
+        # Add system message if provided
+        if opt_system_msg:
+            formatted_prompt += f"<|start_header_id|>system<|end_header_id|>\n{opt_system_msg}\n<|eot_id|>\n"
+
+        # Add message history
+        for msg in message_history:
+            role = msg["role"]
+            content = msg["content"]
+
+            formatted_prompt += f"<|start_header_id|>{role}<|end_header_id|>\n{content}\n<|eot_id|>\n"
+
+        # Add the assistant header for the response
+        formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>\n"
+
+        # Create the Llama-specific request format
+        request = {
+            "prompt": formatted_prompt,
+            "max_gen_len": opt_max_tokens,
+            "temperature": opt_temperature,
+            "top_p": opt_top_p
+        }
+
+        # Add top_k if specified
+        #if opt_top_k > 0:
+        #    request["top_k"] = opt_top_k
     elif "deepseek" in opt_model_id:
         # Deepseek models
         # Implement Deepseek-specific request format
@@ -421,8 +447,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                 if event["chunk"]:
                     chunk = json.loads(event["chunk"]["bytes"])
 
-                    # Process Llama-specific response format
-                    # This is a placeholder - adjust based on actual Llama response format
+                    # Based on the documentation, Llama models return text in the "generation" field
                     if "generation" in chunk:
                         text = chunk["generation"]
                         result_text += text
@@ -437,6 +462,16 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         lag = invocation_metrics.get("firstByteLatency", "N/A")
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
                         result_container.write(stats)
+
+                # Handle exceptions
+                elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
+                                                "modelTimeoutException", "throttlingException", "validationException"]):
+                    for exception_type in ["internalServerException", "modelStreamErrorException", 
+                                          "modelTimeoutException", "throttlingException", "validationException"]:
+                        if exception := event.get(exception_type):
+                            result_text += f"\n\n{exception}"
+                            result_area.write(result_text)
+                            break
 
         else:
             # Generic handler for other models
