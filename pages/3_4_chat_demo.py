@@ -164,11 +164,11 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "amazon.nova-micro-v1:0",
     "amazon.nova-lite-v1:0",
     "amazon.nova-pro-v1:0",
     "amazon.nova-premier-v1:0", #NG
-    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "deepseek.r1-v1:0", #NG
     "meta.llama3-70b-instruct-v1:0",
     "meta.llama3-1-70b-instruct-v1:0", #NG
@@ -186,10 +186,16 @@ with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+
+    # Adjust Top K range based on model
+    if "mistral" in opt_model_id:
+        top_k_max = 200  # Mistral's limit
+    else:
+        top_k_max = 500  # Default limit
+
+    opt_top_k = st.slider(label="Top K", min_value=0, max_value=top_k_max, value=min(250, top_k_max), step=1, key="top_k")
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
-
 
 
 st.title("💬 Chatbot 3")
@@ -303,6 +309,38 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
         # Add top_k if specified
         #if opt_top_k > 0:
         #    request["top_k"] = opt_top_k
+    elif "mistral" in opt_model_id:
+        # Mistral models
+        formatted_prompt = "<s>[INST] "
+
+        # Add system message if provided
+        if opt_system_msg:
+            formatted_prompt += f"{opt_system_msg}\n"
+
+        # Add message history
+        for msg in message_history:
+            if msg["role"] == "user":
+                formatted_prompt += f"{msg['content']}"
+            elif msg["role"] == "assistant":
+                formatted_prompt += f" [/INST] {msg['content']} </s><s>[INST] "
+
+        # Add final instruction token if needed
+        if formatted_prompt.endswith("<s>[INST] "):
+            formatted_prompt = formatted_prompt[:-len("<s>[INST] ")]
+        elif not formatted_prompt.endswith(" [/INST]"):
+            formatted_prompt += " [/INST]"
+
+        # Ensure top_k is within Mistral's limits
+        mistral_top_k = min(opt_top_k, 200)
+
+        request = {
+            "prompt": formatted_prompt,
+            "max_tokens": opt_max_tokens,
+            "temperature": opt_temperature,
+            "top_p": opt_top_p,
+            "top_k": mistral_top_k,
+            "stop": ["</s>"]
+        }
     elif "deepseek" in opt_model_id:
         # Deepseek models
         # Implement Deepseek-specific request format
@@ -472,7 +510,37 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                             result_text += f"\n\n{exception}"
                             result_area.write(result_text)
                             break
+        elif "mistral" in opt_model_id:
+            # Process Mistral models
+            for event in stream:
+                if event["chunk"]:
+                    chunk = json.loads(event["chunk"]["bytes"])
 
+                    # Extract text from Mistral's response format
+                    if "outputs" in chunk:
+                        text = chunk["outputs"][0].get("text", "")
+                        result_text += text
+                        result_area.write(result_text)
+
+                    # Handle metrics if available
+                    if "amazon-bedrock-invocationMetrics" in chunk:
+                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                        input_token_count = invocation_metrics.get("inputTokenCount", "N/A")
+                        output_token_count = invocation_metrics.get("outputTokenCount", "N/A")
+                        latency = invocation_metrics.get("invocationLatency", "N/A")
+                        lag = invocation_metrics.get("firstByteLatency", "N/A")
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        result_container.write(stats)
+
+                # Handle exceptions
+                elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
+                                                "modelTimeoutException", "throttlingException", "validationException"]):
+                    for exception_type in ["internalServerException", "modelStreamErrorException", 
+                                        "modelTimeoutException", "throttlingException", "validationException"]:
+                        if exception := event.get(exception_type):
+                            result_text += f"\n\n{exception}"
+                            result_area.write(result_text)
+                            break 
         else:
             # Generic handler for other models
             for event in stream:
