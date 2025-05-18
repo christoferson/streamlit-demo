@@ -265,6 +265,7 @@ opt_model_id_list = [
     "us.meta.llama4-scout-17b-instruct-v1:0",
     "us.meta.llama4-maverick-17b-instruct-v1:0",
     "us.writer.palmyra-x4-v1:0",
+    "us.writer.palmyra-x5-v1:0",
 ]
 
 # "You are a question and answering chatbot"
