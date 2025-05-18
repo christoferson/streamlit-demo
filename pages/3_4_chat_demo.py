@@ -164,14 +164,22 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "amazon.nova-micro-v1:0",
+    "amazon.nova-lite-v1:0",
     "amazon.nova-pro-v1:0",
-    "amazon.nova-premier-v1:0",
-    "us.anthropic.claude-3-7-sonnet-20250219-v1:0", #ok
-    "deepseek.r1-v1:0",
-    "meta.llama4-maverick-17b-instruct-v1:0",
-    "meta.llama4-scout-17b-instruct-v1:0",
-    "writer.palmyra-x4-v1:0",
-    "writer.palmyra-x5-v1:0"
+    "amazon.nova-premier-v1:0", #NG
+    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+    "deepseek.r1-v1:0", #NG
+    "meta.llama3-70b-instruct-v1:0",
+    "meta.llama3-1-70b-instruct-v1:0",
+    "meta.llama3-2-90b-instruct-v1:0,"
+    "meta.llama3-3-70b-instruct-v1:0",
+    "meta.llama4-maverick-17b-instruct-v1:0", #NG
+    "meta.llama4-scout-17b-instruct-v1:0", #NG
+    "writer.palmyra-x4-v1:0", #NG
+    "writer.palmyra-x5-v1:0", #NG
+    "mistral.mistral-large-2402-v1:0",
+    "mistral.pixtral-large-2502-v1:0", #NG
 ]
 
 with st.sidebar:
