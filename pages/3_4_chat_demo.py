@@ -180,13 +180,21 @@ opt_model_id_list = [
     "writer.palmyra-x5-v1:0", #NG
     "mistral.mistral-large-2402-v1:0",
     "mistral.pixtral-large-2502-v1:0", #NG
+    "cohere.command-r-plus-v1:0",
 ]
 
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    # Adjust Top P range for Cohere models
+    if "cohere" in opt_model_id:
+        opt_top_p_max = 0.99
+    else:
+        opt_top_p_max = 1.0
 
+    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=opt_top_p_max, value=opt_top_p_max, step=0.1, key="top_p")
+
+    
     # Adjust Top K range based on model
     if "mistral" in opt_model_id:
         top_k_max = 200  # Mistral's limit
@@ -197,6 +205,18 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
+with st.sidebar:
+    if "cohere" in opt_model_id:
+        return_likelihoods = st.selectbox(
+            "Return Likelihoods",
+            ["NONE", "GENERATION", "ALL"],
+            index=0
+        )
+        truncate = st.selectbox(
+            "Truncate",
+            ["NONE", "START", "END"],
+            index=2
+        )
 
 st.title("💬 Chatbot 3")
 st.write("Ask LLM Questions")
@@ -341,6 +361,38 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
             "top_k": mistral_top_k,
             "stop": ["</s>"]
         }
+    elif "cohere" in opt_model_id:
+        # Cohere models
+        message_text = ""
+
+        # Add system message if provided
+        if opt_system_msg:
+            message_text += f"{opt_system_msg}\n\n"
+
+        # Add message history
+        for msg in message_history:
+            if msg["role"] == "user":
+                message_text += f"{msg['content']}\n"
+            elif msg["role"] == "assistant":
+                message_text += f"{msg['content']}\n\n"
+
+        request = {
+            "message": message_text,
+            "max_tokens": opt_max_tokens,
+            "temperature": opt_temperature,
+            "p": min(opt_top_p, 0.99),  # Ensure p is <= 0.99
+            "k": min(opt_top_k, 500),  # Ensure within Cohere's limits
+            #"stream": True,
+            #"return_likelihoods": "NONE",  # Can be "NONE", "GENERATION", or "ALL"
+            #"truncate": "END",  # Can be "NONE", "START", or "END"
+            #"stop_sequences": [],  # Optional list of sequences where generation should stop
+        }
+
+        #request.update({
+        #    "return_likelihoods": return_likelihoods,
+        #    "truncate": truncate,
+        #    # Add other Cohere-specific parameters as needed
+        #})
     elif "deepseek" in opt_model_id:
         # Deepseek models
         # Implement Deepseek-specific request format
@@ -540,7 +592,40 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         if exception := event.get(exception_type):
                             result_text += f"\n\n{exception}"
                             result_area.write(result_text)
-                            break 
+                            break
+        elif "cohere" in opt_model_id:
+            # Process Cohere models
+            for event in stream:
+                if event["chunk"]:
+                    chunk = json.loads(event["chunk"]["bytes"])
+
+                    # Debug print to see the structure
+                    print(f"Cohere chunk: {chunk}")
+
+                    # Extract text from Cohere's response format
+                    if "text" in chunk:  # Changed from "generations" to "text"
+                        text = chunk["text"]
+                        result_text += text
+                        result_area.write(result_text)
+
+                    # Handle metrics if available
+                    if "amazon-bedrock-invocationMetrics" in chunk:
+                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
+                        input_token_count = invocation_metrics.get("inputTokenCount", "N/A")
+                        output_token_count = invocation_metrics.get("outputTokenCount", "N/A")
+                        latency = invocation_metrics.get("invocationLatency", "N/A")
+                        lag = invocation_metrics.get("firstByteLatency", "N/A")
+                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
+                        result_container.write(stats)
+                # Handle exceptions
+                elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
+                                                "modelTimeoutException", "throttlingException", "validationException"]):
+                    for exception_type in ["internalServerException", "modelStreamErrorException", 
+                                        "modelTimeoutException", "throttlingException", "validationException"]:
+                        if exception := event.get(exception_type):
+                            result_text += f"\n\n{exception}"
+                            result_area.write(result_text)
+                            break
         else:
             # Generic handler for other models
             for event in stream:
