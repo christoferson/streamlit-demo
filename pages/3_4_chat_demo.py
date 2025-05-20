@@ -103,9 +103,7 @@ st.markdown(
 )
 
 
-def copy_button_clicked(text):
-    pyperclip.copy(text)
-    #st.session_state.button = not st.session_state.button
+
 
 def recite_button_clicked(text):
     try:
@@ -239,11 +237,10 @@ for msg in st.session_state.messages:
     content = msg["content"]
     with st.chat_message(msg["role"]):
         st.write(content)
-        if "assistant" == msg["role"]:
+        #if "assistant" == msg["role"]:
             #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
             #with assistant_cmd_panel_col2:
-            st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
-
+            
 
 def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top_p, opt_top_k, opt_max_tokens, opt_system_msg):
     """
@@ -670,15 +667,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                             result_area.write(result_text)
                             break
 
-        # Display buttons for copying and reciting text
-        col1, col2, col3 = st.columns([1,1,5])
-        with col1:
-            st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
-        with col2:
-            if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
-                st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-        with col3:
-            st.markdown('3')
+
 
     return result_text
 
