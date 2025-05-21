@@ -1,6 +1,8 @@
 import streamlit as st
 import cmn_auth
 from streamlit.web.server.websocket_headers import _get_websocket_headers
+import boto3
+from botocore.exceptions import ClientError
 
 import jwt
 from typing import Any, Dict
@@ -143,3 +145,54 @@ if st.button('Save Settings'):
    st._config.set_option('theme.base', st.session_state.theme)
    st.success('Settings saved successfully!')
    st.rerun()
+
+
+# Add a new section for listing Bedrock Foundation models
+st.header("Bedrock Foundation Models")
+# Initialize Bedrock client
+bedrock = boto3.client('bedrock', region_name='us-east-1')
+
+def list_bedrock_models():
+    try:
+
+
+        # Call the list_foundation_models API
+        response = bedrock.list_foundation_models()
+
+
+        # Display the models
+        if 'modelSummaries' in response:
+            st.subheader("Available Models:")
+            for model in response['modelSummaries']:
+                with st.expander(f"{model.get('modelName', 'Unknown')} ({model.get('providerName', 'Unknown')}) - {model.get('modelId', 'N/A')}"):
+                    st.write(f"Model ID: {model.get('modelId', 'N/A')}")
+                    st.write(f"Model ARN: {model.get('modelArn', 'N/A')}")
+
+                    # Handle optional fields
+                    if 'inputModalities' in model:
+                        st.write(f"Input Modalities: {', '.join(model['inputModalities'])}")
+
+                    if 'outputModalities' in model:
+                        st.write(f"Output Modalities: {', '.join(model['outputModalities'])}")
+
+                    if 'responseStreamingSupported' in model:
+                        st.write(f"Streaming Supported: {model['responseStreamingSupported']}")
+
+                    if 'customizationsSupported' in model and model['customizationsSupported']:
+                        st.write(f"Customizations: {', '.join(model['customizationsSupported'])}")
+
+                    if 'inferenceTypesSupported' in model and model['inferenceTypesSupported']:
+                        st.write(f"Inference Types: {', '.join(model['inferenceTypesSupported'])}")
+
+                    if 'modelLifecycle' in model and 'status' in model['modelLifecycle']:
+                        st.write(f"Status: {model['modelLifecycle']['status']}")
+
+
+    except ClientError as e:
+        st.error(f"Error accessing Bedrock: {str(e)}")
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+
+# Create a button to list the models
+if st.button("List Bedrock Foundation Models"):
+    list_bedrock_models()
