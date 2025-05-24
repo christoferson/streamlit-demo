@@ -44,6 +44,11 @@ e.g. All your output must be pirate speech
 https://github.com/build-on-aws/python-fm-playground
 https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html
 
+Claude Opus 4, Claude Sonnet 4
+anthropic.claude-opus-4-20250514-v1:0
+anthropic.claude-sonnet-4-20250514-v1:0
+- https://aws.amazon.com/jp/blogs/aws/claude-opus-4-anthropics-most-powerful-model-for-coding-is-now-in-amazon-bedrock/
+
 ##### Text to Image
 
 - (Stability.ai Diffusion 1.0 text to image)[https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-1-0-text-image.html]

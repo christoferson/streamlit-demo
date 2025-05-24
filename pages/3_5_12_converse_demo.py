@@ -245,7 +245,8 @@ opt_model_id_list = [
     "us.anthropic.claude-3-opus-20240229-v1:0",
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-
+    "us.anthropic.claude-opus-4-20250514-v1:0",
+    "us.anthropic.claude-sonnet-4-20250514-v1:0",
     "amazon.nova-pro-v1:0",
     
     "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
