@@ -127,8 +127,24 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
+    # Add reranker options
+    st.markdown("---")
+    st.markdown(":blue[Reranking Settings]")
+    opt_enable_reranker = st.checkbox(label="Enable Reranker", value=False, key="enable_reranker")
+    ##cohere.rerank-v3-5:0, amazon.rerank-v1:0
+    if opt_enable_reranker:
+        opt_reranker_model_list = [
+            "cohere.rerank-v3-5:0",
+            "amazon.rerank-v1:0",
+            
+        ]
+        opt_reranker_model = st.selectbox(label="Reranker Model", options=opt_reranker_model_list, index=0, key="reranker_model")
+        opt_reranker_top_k = st.slider(label="Reranker Top K", min_value=1, max_value=opt_kb_doc_count, value=min(5, opt_kb_doc_count), step=1, key="reranker_top_k", 
+            help="Number of documents to return after reranking")
+
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
+bedrock_agent_runtime_oregon = boto3.client('bedrock-agent-runtime', region_name="us-west-2") # Oregon
 
 st.title("💬 Chatbot - Knowledge Base (bedrock_agent_runtime.retrieve)")
 st.markdown("Vector Search then LLM Query")
@@ -216,6 +232,20 @@ if user_prompt := st.chat_input():
                 'numberOfResults': kb_retrieve_document_count
             }
         }
+
+        # Add reranking configuration if enabled
+        if opt_enable_reranker:
+            retrieval_configuration['vectorSearchConfiguration']['rerankingConfiguration'] = {
+                'type': 'BEDROCK_RERANKING_MODEL',
+                'bedrockRerankingConfiguration': {
+                    'modelConfiguration': {
+                        'modelArn': f'arn:aws:bedrock:us-west-2::foundation-model/{opt_reranker_model}'
+                    },
+                    'numberOfRerankedResults': opt_reranker_top_k  # Note: it's 'numberOfRerankedResults', not 'numberOfResults'
+                }
+            }
+
+
         vector_search_configuration = retrieval_configuration['vectorSearchConfiguration']
         filters = medatata_create_filter_condition(application_options)
         if filters != None:
@@ -231,17 +261,23 @@ if user_prompt := st.chat_input():
         )
 
         
+        # Process results
         for i, retrievalResult in enumerate(response['retrievalResults']):
             uri = retrievalResult['location']['s3Location']['uri']
             text = retrievalResult['content']['text']
             excerpt = text[0:75]
             score = retrievalResult['score']
-            print(f"{i} RetrievalResult: {score} {uri} {excerpt}")
-            context_info += f"{text}\n" #context_info += f"<p>${text}</p>\n" #context_info += f"${text}\n"
+
+            # When reranking is used, the score represents the reranking relevance score
+            rerank_indicator = " (reranked)" if opt_enable_reranker else ""
+            print(f"{i} RetrievalResult{rerank_indicator}: {score} {uri} {excerpt}")
+
+            context_info += f"{text}\n"
             uri_name = uri.split('/')[-1]
-            reference_chunk_list.append(f"{score} {uri_name}")
+            reference_chunk_list.append(f"{score:.4f}{rerank_indicator} {uri_name}")
             reference_chunk_text_list.append(text)
-            reference_chunk_list_text += f"[{i}] {score} {uri_name} \n\n  "
+            reference_chunk_list_text += f"[{i}] {score:.4f}{rerank_indicator} {uri_name} \n\n  "
+
 
     except Exception as e:
         logging.error(traceback.format_exc())
