@@ -130,7 +130,7 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
 
-st.title("💬 Chatbot - Knowledge Base 2-2-6")
+st.title("💬 Chatbot - Knowledge Base (bedrock_agent_runtime.retrieve)")
 st.markdown("Vector Search then LLM Query")
 
 

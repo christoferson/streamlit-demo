@@ -38,8 +38,6 @@ st.set_page_config(
 
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
-
-
 opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -133,7 +131,7 @@ with st.sidebar:
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
 
-st.markdown("💬 Chatbot - Knowledge Base 2-2-6")
+st.markdown("💬 Chatbot - Knowledge Base (retrieve_and_generate)")
 #st.markdown("Vector Search then LLM Query")
 
 
