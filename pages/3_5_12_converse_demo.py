@@ -269,6 +269,10 @@ opt_model_id_list = [
     "us.writer.palmyra-x5-v1:0",
 ]
 
+opt_model_id_list_default = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+opt_model_id_list_default_idx = opt_model_id_list.index(opt_model_id_list_default)
+
+
 # "You are a question and answering chatbot"
 # - Maintaining a helpful and courteous tone throughout the interaction.
 opt_system_msg_int = """You are a smart and helpful Assistant. Your tasks include:
@@ -289,7 +293,7 @@ if "menu_converse_messages_feedback" not in st.session_state:
     st.session_state["menu_converse_messages_feedback"] = {}
     
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
+    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = opt_model_id_list_default_idx, key="model_id")
 
 opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
 
