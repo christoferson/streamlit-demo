@@ -128,8 +128,30 @@ with st.sidebar:
     opt_query_transformation = st.selectbox(label="Query Transformation", options=["NONE", "QUERY_DECOMPOSITION"], index = 0, key="query_transformation")
     #opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
+    # Add reranker options
+    st.markdown("---")
+    st.markdown(":blue[Reranking Settings]")
+    opt_enable_reranker = st.checkbox(label="Enable Reranker", value=False, key="enable_reranker")
+
+    if opt_enable_reranker:
+        opt_reranker_model_list = [
+            "cohere.rerank-v3-5:0",
+            "amazon.rerank-v1:0",
+        ]
+        opt_reranker_model = st.selectbox(label="Reranker Model", options=opt_reranker_model_list, index=0, key="reranker_model")
+        opt_reranker_top_k = st.slider(
+            label="Reranker Top K", 
+            min_value=1, 
+            max_value=min(15, opt_kb_doc_count), 
+            value=min(5, opt_kb_doc_count//4), 
+            step=1, 
+            key="reranker_top_k", 
+            help="Number of documents to return after reranking"
+        )
+
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
+bedrock_agent_runtime_oregon = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
 
 st.markdown("💬 Chatbot - Knowledge Base (retrieve_and_generate)")
 #st.markdown("Vector Search then LLM Query")
@@ -237,6 +259,17 @@ if user_prompt := st.chat_input():
                 'numberOfResults': kb_retrieve_document_count
             }
         }
+        # Add reranking configuration if enabled
+        if opt_enable_reranker:
+            retrieval_configuration['vectorSearchConfiguration']['rerankingConfiguration'] = {
+                'type': 'BEDROCK_RERANKING_MODEL',
+                'bedrockRerankingConfiguration': {
+                    'modelConfiguration': {
+                        'modelArn': f'arn:aws:bedrock:us-west-2::foundation-model/{opt_reranker_model}'
+                    },
+                    'numberOfRerankedResults': opt_reranker_top_k
+                }
+            }
         vector_search_configuration = retrieval_configuration['vectorSearchConfiguration']
         filters = medatata_create_filter_condition(application_options)
         if filters != None:
