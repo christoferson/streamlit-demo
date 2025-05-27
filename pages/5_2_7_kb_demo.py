@@ -37,6 +37,10 @@ st.set_page_config(
 
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
+bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
+bedrock_agent_runtime_oregon = boto3.client('bedrock-agent-runtime', region_name="us-west-2") # Oregon
+
 
 opt_model_id_list = [
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -115,6 +119,124 @@ def medatata_create_filter_condition(application_options):
 
     return filter
 
+# NEW: Standalone rerank function using bedrock_agent_runtime.rerank()
+def rerank_documents(query_text, documents, reranker_model, top_k):
+    """
+    Rerank documents using Bedrock's standalone rerank API
+
+    Args:
+        query_text (str): The query text to rerank against
+        documents (list): List of document texts to rerank
+        reranker_model (str): The reranker model ID
+        top_k (int): Number of top results to return
+
+    Returns:
+        list: Reranked documents with scores
+    """
+    try:
+        # Prepare sources for reranking
+        sources = []
+        for doc_text in documents:
+            sources.append({
+                'type': 'INLINE',
+                'inlineDocumentSource': {
+                    'type': 'TEXT',
+                    'textDocument': {
+                        'text': doc_text
+                    }
+                }
+            })
+
+        # Prepare queries
+        queries = [{
+            'type': 'TEXT',
+            'textQuery': {
+                'text': query_text
+            }
+        }]
+
+        # Configure reranking
+        reranking_configuration = {
+            'type': 'BEDROCK_RERANKING_MODEL',
+            'bedrockRerankingConfiguration': {
+                'modelConfiguration': {
+                    'modelArn': f'arn:aws:bedrock:us-west-2::foundation-model/{reranker_model}'
+                },
+                'numberOfResults': min(top_k, len(documents))
+            }
+        }
+
+        # Call rerank API
+        response = bedrock_agent_runtime_oregon.rerank(
+            queries=queries,
+            sources=sources,
+            rerankingConfiguration=reranking_configuration
+        )
+
+        # Process results - FIXED: Use the correct response structure
+        reranked_results = []
+
+        # The response contains results with index and relevanceScore
+        if 'results' in response:
+            for result in response['results']:
+                doc_index = result['index']
+                relevance_score = result['relevanceScore']
+
+                # Make sure the index is valid
+                if 0 <= doc_index < len(documents):
+                    reranked_results.append({
+                        'text': documents[doc_index],  # Get original document by index
+                        'score': relevance_score,
+                        'index': doc_index
+                    })
+                else:
+                    logger.warning(f"Invalid document index: {doc_index}")
+        else:
+            logger.warning("No 'results' found in rerank response")
+
+        # Results are already sorted by relevance score (highest first) from the API
+        return reranked_results
+
+    except Exception as e:
+        logger.error(f"Error in reranking: {str(e)}")
+        logger.error(traceback.format_exc())
+        return []
+
+def rerank_documents_filter(query_text, documents, reranker_model, top_k, relevance_threshold=0.6):
+    """
+    Rerank documents using Bedrock's standalone rerank API and filter by relevance threshold
+
+    Args:
+        query_text (str): The query text to rerank against
+        documents (list): List of document texts to rerank
+        reranker_model (str): The reranker model ID
+        top_k (int): Number of top results to return before filtering
+        relevance_threshold (float): Minimum relevance score to include (default: 0.6)
+
+    Returns:
+        list: Filtered reranked documents with scores above threshold
+    """
+    try:
+        # Get reranked results using existing method
+        reranked_results = rerank_documents(query_text, documents, reranker_model, top_k)
+
+        if not reranked_results:
+            return []
+
+        # Filter by relevance threshold
+        filtered_results = [
+            result for result in reranked_results 
+            if result['score'] >= relevance_threshold
+        ]
+
+        logger.info(f"Reranking: {len(reranked_results)} total → {len(filtered_results)} above threshold {relevance_threshold}")
+
+        return filtered_results
+
+    except Exception as e:
+        logger.error(f"Error in rerank_documents_filter: {str(e)}")
+        logger.error(traceback.format_exc())
+        return []
 
 with st.sidebar:
     st.markdown(":blue[Settings]")
@@ -130,9 +252,16 @@ with st.sidebar:
     # Add reranker options
     st.markdown("---")
     st.markdown(":blue[Reranking Settings]")
-    opt_enable_reranker = st.checkbox(label="Enable Reranker", value=False, key="enable_reranker")
+    #opt_enable_reranker = st.checkbox(label="Enable Reranker", value=False, key="enable_reranker")
+    opt_reranking_method = st.selectbox(
+        label="Reranking Method", 
+        options=["None", "Built-in (with retrieve)", "Standalone (separate API)"], 
+        index=0, 
+        key="reranking_method",
+        help="Choose how to apply reranking: None, built into retrieve call, or separate rerank API call"
+    )
     ##cohere.rerank-v3-5:0, amazon.rerank-v1:0
-    if opt_enable_reranker:
+    if opt_reranking_method != "None":
         opt_reranker_model_list = [
             "cohere.rerank-v3-5:0",
             "amazon.rerank-v1:0",
@@ -141,10 +270,15 @@ with st.sidebar:
         opt_reranker_model = st.selectbox(label="Reranker Model", options=opt_reranker_model_list, index=0, key="reranker_model")
         opt_reranker_top_k = st.slider(label="Reranker Top K", min_value=1, max_value=opt_kb_doc_count, value=min(5, opt_kb_doc_count), step=1, key="reranker_top_k", 
             help="Number of documents to return after reranking")
-
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
-bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
-bedrock_agent_runtime_oregon = boto3.client('bedrock-agent-runtime', region_name="us-west-2") # Oregon
+        opt_relevance_threshold = st.slider(
+            label="Relevance Threshold", 
+            min_value=0.0, 
+            max_value=1.0, 
+            value=0.6, 
+            step=0.05, 
+            key="relevance_threshold",
+            help="Filter out results below this relevance score"
+        )
 
 st.title("💬 Chatbot - Knowledge Base (bedrock_agent_runtime.retrieve)")
 st.markdown("Vector Search then LLM Query")
@@ -234,7 +368,7 @@ if user_prompt := st.chat_input():
         }
 
         # Add reranking configuration if enabled
-        if opt_enable_reranker:
+        if opt_reranking_method == "Built-in (with retrieve)":
             retrieval_configuration['vectorSearchConfiguration']['rerankingConfiguration'] = {
                 'type': 'BEDROCK_RERANKING_MODEL',
                 'bedrockRerankingConfiguration': {
@@ -260,23 +394,87 @@ if user_prompt := st.chat_input():
             retrievalConfiguration=retrieval_configuration
         )
 
-        
-        # Process results
-        for i, retrievalResult in enumerate(response['retrievalResults']):
-            uri = retrievalResult['location']['s3Location']['uri']
-            text = retrievalResult['content']['text']
-            excerpt = text[0:75]
-            score = retrievalResult['score']
+        # Add this line immediately after the retrieve call:
+        initial_results = response['retrievalResults']
 
-            # When reranking is used, the score represents the reranking relevance score
-            rerank_indicator = " (reranked)" if opt_enable_reranker else ""
-            print(f"{i} RetrievalResult{rerank_indicator}: {score} {uri} {excerpt}")
+
+        # Apply standalone reranking if selected
+        if opt_reranking_method == "Standalone (separate API)":
+            st.info("🔄 Applying standalone reranking...")
+
+            # Extract document texts for reranking - FIX: Use correct path
+            document_texts = [result['content']['text'] for result in initial_results]
+
+            # Perform standalone reranking
+            # Perform standalone reranking with filtering
+            reranked_results = rerank_documents_filter(
+                query_text=user_prompt,
+                documents=document_texts,
+                reranker_model=opt_reranker_model,
+                top_k=opt_reranker_top_k,
+                relevance_threshold=opt_relevance_threshold
+            )
+
+            if reranked_results:
+                # Map reranked results back to original results
+                final_results = []
+                for reranked in reranked_results:
+                    original_result = initial_results[reranked['index']]
+                    final_results.append({
+                        'uri': original_result['location']['s3Location']['uri'],
+                        'text': reranked['text'],
+                        'score': reranked['score'],  # Use reranked score
+                        'original_score': original_result['score'],
+                        'reranked': True
+                    })
+            else:
+                # Fallback to original results if reranking fails
+                final_results = []
+                for result in initial_results:
+                    final_results.append({
+                        'uri': result['location']['s3Location']['uri'],
+                        'text': result['content']['text'],  # FIX: Use correct path
+                        'score': result['score'],
+                        'reranked': False
+                    })
+                st.warning("⚠️ Reranking failed, using original results")
+        else:
+            # Use original results (either no reranking or built-in reranking)
+            final_results = []
+            for result in initial_results:
+                final_results.append({
+                    'uri': result['location']['s3Location']['uri'],  # FIX: Use correct path
+                    'text': result['content']['text'],  # FIX: Use correct path
+                    'score': result['score'],
+                    'reranked': opt_reranking_method == "Built-in (with retrieve)"
+                })
+            
+
+        
+        # Process final results for display and context
+        for i, result in enumerate(final_results):
+            uri = result['uri']
+            text = result['text']
+            score = result['score']
+            is_reranked = result.get('reranked', False)
+
+            excerpt = text[0:75]
+            rerank_indicator = " (reranked)" if is_reranked else ""
+
+            # For standalone reranking, show both scores
+            if opt_reranking_method == "Standalone (separate API)" and 'original_score' in result:
+                score_display = f"{score:.4f} (orig: {result['original_score']:.4f})"
+            else:
+                score_display = f"{score:.4f}"
+
+            print(f"{i} RetrievalResult{rerank_indicator}: {score_display} {uri} {excerpt}")
 
             context_info += f"{text}\n"
             uri_name = uri.split('/')[-1]
-            reference_chunk_list.append(f"{score:.4f}{rerank_indicator} {uri_name}")
+            reference_chunk_list.append(f"{score_display}{rerank_indicator} {uri_name}")
             reference_chunk_text_list.append(text)
-            reference_chunk_list_text += f"[{i}] {score:.4f}{rerank_indicator} {uri_name} \n\n  "
+            reference_chunk_list_text += f"[{i}] {score_display}{rerank_indicator} {uri_name} \n\n  "
+
 
 
     except Exception as e:
