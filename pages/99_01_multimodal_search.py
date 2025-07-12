@@ -141,6 +141,18 @@ with st.sidebar:
             debug_info = service.debug_vector_search(test_query)
             st.json(debug_info)
 
+    # Add this to your sidebar debug section
+    if st.button("🖼️ Debug Image Search"):
+        debug_image_file = st.file_uploader(
+            "Upload image for debug", 
+            type=['jpg', 'jpeg', 'png', 'webp'], 
+            key="debug_image"
+        )
+        if debug_image_file:
+            debug_image = Image.open(debug_image_file)
+            debug_info = service.debug_image_search(debug_image)
+            st.json(debug_info)
+
 
     # Statistics
     st.header("📈 Statistics")
@@ -166,7 +178,8 @@ if not status['can_operate']:
 else:
     # Main content tabs - Added "Search by Title" tab
     #tab1, tab2, tab3, tab4 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title"])
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title", "📋 List All Products"])
+    #tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title", "📋 List All Products"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title", "📋 List All Products", "✏️ Update Product"])
 
     # Tab 1: Register Product
     with tab1:
@@ -402,3 +415,183 @@ else:
 
         elif 'all_products' in st.session_state:
             st.info("No products found in the database.")   
+
+    # Tab 6: Update Product (NEW)
+    with tab6:
+        st.header("✏️ Update Product")
+
+        # Step 1: Find product to update
+        st.subheader("1. Find Product to Update")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            update_product_id = st.text_input(
+                "Enter Product ID",
+                placeholder="Enter the product ID to update...",
+                help="You can find product IDs in the 'List All Products' tab"
+            )
+
+        with col2:
+            st.write("")  # Empty space for alignment
+            st.write("")  # Empty space for alignment
+            if st.button("🔍 Find Product", use_container_width=True):
+                if update_product_id:
+                    found_product = service.get_product(update_product_id)
+                    if found_product:
+                        st.session_state.product_to_update = found_product
+                        st.success(f"✅ Found product: {found_product['title']}")
+                    else:
+                        st.error("❌ Product not found")
+                        if 'product_to_update' in st.session_state:
+                            del st.session_state.product_to_update
+                else:
+                    st.warning("⚠️ Please enter a product ID")
+
+        # Step 2: Show current product and update form
+        if 'product_to_update' in st.session_state:
+            current_product = st.session_state.product_to_update
+
+            st.divider()
+            st.subheader("2. Current Product Information")
+
+            col1, col2 = st.columns([1, 1])
+
+            with col1:
+                st.info(f"**Title:** {current_product['title']}")
+                st.info(f"**Product ID:** {current_product['product_id']}")
+                st.info(f"**Created:** {current_product['created_at']}")
+
+            with col2:
+                with st.expander("Current Description", expanded=False):
+                    st.write(current_product['description'])
+
+            st.divider()
+            st.subheader("3. Update Product")
+
+            col1, col2 = st.columns([1, 1])
+
+            with col1:
+                st.subheader("New Product Image (Optional)")
+                new_image_file = st.file_uploader(
+                    "Choose new image file (leave empty to keep current)",
+                    type=config.SUPPORTED_IMAGE_FORMATS,
+                    help=f"Max size: {config.MAX_FILE_SIZE_MB}MB",
+                    key="update_image"
+                )
+
+                if new_image_file:
+                    is_valid, message = validate_image(new_image_file)
+                    if is_valid:
+                        new_image = Image.open(new_image_file)
+                        st.image(new_image, caption="New Product Image", use_container_width=True)
+                    else:
+                        st.error(f"❌ {message}")
+                        new_image = None
+                else:
+                    new_image = None
+                    st.info("📷 No new image selected - will keep current image")
+
+            with col2:
+                st.subheader("New Product Details")
+
+                new_title = st.text_input(
+                    "New Product Title (leave empty to keep current)",
+                    placeholder=current_product['title'],
+                    help="Leave empty to keep the current title"
+                )
+
+                new_description = st.text_area(
+                    "New Product Description (leave empty to keep current)",
+                    placeholder="Enter new description or leave empty to keep current...",
+                    height=200,
+                    help="Leave empty to keep the current description"
+                )
+
+                # Update options
+                st.subheader("Update Options")
+
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    update_title_only = st.checkbox("Update title only", help="Only update the title, keep description and image")
+                    update_description_only = st.checkbox("Update description only", help="Only update the description, keep title and image")
+
+                with col_b:
+                    update_image_only = st.checkbox("Update image only", help="Only update the image, keep title and description")
+                    update_all = st.checkbox("Update all fields", help="Update all provided fields")
+
+                # Update button
+                st.divider()
+
+                if st.button("🔄 Update Product", type="primary", use_container_width=True):
+                    # Determine what to update based on checkboxes and inputs
+                    title_to_update = None
+                    description_to_update = None
+                    image_to_update = None
+
+                    if update_all or not any([update_title_only, update_description_only, update_image_only]):
+                        # Update all provided fields
+                        if new_title.strip():
+                            title_to_update = new_title.strip()
+                        if new_description.strip():
+                            description_to_update = new_description.strip()
+                        if new_image:
+                            image_to_update = new_image
+                    else:
+                        # Update specific fields only
+                        if update_title_only and new_title.strip():
+                            title_to_update = new_title.strip()
+                        if update_description_only and new_description.strip():
+                            description_to_update = new_description.strip()
+                        if update_image_only and new_image:
+                            image_to_update = new_image
+
+                    # Check if anything to update
+                    if not any([title_to_update, description_to_update, image_to_update]):
+                        st.warning("⚠️ Please provide at least one field to update")
+                    else:
+                        # Perform update
+                        success = service.update_product(
+                            current_product['product_id'],
+                            image=image_to_update,
+                            title=title_to_update,
+                            description=description_to_update
+                        )
+
+                        if success:
+                            st.balloons()
+                            # Refresh the product info
+                            updated_product = service.get_product(current_product['product_id'])
+                            if updated_product:
+                                st.session_state.product_to_update = updated_product
+                                st.rerun()
+
+                # Clear selection button
+                if st.button("🗑️ Clear Selection", use_container_width=True):
+                    if 'product_to_update' in st.session_state:
+                        del st.session_state.product_to_update
+                    st.rerun()
+
+        else:
+            st.info("👆 Enter a Product ID above to start updating a product")
+
+            # Show recent products for easy selection
+            st.subheader("Recent Products")
+            recent_products = service.list_all_products(5)
+
+            if recent_products:
+                st.write("Click on a Product ID to copy it:")
+                for product in recent_products:
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.write(f"**{product['title']}**")
+                    with col2:
+                        st.code(product['product_id'])
+                    with col3:
+                        if st.button("📋", key=f"copy_{product['product_id']}", help="Click to select this product"):
+                            st.session_state.selected_product_id = product['product_id']
+                            # Auto-fill the product ID field
+                            st.rerun()
+            else:
+                st.info("No products found. Register some products first.")

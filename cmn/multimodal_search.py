@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 from opensearchpy import AWSV4SignerAuth
 import logging
 from datetime import datetime, timezone
+import numpy as np
+
 
 # Configure logging
 logging.basicConfig(
@@ -340,7 +342,8 @@ class MultimodalSearchService:
                 image_embedding = self.get_image_embedding(image)
 
             with st.spinner("🔄 Generating text embedding..."):
-                text_embedding = self.get_text_embedding(f"{title}. {description}")
+                #text_embedding = self.get_text_embedding(f"{title}. {description}")
+                text_embedding = self.get_text_embedding(f"{title}")
 
             if not image_embedding or not text_embedding:
                 return False
@@ -426,7 +429,8 @@ class MultimodalSearchService:
 
             if title is not None or description is not None:
                 # If text is updated, update text embedding too
-                new_text = f"{title or existing_doc.get('title', '')}. {description or existing_doc.get('description', '')}"
+                #new_text = f"{title or existing_doc.get('title', '')}. {description or existing_doc.get('description', '')}"
+                new_text = f"{title or existing_doc.get('title', '')}"
                 with st.spinner("🔄 Generating new text embedding..."):
                     text_embedding = self.get_text_embedding(new_text)
                     if text_embedding:
@@ -598,34 +602,70 @@ class MultimodalSearchService:
                 if not image_embedding:
                     return []
 
-                search_body = {
-                    "size": limit,
-                    "_source": ["product_id", "title", "description"],
-                    "query": {
-                        "knn": {
-                            "image_embedding": {
-                                "vector": image_embedding,
-                                "k": limit
+                # Try multiple search strategies
+                strategies = [
+                    # Strategy 1: Standard KNN
+                    {
+                        "size": limit,
+                        "_source": ["product_id", "title", "description"],
+                        "query": {
+                            "knn": {
+                                "image_embedding": {
+                                    "vector": image_embedding,
+                                    "k": limit * 3  # Try larger k
+                                }
+                            }
+                        }
+                    },
+                    # Strategy 2: Script score with manual similarity
+                    {
+                        "size": limit,
+                        "_source": ["product_id", "title", "description"],
+                        "query": {
+                            "script_score": {
+                                "query": {"match_all": {}},
+                                "script": {
+                                    "source": "cosineSimilarity(params.query_vector, 'image_embedding') + 1.0",
+                                    "params": {"query_vector": image_embedding}
+                                }
                             }
                         }
                     }
-                }
+                ]
 
-                response = self.opensearch_client.search(
-                    index=config.INDEX_NAME,
-                    body=search_body
-                )
+                for i, search_body in enumerate(strategies):
+                    try:
+                        logger.info(f"Trying image search strategy {i+1}")
 
-                results = []
-                for hit in response['hits']['hits']:
-                    results.append({
-                        'product_id': hit['_source']['product_id'],
-                        'title': hit['_source']['title'],
-                        'description': hit['_source']['description'],
-                        'score': hit['_score']
-                    })
+                        response = self.opensearch_client.search(
+                            index=config.INDEX_NAME,
+                            body=search_body
+                        )
 
-                return results
+                        logger.info(f"Strategy {i+1} response: {response['hits']['total']['value']} hits")
+
+                        if response['hits']['total']['value'] > 0:
+                            results = []
+                            for hit in response['hits']['hits']:
+                                results.append({
+                                    'product_id': hit['_source']['product_id'],
+                                    'title': hit['_source']['title'],
+                                    'description': hit['_source']['description'],
+                                    'score': hit['_score']
+                                })
+
+                            if i > 0:
+                                st.info(f"🔄 Used alternative search method (strategy {i+1})")
+
+                            return results
+
+                    except Exception as strategy_error:
+                        logger.warning(f"Strategy {i+1} failed: {strategy_error}")
+                        continue
+
+                # If all strategies fail
+                st.info("🔄 Vector search similarity threshold too strict - no similar images found")
+                return []
 
         except Exception as e:
             st.error(f"❌ Image search failed: {str(e)}")
@@ -633,7 +673,7 @@ class MultimodalSearchService:
             return []
 
     def search_by_text(self, query: str, limit: int = 10) -> List[Dict]:
-        """Search for similar products using text"""
+        """Search for similar products using text with fallback strategies"""
         if not self.connected:
             st.error("❌ Not connected to AWS services")
             return []
@@ -644,33 +684,110 @@ class MultimodalSearchService:
 
         try:
             with st.spinner("🔍 Searching by text..."):
+                # Strategy 1: Try vector search first
                 text_embedding = self.get_text_embedding(query)
 
                 if not text_embedding:
+                    st.error("❌ Failed to generate text embedding")
                     return []
 
-                # Simplified search body for OpenSearch Serverless Vector Search Collection
-                search_body = {
-                    "size": limit,
+                logger.info(f"Generated embedding for '{query}': length={len(text_embedding)}")
+
+                # Try vector search with larger k and no minimum score
+                vector_search_body = {
+                    "size": limit * 2,  # Get more results to increase chances
                     "_source": ["product_id", "title", "description"],
                     "query": {
                         "knn": {
                             "text_embedding": {
                                 "vector": text_embedding,
-                                "k": limit
-                                # Remove method_parameters - not supported in Vector Search Collection
+                                "k": limit * 2  # Increase k value
                             }
                         }
                     }
                 }
 
+                logger.info(f"Trying vector search with k={limit * 2}")
+
                 response = self.opensearch_client.search(
                     index=config.INDEX_NAME,
-                    body=search_body
+                    body=vector_search_body
                 )
 
+                logger.info(f"Vector search found {response['hits']['total']['value']} hits")
+
+                # If vector search finds results, use them
+                if response['hits']['total']['value'] > 0:
+                    results = []
+                    for hit in response['hits']['hits'][:limit]:  # Limit final results
+                        results.append({
+                            'product_id': hit['_source']['product_id'],
+                            'title': hit['_source']['title'],
+                            'description': hit['_source']['description'],
+                            'score': hit['_score']
+                        })
+                    logger.info(f"Returning {len(results)} vector search results")
+                    return results
+
+                # Strategy 2: Fallback to traditional text search if vector search fails
+                logger.info("Vector search returned 0 results, trying traditional text search")
+
+                fallback_search_body = {
+                    "size": limit,
+                    "_source": ["product_id", "title", "description"],
+                    "query": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "match": {
+                                        "title": {
+                                            "query": query,
+                                            "boost": 2.0
+                                        }
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "description": {
+                                            "query": query,
+                                            "boost": 1.0
+                                        }
+                                    }
+                                },
+                                {
+                                    "wildcard": {
+                                        "title": {
+                                            "value": f"*{query.upper()}*",
+                                            "boost": 1.5
+                                        }
+                                    }
+                                },
+                                {
+                                    "wildcard": {
+                                        "description": {
+                                            "value": f"*{query.upper()}*",
+                                            "boost": 0.5
+                                        }
+                                    }
+                                }
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    },
+                    "sort": [
+                        {"_score": {"order": "desc"}}
+                    ]
+                }
+
+                fallback_response = self.opensearch_client.search(
+                    index=config.INDEX_NAME,
+                    body=fallback_search_body
+                )
+
+                logger.info(f"Fallback text search found {fallback_response['hits']['total']['value']} hits")
+
                 results = []
-                for hit in response['hits']['hits']:
+                for hit in fallback_response['hits']['hits']:
                     results.append({
                         'product_id': hit['_source']['product_id'],
                         'title': hit['_source']['title'],
@@ -678,11 +795,15 @@ class MultimodalSearchService:
                         'score': hit['_score']
                     })
 
+                if results:
+                    st.info("🔄 Used traditional text search (vector search found no similar results)")
+
                 return results
 
         except Exception as e:
             st.error(f"❌ Text search failed: {str(e)}")
             logger.error(f"Text search error: {str(e)}")
+            logger.exception("Full text search exception:")
             return []
 
     def search_by_title(self, title_query: str, limit: int = 10, search_mode: str = "partial") -> List[Dict]:
@@ -969,6 +1090,91 @@ class MultimodalSearchService:
                 'vector_hits': vector_hits,
                 'vector_error': vector_error if not vector_search_success else None,
                 'sample_embedding': text_embedding[:5] if text_embedding else None
+            }
+
+        except Exception as e:
+            return {'error': str(e)}
+
+    def debug_image_search(self, image: Image.Image) -> Dict:
+        """Debug image search to understand what's happening"""
+        if not self.connected:
+            return {'error': 'Not connected'}
+
+        try:
+            # Step 1: Generate embedding for search image
+            search_embedding = self.get_image_embedding(image)
+
+            if not search_embedding:
+                return {'error': 'Failed to generate search embedding'}
+
+            # Step 2: Get stored image embedding from database
+            get_doc_body = {
+                "size": 1,
+                "_source": ["product_id", "title", "image_embedding"],
+                "query": {"match_all": {}}
+            }
+
+            doc_response = self.opensearch_client.search(
+                index=config.INDEX_NAME,
+                body=get_doc_body
+            )
+
+            if doc_response['hits']['total']['value'] == 0:
+                return {'error': 'No documents found'}
+
+            stored_doc = doc_response['hits']['hits'][0]['_source']
+            stored_embedding = stored_doc.get('image_embedding', [])
+
+            if not stored_embedding:
+                return {'error': 'No image embedding found in stored document'}
+
+            # Step 3: Calculate manual similarity (cosine similarity)
+            import numpy as np
+
+            search_vec = np.array(search_embedding)
+            stored_vec = np.array(stored_embedding)
+
+            # Cosine similarity
+            dot_product = np.dot(search_vec, stored_vec)
+            norm_search = np.linalg.norm(search_vec)
+            norm_stored = np.linalg.norm(stored_vec)
+            cosine_similarity = dot_product / (norm_search * norm_stored)
+
+            # Step 4: Try vector search
+            vector_search_body = {
+                "size": 5,
+                "_source": ["product_id", "title"],
+                "query": {
+                    "knn": {
+                        "image_embedding": {
+                            "vector": search_embedding,
+                            "k": 5
+                        }
+                    }
+                }
+            }
+
+            try:
+                vector_response = self.opensearch_client.search(
+                    index=config.INDEX_NAME,
+                    body=vector_search_body
+                )
+                vector_hits = vector_response['hits']['total']['value']
+                vector_scores = [hit['_score'] for hit in vector_response['hits']['hits']]
+            except Exception as ve:
+                vector_hits = 0
+                vector_scores = []
+                vector_error = str(ve)
+
+            return {
+                'search_embedding_length': len(search_embedding),
+                'stored_embedding_length': len(stored_embedding),
+                'cosine_similarity': float(cosine_similarity),
+                'search_embedding_sample': search_embedding[:3],
+                'stored_embedding_sample': stored_embedding[:3],
+                'vector_search_hits': vector_hits,
+                'vector_search_scores': vector_scores,
+                'stored_product_title': stored_doc.get('title', 'Unknown')
             }
 
         except Exception as e:
