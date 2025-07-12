@@ -41,8 +41,8 @@ class Config:
     INDEX_NAME: str = os.getenv('INDEX_NAME', 'products')
 
     # Bedrock Configuration
-    TITAN_IMAGE_MODEL_ID: str = 'amazon.titan-embed-image-v1'
-    TITAN_TEXT_MODEL_ID: str = 'amazon.titan-embed-text-v1'
+    #TITAN_IMAGE_MODEL_ID: str = 'amazon.titan-embed-image-v1'
+    #TITAN_TEXT_MODEL_ID: str = 'amazon.titan-embed-text-v1'
     TITAN_MULTIMODAL_MODEL_ID: str = 'amazon.titan-embed-image-v1'
 
 
@@ -156,79 +156,6 @@ class MultimodalSearchService:
             logger.exception("OpenSearch client creation exception:")
             raise e
 
-    # def _get_opensearch_client(self):
-        
-    #     """Initialize OpenSearch Serverless client"""
-    #     logger.info("Creating OpenSearch Serverless client...")
-
-    #     try:
-    #         # Get credentials
-    #         logger.info("Getting AWS credentials for OpenSearch...")
-    #         credentials = self.session.get_credentials()
-
-    #         if not credentials:
-    #             raise Exception("No AWS credentials available")
-
-    #         logger.info("✅ AWS credentials obtained")
-    #         logger.info(f"Access Key ID: {credentials.access_key[:10]}...")
-
-    #         # Create auth
-    #         logger.info("Creating AWSV4SignerAuth...")
-    #         awsauth = AWSV4SignerAuth(credentials, config.AWS_REGION, 'aoss')
-    #         logger.info("✅ AWSV4SignerAuth created")
-
-    #         # Clean endpoint
-    #         endpoint = config.OPENSEARCH_ENDPOINT.replace('https://', '').replace('http://', '')
-    #         logger.info(f"Using endpoint: {endpoint}")
-
-    #         # Create client
-    #         logger.info("Creating OpenSearch client...")
-    #         client = OpenSearch(
-    #             hosts=[{'host': endpoint, 'port': 443}],
-    #             http_auth=awsauth,
-    #             use_ssl=True,
-    #             verify_certs=True,
-    #             connection_class=RequestsHttpConnection,
-    #             timeout=60
-    #         )
-    #         logger.info("✅ OpenSearch client created")
-
-    #         # Test connection with a different method since info() doesn't work on Serverless
-    #         logger.info("Testing OpenSearch connection with cat.indices...")
-    #         try:
-    #             # Use cat.indices instead of info() for OpenSearch Serverless
-    #             indices_response = client.cat.indices(format='json')
-    #             logger.info("✅ OpenSearch connection test successful")
-    #             logger.info(f"Available indices: {indices_response}")
-    #             st.success("✅ OpenSearch Connected")
-    #             return client
-
-    #         except Exception as conn_error:
-    #             # If cat.indices fails, try a simple search on a non-existent index
-    #             # This should return a proper error (not 404) if connection works
-    #             logger.info("cat.indices failed, trying alternative connection test...")
-    #             try:
-    #                 # This will fail but with a different error if connection works
-    #                 client.search(index='_test_connection_index_that_does_not_exist', body={'query': {'match_all': {}}})
-    #             except Exception as search_error:
-    #                 error_str = str(search_error).lower()
-    #                 if 'no such index' in error_str or 'index_not_found' in error_str or '404' in error_str:
-    #                     # This is expected - means connection works but index doesn't exist
-    #                     logger.info("✅ OpenSearch connection confirmed (index not found is expected)")
-    #                     st.success("✅ OpenSearch Connected")
-    #                     return client
-    #                 else:
-    #                     # Different error - connection issue
-    #                     logger.error(f"Connection test failed: {search_error}")
-    #                     raise search_error
-
-    #             logger.error(f"OpenSearch connection test failed: {str(conn_error)}")
-    #             raise conn_error
-
-    #     except Exception as e:
-    #         logger.error(f"Failed to create OpenSearch client: {str(e)}")
-    #         logger.exception("OpenSearch client creation exception:")
-    #         raise e
 
     def check_index_exists(self) -> bool:
         """Check if index exists"""
@@ -393,7 +320,7 @@ class MultimodalSearchService:
             st.error(f"❌ Image embedding failed: {str(e)}")
             return None
 
-    from datetime import datetime, timezone
+    
 
     def register_product(self, image: Image.Image, title: str, description: str) -> bool:
         """Register a new product with image and text"""
@@ -460,7 +387,7 @@ class MultimodalSearchService:
             return False
 
         try:
-            # まず、product_idでドキュメントを検索
+            # Search for document by product_id
             search_body = {
                 "query": {
                     "term": {
@@ -478,11 +405,11 @@ class MultimodalSearchService:
                 st.error(f"❌ Product with ID {product_id} not found")
                 return False
 
-            # 内部的な_idを取得
+            # Get internal _id
             internal_doc_id = response['hits']['hits'][0]['_id']
             existing_doc = response['hits']['hits'][0]['_source']
 
-            # 更新するフィールドを準備
+            # Prepare update fields
             update_doc = {}
 
             if title is not None:
@@ -490,7 +417,7 @@ class MultimodalSearchService:
             if description is not None:
                 update_doc['description'] = description
 
-            # 新しい埋め込みを生成（必要な場合）
+            # Generate new embeddings if needed
             if image is not None:
                 with st.spinner("🔄 Generating new image embedding..."):
                     image_embedding = self.get_image_embedding(image)
@@ -498,7 +425,7 @@ class MultimodalSearchService:
                         update_doc['image_embedding'] = image_embedding
 
             if title is not None or description is not None:
-                # テキストが更新された場合、テキスト埋め込みも更新
+                # If text is updated, update text embedding too
                 new_text = f"{title or existing_doc.get('title', '')}. {description or existing_doc.get('description', '')}"
                 with st.spinner("🔄 Generating new text embedding..."):
                     text_embedding = self.get_text_embedding(new_text)
@@ -509,13 +436,13 @@ class MultimodalSearchService:
                 st.warning("⚠️ No fields to update")
                 return False
 
-            # ドキュメントを更新
+            # Update document - no refresh parameter
             with st.spinner("💾 Updating document..."):
                 update_response = self.opensearch_client.update(
                     index=config.INDEX_NAME,
                     id=internal_doc_id,
-                    body={"doc": update_doc},
-                    refresh=True
+                    body={"doc": update_doc}
+                    # Remove refresh=True - not supported in Vector Search Collection
                 )
 
             if update_response['result'] == 'updated':
@@ -527,6 +454,7 @@ class MultimodalSearchService:
 
         except Exception as e:
             st.error(f"❌ Update failed: {str(e)}")
+            logger.error(f"Update error: {str(e)}")
             return False
 
     def delete_product(self, product_id: str) -> bool:
@@ -536,7 +464,7 @@ class MultimodalSearchService:
             return False
 
         try:
-            # product_idでドキュメントを検索
+            # Search for document by product_id
             search_body = {
                 "query": {
                     "term": {
@@ -554,15 +482,15 @@ class MultimodalSearchService:
                 st.error(f"❌ Product with ID {product_id} not found")
                 return False
 
-            # 内部的な_idを取得
+            # Get internal _id
             internal_doc_id = response['hits']['hits'][0]['_id']
 
-            # ドキュメントを削除
+            # Delete document - no refresh parameter
             with st.spinner("🗑️ Deleting product..."):
                 delete_response = self.opensearch_client.delete(
                     index=config.INDEX_NAME,
-                    id=internal_doc_id,
-                    refresh=True
+                    id=internal_doc_id
+                    # Remove refresh=True - not supported in Vector Search Collection
                 )
 
             if delete_response['result'] == 'deleted':
@@ -574,6 +502,7 @@ class MultimodalSearchService:
 
         except Exception as e:
             st.error(f"❌ Delete failed: {str(e)}")
+            logger.error(f"Delete error: {str(e)}")
             return False
 
     def get_product(self, product_id: str) -> Dict:
@@ -720,7 +649,7 @@ class MultimodalSearchService:
                 if not text_embedding:
                     return []
 
-                # Updated search body for OpenSearch Serverless
+                # Simplified search body for OpenSearch Serverless Vector Search Collection
                 search_body = {
                     "size": limit,
                     "_source": ["product_id", "title", "description"],
@@ -728,10 +657,8 @@ class MultimodalSearchService:
                         "knn": {
                             "text_embedding": {
                                 "vector": text_embedding,
-                                "k": limit,
-                                "method_parameters": {
-                                    "ef": 100
-                                }
+                                "k": limit
+                                # Remove method_parameters - not supported in Vector Search Collection
                             }
                         }
                     }
@@ -755,8 +682,205 @@ class MultimodalSearchService:
 
         except Exception as e:
             st.error(f"❌ Text search failed: {str(e)}")
+            logger.error(f"Text search error: {str(e)}")
             return []
 
+    def search_by_title(self, title_query: str, limit: int = 10, search_mode: str = "partial") -> List[Dict]:
+        """Search for products by title using different matching strategies"""
+        if not self.connected:
+            st.error("❌ Not connected to AWS services")
+            return []
+
+        if not self.check_index_exists():
+            st.error("❌ Index does not exist. Please create index first.")
+            return []
+
+        try:
+            with st.spinner(f"🔍 Searching by title ({search_mode} match)..."):
+
+                # Build query based on search mode
+                if search_mode == "exact":
+                    # Exact match - try both approaches
+                    query = {
+                        "bool": {
+                            "should": [
+                                {
+                                    "match": {
+                                        "title": {
+                                            "query": title_query,
+                                            "operator": "and"
+                                        }
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "title.keyword": title_query
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                elif search_mode == "fuzzy":
+                    # Fuzzy match with multiple approaches
+                    query = {
+                        "bool": {
+                            "should": [
+                                {
+                                    "match": {
+                                        "title": {
+                                            "query": title_query,
+                                            "fuzziness": "AUTO"
+                                        }
+                                    }
+                                },
+                                {
+                                    "wildcard": {
+                                        "title": {
+                                            "value": f"*{title_query.lower()}*",
+                                            "case_insensitive": True
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                else:  # partial match (default)
+                    # Multiple partial matching strategies
+                    query = {
+                        "bool": {
+                            "should": [
+                                # Standard match with partial terms
+                                {
+                                    "match": {
+                                        "title": {
+                                            "query": title_query,
+                                            "minimum_should_match": "1"
+                                        }
+                                    }
+                                },
+                                # Wildcard search (case insensitive)
+                                {
+                                    "wildcard": {
+                                        "title": {
+                                            "value": f"*{title_query.upper()}*"
+                                        }
+                                    }
+                                },
+                                {
+                                    "wildcard": {
+                                        "title": {
+                                            "value": f"*{title_query.lower()}*"
+                                        }
+                                    }
+                                },
+                                # Match phrase prefix
+                                {
+                                    "match_phrase_prefix": {
+                                        "title": {
+                                            "query": title_query
+                                        }
+                                    }
+                                },
+                                # Query string for more flexible matching
+                                {
+                                    "query_string": {
+                                        "query": f"*{title_query}*",
+                                        "fields": ["title"],
+                                        "default_operator": "OR"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+
+                search_body = {
+                    "size": limit,
+                    "_source": ["product_id", "title", "description", "created_at"],
+                    "query": query,
+                    "sort": [
+                        {"_score": {"order": "desc"}},
+                        {"created_at": {"order": "desc"}}
+                    ]
+                }
+
+                logger.info(f"Title search query ({search_mode}): {json.dumps(search_body, indent=2)}")
+
+                response = self.opensearch_client.search(
+                    index=config.INDEX_NAME,
+                    body=search_body
+                )
+
+                logger.info(f"Title search response: {response['hits']['total']['value']} hits")
+
+                results = []
+                for hit in response['hits']['hits']:
+                    results.append({
+                        'product_id': hit['_source']['product_id'],
+                        'title': hit['_source']['title'],
+                        'description': hit['_source']['description'],
+                        'created_at': hit['_source'].get('created_at', 'Unknown'),
+                        'score': hit['_score']
+                    })
+
+                return results
+
+        except Exception as e:
+            st.error(f"❌ Title search failed: {str(e)}")
+            logger.error(f"Title search error: {str(e)}")
+            logger.exception("Title search exception:")
+            return []
+
+
+    def list_all_products(self, limit: int = 100) -> List[Dict]:
+        """List all products with better error handling and logging"""
+        if not self.connected:
+            st.error("❌ Not connected to AWS services")
+            return []
+
+        if not self.check_index_exists():
+            st.error("❌ Index does not exist. Please create index first.")
+            return []
+
+        try:
+            search_body = {
+                "size": limit,
+                "_source": ["product_id", "title", "description", "created_at"],
+                "query": {
+                    "match_all": {}
+                },
+                "sort": [
+                    {"created_at": {"order": "desc"}}
+                ]
+            }
+
+            logger.info(f"Listing all products with limit: {limit}")
+
+            response = self.opensearch_client.search(
+                index=config.INDEX_NAME,
+                body=search_body
+            )
+
+            logger.info(f"List products response: {response['hits']['total']['value']} total hits")
+
+            products = []
+            for hit in response['hits']['hits']:
+                products.append({
+                    'internal_id': hit['_id'],
+                    'product_id': hit['_source']['product_id'],
+                    'title': hit['_source']['title'],
+                    'description': hit['_source']['description'],
+                    'created_at': hit['_source'].get('created_at', 'Unknown')
+                })
+
+            return products
+
+        except Exception as e:
+            st.error(f"❌ List products failed: {str(e)}")
+            logger.error(f"List products error: {str(e)}")
+            logger.exception("List products exception:")
+            return []
+
+            
     def get_stats(self) -> Dict:
         """Get collection statistics"""
         if not self.connected:
@@ -772,5 +896,80 @@ class MultimodalSearchService:
                 'index_name': config.INDEX_NAME,
                 'collection_name': config.COLLECTION_NAME
             }
+        except Exception as e:
+            return {'error': str(e)}
+
+    def debug_vector_search(self, query: str) -> Dict:
+        """Debug vector search to understand what's happening"""
+        if not self.connected:
+            return {'error': 'Not connected'}
+
+        try:
+            # Step 1: Generate embedding
+            text_embedding = self.get_text_embedding(query)
+
+            if not text_embedding:
+                return {'error': 'Failed to generate embedding'}
+
+            # Step 2: Check if documents have embeddings
+            check_embeddings_body = {
+                "size": 1,
+                "_source": ["product_id", "title", "text_embedding"],
+                "query": {"match_all": {}}
+            }
+
+            check_response = self.opensearch_client.search(
+                index=config.INDEX_NAME,
+                body=check_embeddings_body
+            )
+
+            has_embeddings = False
+            embedding_length = 0
+
+            if check_response['hits']['total']['value'] > 0:
+                doc = check_response['hits']['hits'][0]['_source']
+                if 'text_embedding' in doc and doc['text_embedding']:
+                    has_embeddings = True
+                    embedding_length = len(doc['text_embedding'])
+
+            # Step 3: Try vector search
+            vector_search_body = {
+                "size": 5,
+                "_source": ["product_id", "title", "description"],
+                "query": {
+                    "knn": {
+                        "text_embedding": {
+                            "vector": text_embedding,
+                            "k": 5
+                        }
+                    }
+                }
+            }
+
+            try:
+                vector_response = self.opensearch_client.search(
+                    index=config.INDEX_NAME,
+                    body=vector_search_body
+                )
+                vector_search_success = True
+                vector_hits = vector_response['hits']['total']['value']
+            except Exception as ve:
+                vector_search_success = False
+                vector_hits = 0
+                vector_error = str(ve)
+
+            return {
+                'query': query,
+                'embedding_generated': True,
+                'embedding_length': len(text_embedding),
+                'expected_dimension': config.EMBEDDING_DIMENSION,
+                'documents_have_embeddings': has_embeddings,
+                'stored_embedding_length': embedding_length,
+                'vector_search_success': vector_search_success,
+                'vector_hits': vector_hits,
+                'vector_error': vector_error if not vector_search_success else None,
+                'sample_embedding': text_embedding[:5] if text_embedding else None
+            }
+
         except Exception as e:
             return {'error': str(e)}

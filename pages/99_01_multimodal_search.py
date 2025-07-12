@@ -130,6 +130,17 @@ with st.sidebar:
     st.info(f"**Region:** {config.AWS_REGION}")
     st.info(f"**Collection:** {config.COLLECTION_NAME}")
     st.info(f"**Index:** {config.INDEX_NAME}")
+    st.info(f"**Endpoint:** {config.OPENSEARCH_ENDPOINT}")
+
+    st.divider()
+
+    # Add this to your sidebar debug tools
+    if st.button("🔍 Debug Vector Search"):
+        test_query = st.text_input("Enter test query for vector debug", value="METASPEED")
+        if test_query:
+            debug_info = service.debug_vector_search(test_query)
+            st.json(debug_info)
+
 
     # Statistics
     st.header("📈 Statistics")
@@ -153,8 +164,9 @@ if not status['can_operate']:
     st.info("1. Click '🔌 Connect' to connect to AWS services")
     st.info("2. Click '➕ Create Index' to create the search index")
 else:
-    # Main content tabs
-    tab1, tab2, tab3 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text"])
+    # Main content tabs - Added "Search by Title" tab
+    #tab1, tab2, tab3, tab4 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Register Product", "🖼️ Search by Image", "📝 Search by Text", "🏷️ Search by Title", "📋 List All Products"])
 
     # Tab 1: Register Product
     with tab1:
@@ -174,7 +186,7 @@ else:
                 is_valid, message = validate_image(uploaded_file)
                 if is_valid:
                     image = Image.open(uploaded_file)
-                    st.image(image, caption="Product Image", use_column_width=True)
+                    st.image(image, caption="Product Image", use_container_width=True)
                 else:
                     st.error(f"❌ {message}")
                     image = None
@@ -217,7 +229,7 @@ else:
                 is_valid, message = validate_image(search_image_file)
                 if is_valid:
                     search_image = Image.open(search_image_file)
-                    st.image(search_image, caption="Search Image", use_column_width=True)
+                    st.image(search_image, caption="Search Image", use_container_width=True)
 
                     if st.button("🔍 Search Similar Images", type="primary", use_container_width=True):
                         results = service.search_by_image(search_image, search_limit)
@@ -276,3 +288,117 @@ else:
                 st.info("No matching products found. Try different keywords.")
         elif search_button:
             st.warning("⚠️ Please enter a search query")
+
+    # Tab 4: Search by Title (NEW)
+    with tab4:
+        st.header("🏷️ Search by Title")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            title_query = st.text_input(
+                "Enter product title to search",
+                placeholder="Enter exact or partial product title...",
+                help="Search for products by their title using exact or fuzzy matching"
+            )
+
+        with col2:
+            st.write("")  # Empty space for alignment
+            st.write("")  # Empty space for alignment
+            search_type = st.selectbox(
+                "Search Type",
+                ["Partial Match", "Exact Match", "Fuzzy Match"],
+                help="Choose how to match the title"
+            )
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col2:
+            title_search_button = st.button("🔍 Search by Title", type="primary", use_container_width=True)
+
+        if title_search_button and title_query:
+            # Map search type to method parameter
+            search_mode = {
+                "Exact Match": "exact",
+                "Fuzzy Match": "fuzzy", 
+                "Partial Match": "partial"
+            }[search_type]
+
+            results = service.search_by_title(title_query, search_limit, search_mode)
+
+            if results:
+                st.success(f"Found {len(results)} products matching '{title_query}'")
+
+                # Display results in a nice format
+                for i, result in enumerate(results):
+                    with st.expander(f"🏷️ {result['title']} (Score: {result['score']:.4f})"):
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            st.write(f"**Description:** {result['description']}")
+                            if 'created_at' in result:
+                                st.write(f"**Created:** {result['created_at']}")
+                        with col2:
+                            st.code(result['product_id'])
+            else:
+                st.info(f"No products found with title matching '{title_query}'. Try different keywords or search type.")
+        elif title_search_button:
+            st.warning("⚠️ Please enter a title to search")
+
+    with tab5:
+        st.header("📋 List All Products")
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            list_limit = st.number_input("Number of products to show", min_value=1, max_value=100, value=20)
+
+        with col2:
+            st.write("")  # Empty space for alignment
+            st.write("")  # Empty space for alignment
+            if st.button("📋 Load All Products", type="primary", use_container_width=True):
+                st.session_state.all_products = service.list_all_products(list_limit)
+
+        # Display products if loaded
+        if 'all_products' in st.session_state and st.session_state.all_products:
+            products = st.session_state.all_products
+            st.success(f"Found {len(products)} products")
+
+            # Create a searchable/filterable list
+            search_filter = st.text_input("🔍 Filter products by title or description", placeholder="Type to filter...")
+
+            # Filter products if search term provided
+            if search_filter:
+                filtered_products = [
+                    p for p in products 
+                    if search_filter.lower() in p['title'].lower() or 
+                       search_filter.lower() in p['description'].lower()
+                ]
+            else:
+                filtered_products = products
+
+            if filtered_products:
+                st.info(f"Showing {len(filtered_products)} products")
+
+                # Display products in a table-like format
+                for i, product in enumerate(filtered_products):
+                    with st.expander(f"🏷️ {product['title']}", expanded=False):
+                        col1, col2 = st.columns([3, 1])
+
+                        with col1:
+                            st.write(f"**Description:** {product['description']}")
+                            st.write(f"**Created:** {product['created_at']}")
+
+                        with col2:
+                            st.code(product['product_id'])
+
+                            # Add action buttons
+                            if st.button(f"🗑️ Delete", key=f"delete_{product['product_id']}", help="Delete this product"):
+                                if service.delete_product(product['product_id']):
+                                    st.success("Product deleted!")
+                                    # Refresh the list
+                                    st.session_state.all_products = service.list_all_products(list_limit)
+                                    st.rerun()
+            else:
+                st.info("No products match your filter.")
+
+        elif 'all_products' in st.session_state:
+            st.info("No products found in the database.")   
