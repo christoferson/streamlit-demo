@@ -170,14 +170,15 @@ class MultimodalSearchService:
             return False
 
     def create_index(self) -> bool:
-        """Create index with proper mappings for OpenSearch Serverless"""
+        """Create index with proper mappings for OpenSearch Serverless using Faiss engine"""
         if not self.connected:
             st.error("❌ Not connected to AWS services")
             return False
 
-        # OpenSearch Serverless index configuration
+        # OpenSearch Serverless index configuration with Faiss
         index_body = {
             "settings": {
+                "index.knn": True,  # Enable KNN
                 "number_of_shards": 1,
                 "number_of_replicas": 0
             },
@@ -193,8 +194,8 @@ class MultimodalSearchService:
                         "dimension": config.EMBEDDING_DIMENSION,
                         "method": {
                             "name": "hnsw",
-                            "space_type": "cosinesimil",
-                            "engine": "nmslib"
+                            "space_type": "l2",  # Changed from cosinesimil
+                            "engine": "faiss"    # Changed from nmslib
                         }
                     },
                     "text_embedding": {
@@ -202,8 +203,8 @@ class MultimodalSearchService:
                         "dimension": config.EMBEDDING_DIMENSION,
                         "method": {
                             "name": "hnsw",
-                            "space_type": "cosinesimil",
-                            "engine": "nmslib"
+                            "space_type": "l2",  # Changed from cosinesimil
+                            "engine": "faiss"    # Changed from nmslib
                         }
                     }
                 }
@@ -219,10 +220,11 @@ class MultimodalSearchService:
                 index=config.INDEX_NAME,
                 body=index_body
             )
-            st.success(f"✅ Created index: {config.INDEX_NAME}")
+            st.success(f"✅ Created index with Faiss engine: {config.INDEX_NAME}")
             return True
         except Exception as e:
             st.error(f"❌ Index creation failed: {str(e)}")
+            logger.error(f"Index creation error: {str(e)}")
             return False
 
     def delete_index(self) -> bool:
@@ -322,7 +324,41 @@ class MultimodalSearchService:
             st.error(f"❌ Image embedding failed: {str(e)}")
             return None
 
-    
+    def check_title_exists(self, title: str) -> Dict:
+        """Check if a product with the given title already exists"""
+        if not self.connected:
+            return {'exists': False, 'error': 'Not connected'}
+
+        if not self.check_index_exists():
+            return {'exists': False, 'error': 'Index does not exist'}
+
+        try:
+            search_body = {
+                "query": {
+                    "term": {
+                        "title.keyword": title
+                    }
+                }
+            }
+
+            response = self.opensearch_client.search(
+                index=config.INDEX_NAME,
+                body=search_body
+            )
+
+            if response['hits']['total']['value'] > 0:
+                existing_product = response['hits']['hits'][0]['_source']
+                return {
+                    'exists': True,
+                    'product_id': existing_product['product_id'],
+                    'created_at': existing_product.get('created_at', 'Unknown')
+                }
+            else:
+                return {'exists': False}
+
+        except Exception as e:
+            logger.error(f"Check title exists error: {str(e)}")
+            return {'exists': False, 'error': str(e)}
 
     def register_product(self, image: Image.Image, title: str, description: str) -> bool:
         """Register a new product with image and text"""
@@ -333,6 +369,20 @@ class MultimodalSearchService:
         if not self.check_index_exists():
             st.error("❌ Index does not exist. Please create index first.")
             return False
+
+        # Check if title already exists
+        title_check = self.check_title_exists(title)
+
+        if title_check.get('exists', False):
+            st.error(f"❌ Product with title '{title}' already exists!")
+            st.info(f"Existing Product ID: {title_check['product_id']}")
+            st.info(f"Created: {title_check['created_at']}")
+            st.info("💡 Please use a different title or update the existing product instead.")
+            return False
+
+        if 'error' in title_check:
+            st.warning(f"⚠️ Could not check for duplicate titles: {title_check['error']}")
+            # Continue with registration despite the warning
 
         try:
             product_id = str(uuid.uuid4())
