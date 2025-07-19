@@ -295,6 +295,15 @@ else:
                         col1, col2 = st.columns([2, 1])
                         with col1:
                             st.write(f"**Description:** {result['description']}")
+
+                            # Safe access to trade_code
+                            trade_code = result.get('trade_code', '')
+                            if trade_code:
+                                st.write(f"**Trade Code:** {trade_code}")
+                                # Generate and show image URL if trade_code exists
+                                image_url = service.generate_image_url_from_trade_code(trade_code)
+                                if image_url:
+                                    st.markdown(f"[🔗 View Image]({image_url})")
                         with col2:
                             st.code(result['product_id'])
             else:
@@ -371,6 +380,8 @@ else:
                 st.session_state.all_products = service.list_all_products(list_limit)
 
         # Display products if loaded
+        # Tab 5: List All Products - Update the display section
+        # Tab 5: List All Products - Update the display section with image display
         if 'all_products' in st.session_state and st.session_state.all_products:
             products = st.session_state.all_products
             st.success(f"Found {len(products)} products")
@@ -383,7 +394,7 @@ else:
                 filtered_products = [
                     p for p in products 
                     if search_filter.lower() in p['title'].lower() or 
-                       search_filter.lower() in p['description'].lower()
+                    search_filter.lower() in p['description'].lower()
                 ]
             else:
                 filtered_products = products
@@ -394,13 +405,48 @@ else:
                 # Display products in a table-like format
                 for i, product in enumerate(filtered_products):
                     with st.expander(f"🏷️ {product['title']}", expanded=False):
-                        col1, col2 = st.columns([3, 1])
+                        # Create 3 columns: image, details, actions
+                        col1, col2, col3 = st.columns([1, 2, 1])
 
+                        # Column 1: Product Image
                         with col1:
+                            trade_code = product.get('trade_code', '')
+                            if trade_code:
+                                image_url = product.get('image_url', '')
+                                if image_url:
+                                    try:
+                                        # Display the image from URL
+                                        st.image(image_url, caption=f"Trade Code: {trade_code}", use_container_width=True)
+                                    except Exception as e:
+                                        # If image fails to load, show placeholder
+                                        st.write("🖼️ Image not available")
+                                        st.write(f"**Trade Code:** {trade_code}")
+                                else:
+                                    st.write("🖼️ No image URL")
+                                    st.write(f"**Trade Code:** {trade_code}")
+                            else:
+                                st.write("📷 No trade code")
+                                st.write("No image available")
+
+                        # Column 2: Product Details
+                        with col2:
                             st.write(f"**Description:** {product['description']}")
                             st.write(f"**Created:** {product['created_at']}")
 
-                        with col2:
+                            # Show trade code and image URL info
+                            trade_code = product.get('trade_code', '')
+                            if trade_code:
+                                st.write(f"**Trade Code:** {trade_code}")
+                                image_url = product.get('image_url', '')
+                                if image_url:
+                                    st.write(f"**Image URL:** {image_url}")
+                                    # Make it clickable
+                                    st.markdown(f"[🔗 Open in New Tab]({image_url})")
+                            else:
+                                st.write("**Trade Code:** Not set")
+
+                        # Column 3: Actions
+                        with col3:
                             st.code(product['product_id'])
 
                             # Add action buttons
@@ -410,11 +456,19 @@ else:
                                     # Refresh the list
                                     st.session_state.all_products = service.list_all_products(list_limit)
                                     st.rerun()
+
+                            # Add update button for quick access
+                            if st.button(f"✏️ Update", key=f"update_{product['product_id']}", help="Update this product"):
+                                # Set the product for update and switch to update tab
+                                st.session_state.product_to_update = product
+                                st.session_state.switch_to_update = True
+                                st.info("💡 Switch to 'Update Product' tab to edit this product")
+
             else:
                 st.info("No products match your filter.")
 
         elif 'all_products' in st.session_state:
-            st.info("No products found in the database.")   
+            st.info("No products found in the database.")
 
     # Tab 6: Update Product (NEW)
     with tab6:
@@ -449,6 +503,7 @@ else:
                     st.warning("⚠️ Please enter a product ID")
 
         # Step 2: Show current product and update form
+        # In Tab 6: Update Product - Step 2: Show current product information
         if 'product_to_update' in st.session_state:
             current_product = st.session_state.product_to_update
 
@@ -461,6 +516,13 @@ else:
                 st.info(f"**Title:** {current_product['title']}")
                 st.info(f"**Product ID:** {current_product['product_id']}")
                 st.info(f"**Created:** {current_product['created_at']}")
+
+                # Check if trade_code exists
+                trade_code = current_product.get('trade_code', '')
+                if trade_code:
+                    st.info(f"**Trade Code:** {trade_code}")
+                else:
+                    st.info("**Trade Code:** Not set")
 
             with col2:
                 with st.expander("Current Description", expanded=False):
@@ -504,9 +566,20 @@ else:
                 new_description = st.text_area(
                     "New Product Description (leave empty to keep current)",
                     placeholder="Enter new description or leave empty to keep current...",
-                    height=200,
+                    height=150,
                     help="Leave empty to keep the current description"
                 )
+
+                # Add trade code input
+                new_trade_code = st.text_input(
+                    "Trade Code (leave empty to keep current)",
+                    placeholder="e.g., 1203A750.020",
+                    help="Enter the product trade code"
+                )
+
+                # Show current trade code if it exists
+                if 'trade_code' in current_product and current_product['trade_code']:
+                    st.info(f"Current trade code: {current_product['trade_code']}")
 
                 # Update options
                 st.subheader("Update Options")
@@ -514,12 +587,13 @@ else:
                 col_a, col_b = st.columns(2)
 
                 with col_a:
-                    update_title_only = st.checkbox("Update title only", help="Only update the title, keep description and image")
-                    update_description_only = st.checkbox("Update description only", help="Only update the description, keep title and image")
+                    update_title_only = st.checkbox("Update title only")
+                    update_description_only = st.checkbox("Update description only")
+                    update_trade_code_only = st.checkbox("Update trade code only")
 
                 with col_b:
-                    update_image_only = st.checkbox("Update image only", help="Only update the image, keep title and description")
-                    update_all = st.checkbox("Update all fields", help="Update all provided fields")
+                    update_image_only = st.checkbox("Update image only")
+                    update_all = st.checkbox("Update all fields")
 
                 # Update button
                 st.divider()
@@ -529,13 +603,16 @@ else:
                     title_to_update = None
                     description_to_update = None
                     image_to_update = None
+                    trade_code_to_update = None
 
-                    if update_all or not any([update_title_only, update_description_only, update_image_only]):
+                    if update_all or not any([update_title_only, update_description_only, update_image_only, update_trade_code_only]):
                         # Update all provided fields
                         if new_title.strip():
                             title_to_update = new_title.strip()
                         if new_description.strip():
                             description_to_update = new_description.strip()
+                        if new_trade_code.strip():
+                            trade_code_to_update = new_trade_code.strip()
                         if new_image:
                             image_to_update = new_image
                     else:
@@ -544,11 +621,13 @@ else:
                             title_to_update = new_title.strip()
                         if update_description_only and new_description.strip():
                             description_to_update = new_description.strip()
+                        if update_trade_code_only and new_trade_code.strip():
+                            trade_code_to_update = new_trade_code.strip()
                         if update_image_only and new_image:
                             image_to_update = new_image
 
                     # Check if anything to update
-                    if not any([title_to_update, description_to_update, image_to_update]):
+                    if not any([title_to_update, description_to_update, image_to_update, trade_code_to_update]):
                         st.warning("⚠️ Please provide at least one field to update")
                     else:
                         # Perform update
@@ -556,7 +635,8 @@ else:
                             current_product['product_id'],
                             image=image_to_update,
                             title=title_to_update,
-                            description=description_to_update
+                            description=description_to_update,
+                            trade_code=trade_code_to_update
                         )
 
                         if success:
