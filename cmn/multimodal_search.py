@@ -56,6 +56,10 @@ class Config:
     SUPPORTED_IMAGE_FORMATS: list = None
     SEARCH_RESULTS_LIMIT: int = 20
 
+    # Image URL Template
+    IMAGE_URL_TEMPLATE: str = os.getenv('IMAGE_URL_TEMPLATE', 'https://xxx/{code}_bar')
+
+
     def __post_init__(self):
         if self.SUPPORTED_IMAGE_FORMATS is None:
             self.SUPPORTED_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp']
@@ -433,7 +437,7 @@ class MultimodalSearchService:
             logger.error(f"Registration error: {str(e)}")
             return False
 
-    def update_product(self, product_id: str, image: Image.Image = None, title: str = None, description: str = None) -> bool:
+    def update_product(self, product_id: str, image: Image.Image = None, title: str = None, description: str = None, trade_code: str = None) -> bool:
         """Update an existing product"""
         if not self.connected:
             st.error("❌ Not connected to AWS services")
@@ -464,11 +468,19 @@ class MultimodalSearchService:
 
             # Prepare update fields
             update_doc = {}
+            update_summary = []
 
             if title is not None:
                 update_doc['title'] = title
+                update_summary.append(f"title to '{title}'")
+
             if description is not None:
                 update_doc['description'] = description
+                update_summary.append("description")
+
+            if trade_code is not None:
+                update_doc['trade_code'] = trade_code.strip()
+                update_summary.append(f"trade code to '{trade_code.strip()}'")
 
             # Generate new embeddings if needed
             if image is not None:
@@ -476,31 +488,36 @@ class MultimodalSearchService:
                     image_embedding = self.get_image_embedding(image)
                     if image_embedding:
                         update_doc['image_embedding'] = image_embedding
+                        update_summary.append("image and image embedding")
 
             if title is not None or description is not None:
                 # If text is updated, update text embedding too
-                #new_text = f"{title or existing_doc.get('title', '')}. {description or existing_doc.get('description', '')}"
-                new_text = f"{title or existing_doc.get('title', '')}"
+                new_title = title if title is not None else existing_doc.get('title', '')
+                new_description = description if description is not None else existing_doc.get('description', '')
+                new_text = f"{new_title}. {new_description}"
+
                 with st.spinner("🔄 Generating new text embedding..."):
                     text_embedding = self.get_text_embedding(new_text)
                     if text_embedding:
                         update_doc['text_embedding'] = text_embedding
+                        if "text embedding" not in " ".join(update_summary):
+                            update_summary.append("text embedding")
 
             if not update_doc:
                 st.warning("⚠️ No fields to update")
                 return False
 
-            # Update document - no refresh parameter
+            # Update document - no refresh parameter for Vector Search Collection
             with st.spinner("💾 Updating document..."):
                 update_response = self.opensearch_client.update(
                     index=config.INDEX_NAME,
                     id=internal_doc_id,
                     body={"doc": update_doc}
-                    # Remove refresh=True - not supported in Vector Search Collection
                 )
 
             if update_response['result'] == 'updated':
                 st.success(f"✅ Product {product_id} updated successfully!")
+                st.info(f"Updated: {', '.join(update_summary)}")
                 return True
             else:
                 st.error("❌ Failed to update product")
@@ -589,23 +606,29 @@ class MultimodalSearchService:
                 'product_id': hit['_source']['product_id'],
                 'title': hit['_source']['title'],
                 'description': hit['_source']['description'],
+                'trade_code': hit['_source'].get('trade_code', ''),  # Add trade_code
                 'created_at': hit['_source']['created_at']
             }
 
         except Exception as e:
             st.error(f"❌ Get product failed: {str(e)}")
+            logger.error(f"Get product error: {str(e)}")
             return None
 
     def list_all_products(self, limit: int = 100) -> List[Dict]:
-        """List all products"""
+        """List all products with better error handling and logging"""
         if not self.connected:
             st.error("❌ Not connected to AWS services")
+            return []
+
+        if not self.check_index_exists():
+            st.error("❌ Index does not exist. Please create index first.")
             return []
 
         try:
             search_body = {
                 "size": limit,
-                "_source": ["product_id", "title", "description", "created_at"],
+                "_source": ["product_id", "title", "description", "trade_code", "created_at"],
                 "query": {
                     "match_all": {}
                 },
@@ -614,25 +637,36 @@ class MultimodalSearchService:
                 ]
             }
 
+            logger.info(f"Listing all products with limit: {limit}")
+
             response = self.opensearch_client.search(
                 index=config.INDEX_NAME,
                 body=search_body
             )
 
+            logger.info(f"List products response: {response['hits']['total']['value']} total hits")
+
             products = []
             for hit in response['hits']['hits']:
+                trade_code = hit['_source'].get('trade_code', '')
+                image_url = self.generate_image_url_from_trade_code(trade_code) if trade_code else ""
+
                 products.append({
                     'internal_id': hit['_id'],
                     'product_id': hit['_source']['product_id'],
                     'title': hit['_source']['title'],
                     'description': hit['_source']['description'],
-                    'created_at': hit['_source']['created_at']
+                    'trade_code': trade_code,
+                    'image_url': image_url,
+                    'created_at': hit['_source'].get('created_at', 'Unknown')
                 })
 
             return products
 
         except Exception as e:
             st.error(f"❌ List products failed: {str(e)}")
+            logger.error(f"List products error: {str(e)}")
+            logger.exception("List products exception:")
             return []
 
     def search_by_image(self, image: Image.Image, limit: int = 10) -> List[Dict]:
@@ -1015,7 +1049,7 @@ class MultimodalSearchService:
         try:
             search_body = {
                 "size": limit,
-                "_source": ["product_id", "title", "description", "created_at"],
+                "_source": ["product_id", "title", "description", "trade_code", "created_at"],  # Added trade_code here
                 "query": {
                     "match_all": {}
                 },
@@ -1035,11 +1069,16 @@ class MultimodalSearchService:
 
             products = []
             for hit in response['hits']['hits']:
+                trade_code = hit['_source'].get('trade_code', '')
+                image_url = self.generate_image_url_from_trade_code(trade_code) if trade_code else ""
+
                 products.append({
                     'internal_id': hit['_id'],
                     'product_id': hit['_source']['product_id'],
                     'title': hit['_source']['title'],
                     'description': hit['_source']['description'],
+                    'trade_code': trade_code,  # Added trade_code
+                    'image_url': image_url,    # Added image_url
                     'created_at': hit['_source'].get('created_at', 'Unknown')
                 })
 
@@ -1229,3 +1268,23 @@ class MultimodalSearchService:
 
         except Exception as e:
             return {'error': str(e)}
+
+    def generate_image_url_from_trade_code(self, trade_code: str) -> str:
+        """Generate image URL from trade code using template"""
+        if not trade_code:
+            return ""
+
+        try:
+            # Convert format: 1203A750.020 -> 1203A750_020
+            if '.' in trade_code:
+                formatted_code = trade_code.replace('.', '_')
+            else:
+                formatted_code = trade_code
+
+            # Use template from config
+            url = config.IMAGE_URL_TEMPLATE.format(trade_code=formatted_code)
+            return url
+
+        except Exception as e:
+            logger.error(f"Error generating image URL from trade code '{trade_code}': {str(e)}")
+            return ""
