@@ -261,11 +261,43 @@ else:
                             st.markdown(f"""
                             <div class="result-card">
                                 <h4>🏷️ {result['title']}</h4>
-                                <p><strong>Score:</strong> {result['score']:.4f}</p>
-                                <p><strong>Description:</strong> {result['description']}</p>
-                                <p><strong>ID:</strong> <code>{result['product_id']}</code></p>
                             </div>
                             """, unsafe_allow_html=True)
+
+                            # Add image and details in columns
+                            col_img, col_details = st.columns([1, 2])
+
+                            # Column 1: Product Image
+                            with col_img:
+                                trade_code = result.get('trade_code', '')
+                                st.write(f"**Trade Code:** {trade_code}")
+                                if trade_code:
+                                    image_url = service.generate_image_url_from_trade_code(trade_code)
+                                    if image_url:
+                                        try:
+                                            st.image(image_url, caption=f"Trade Code: {trade_code}", use_container_width=True)
+                                        except Exception as e:
+                                            st.write("🖼️ Image not available")
+                                            st.write(f"**Trade Code:** {trade_code}")
+                                    else:
+                                        st.write("🖼️ No image URL")
+                                        st.write(f"**Trade Code:** {trade_code}")
+                                else:
+                                    st.write("📷 No trade code")
+                                    st.write("No image available")
+
+                            # Column 2: Product Details
+                            with col_details:
+                                st.write(f"**Score:** {result['score']:.4f}")
+                                st.write(f"**Description:** {result['description']}")
+                                st.write(f"**ID:** `{result['product_id']}`")
+
+                                # Show trade code and image URL info
+                                if trade_code:
+                                    st.write(f"**Trade Code:** {trade_code}")
+                                    image_url = service.generate_image_url_from_trade_code(trade_code)
+                                    if image_url:
+                                        st.markdown(f"[🔗 View Image]({image_url})")
                 else:
                     st.info("No similar products found")
 
