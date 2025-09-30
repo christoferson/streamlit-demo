@@ -50,6 +50,10 @@ http://localhost:8501/
 - anthropic.claude-opus-4-20250514-v1:0, anthropic.claude-sonnet-4-20250514-v1:0
 - https://aws.amazon.com/jp/blogs/aws/claude-opus-4-anthropics-most-powerful-model-for-coding-is-now-in-amazon-bedrock/
 
+- Claude Sonnet 4.5 "anthropic.claude-sonnet-4-5-20250929-v1:0"
+- Latest version with improved performance and capabilities
+- **Note:** When configuring model parameters, only temperature OR top_p can be specified, but not both parameters simultaneously.
+
 ##### Text to Image
 
 - (Stability.ai Diffusion 1.0 text to image)[https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-1-0-text-image.html]

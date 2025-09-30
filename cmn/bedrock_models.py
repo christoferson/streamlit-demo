@@ -43,6 +43,20 @@ class FoundationModel:
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
                 }
+            elif self.model_id in ["us.anthropic.claude-sonnet-4-20250514-v1:0"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1),
+                "TopK": InferenceParameter("top_k", 0, 250, 500)
+                }
+            elif self.model_id in ["global.anthropic.claude-sonnet-4-5-20250929-v1:0"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1, False),
+                "TopK": InferenceParameter("top_k", 0, 250, 500, False)
+                }
             else:
                 return {
                     "MaxTokensToSample": InferenceParameter("max_tokens", 0, 2048, 4096),
@@ -109,6 +123,8 @@ class FoundationModel:
 
 # Dictionary to store FoundationModel instances
 foundation_models = {
+    
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-5-20250929-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),

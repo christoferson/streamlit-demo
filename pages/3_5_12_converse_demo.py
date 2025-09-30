@@ -232,6 +232,7 @@ mime_mapping_document = {
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
 
@@ -298,11 +299,15 @@ with st.sidebar:
 opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
 
 opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
+opt_fm_top_p = opt_fm.InferenceParameter.get("TopP")
 opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
 
 with st.sidebar:
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    if opt_fm_top_p.isSupported():
+        opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    else:
+        opt_top_p = 0.0
     if opt_fm_top_k.isSupported():
         opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     else:
@@ -489,9 +494,12 @@ if prompt:
     inference_config = {
         "temperature": opt_temperature,
         "maxTokens": opt_max_tokens,
-        "topP": opt_top_p,
+        #"topP": opt_top_p,
         #stopSequences 
     }
+
+    if opt_fm_top_p.isSupported():
+        inference_config["topP"] = opt_top_p
 
     additional_model_fields = {}
 
