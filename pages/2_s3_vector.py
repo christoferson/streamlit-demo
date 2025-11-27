@@ -151,6 +151,47 @@ def query_vector_store(
         st.error(f"Error querying vectors: {str(e)}")
         return []
 
+def list_indexes(s3vectors_client, prefix: str = None) -> List[Dict[str, Any]]:
+    """
+    List all indexes in the vector bucket
+
+    Args:
+        s3vectors_client: Boto3 S3 Vectors client
+        prefix: Optional prefix to filter index names
+
+    Returns:
+        List of dictionaries containing index information
+    """
+    try:
+        indexes = []
+        next_token = None
+
+        while True:
+            params = {
+                "vectorBucketName": VECTOR_BUCKET_NAME,
+                "maxResults": 100
+            }
+
+            if prefix:
+                params["prefix"] = prefix
+
+            if next_token:
+                params["nextToken"] = next_token
+
+            response = s3vectors_client.list_indexes(**params)
+
+            if 'indexes' in response:
+                indexes.extend(response['indexes'])
+
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
+
+        return indexes
+    except Exception as e:
+        st.error(f"Error listing indexes: {str(e)}")
+        return []
+
 def list_all_vectors(s3vectors_client, max_results: int = None) -> List[Dict[str, Any]]:
     """
     List all vectors in the index with their metadata
@@ -303,7 +344,12 @@ Vector Store: Connected ✓
             st.text("• aws_service")
             st.text("• (any other metadata)")
 
-    tab1, tab2, tab3 = st.tabs(["📝 Add Documents", "🔎 Query Documents", "🗑️ Manage Index"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📝 Add Documents", 
+        "🔎 Query Documents", 
+        "📋 Manage Bucket",
+        "🗑️ Manage Index"
+    ])
 
     # ========================================================================
     # TAB 1: ADD DOCUMENTS
@@ -651,9 +697,84 @@ Vector Store: Connected ✓
             del st.session_state.sample_query
 
     # ========================================================================
-    # TAB 3: MANAGE INDEX
+    # TAB 3: LIST INDEXES
     # ========================================================================
     with tab3:
+        st.header("📋 Manage Bucket")
+        st.markdown("View all vector indexes in the current vector bucket")
+
+        # Filter by prefix (optional)
+        prefix_filter = st.text_input(
+            "Filter by prefix (optional)",
+            placeholder="e.g., my-index",
+            help="Only show indexes that start with this prefix"
+        )
+
+        if st.button("🔄 Load Indexes", type="primary"):
+            with st.spinner("Loading indexes..."):
+                indexes = list_indexes(
+                    s3vectors_client, 
+                    prefix=prefix_filter if prefix_filter.strip() else None
+                )
+                st.session_state.indexes = indexes
+                st.rerun()
+
+        # Display indexes
+        if 'indexes' in st.session_state:
+            indexes = st.session_state.indexes
+
+            if indexes:
+                st.success(f"✅ Found {len(indexes)} index(es)")
+
+                # Summary information - no columns, no clipping
+                st.markdown("### 📊 Summary")
+                st.metric("Total Indexes", len(indexes))
+
+                st.markdown("**Vector Bucket:**")
+                st.code(VECTOR_BUCKET_NAME, language=None)
+
+                st.markdown("**Current Index:**")
+                st.code(VECTOR_INDEX_NAME, language=None)
+
+                st.markdown("---")
+
+                # Display each index
+                st.markdown("### 📑 Indexes")
+
+                for i, index in enumerate(indexes, 1):
+                    is_current = index.get('indexName') == VECTOR_INDEX_NAME
+
+                    with st.expander(
+                        f"{'🟢' if is_current else '⚪'} Index {i}: {index.get('indexName', 'unknown')}" + 
+                        (" (Current)" if is_current else ""),
+                        expanded=is_current
+                    ):
+                        st.markdown("**Index Name:**")
+                        st.code(index.get('indexName', 'N/A'), language=None)
+
+                        st.markdown("**Vector Bucket Name:**")
+                        st.code(index.get('vectorBucketName', 'N/A'), language=None)
+
+                        st.markdown("**Amazon Resource Name (ARN):**")
+                        st.code(index.get('indexArn', 'N/A'), language=None)
+
+                        creation_time = index.get('creationTime')
+                        if creation_time:
+                            st.markdown("**Creation Time:**")
+                            st.text(str(creation_time))
+
+                        # Show full index details
+                        with st.expander("View Full Index Details"):
+                            st.json(index)
+            else:
+                st.info("ℹ️ No indexes found in this vector bucket")
+        else:
+            st.info("👆 Click 'Load Indexes' to view all indexes in the vector bucket")
+
+    # ========================================================================
+    # TAB 4: MANAGE INDEX
+    # ========================================================================
+    with tab4:
         st.header("Manage Vector Index")
 
         st.markdown("### 📊 Index Statistics")
