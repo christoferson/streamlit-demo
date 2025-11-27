@@ -11,11 +11,47 @@ import cmn_settings
 # ============================================================================
 
 AWS_REGION = cmn_settings.VECTOR_REGION_ID
-BEDROCK_MODEL_ID = cmn_settings.VECTOR_EMBEDDING_MODEL_ID
 
 # Your Vector Bucket and Index Names
 VECTOR_BUCKET_NAME = cmn_settings.VECTOR_BUCKET_NAME
 VECTOR_INDEX_NAME = cmn_settings.VECTOR_INDEX_NAME
+
+# ============================================================================
+# EMBEDDING MODELS CONFIGURATION
+# ============================================================================
+
+EMBEDDING_MODELS = {
+    "Amazon Titan Text V2": {
+        "model_id": "amazon.titan-embed-text-v2:0",
+        "dimensions": [256, 512, 1024],
+        "default_dimension": 1024,
+        "description": "Latest Titan model with configurable dimensions"
+    },
+    "Amazon Titan Text V1": {
+        "model_id": "amazon.titan-embed-text-v1",
+        "dimensions": [1536],
+        "default_dimension": 1536,
+        "description": "First generation Titan text embeddings"
+    },
+    "Amazon Titan Multimodal V1": {
+        "model_id": "amazon.titan-embed-image-v1",
+        "dimensions": [1024, 384],
+        "default_dimension": 1024,
+        "description": "Multimodal embeddings (1024 for images, 384 for text)"
+    },
+    "Cohere Embed English V3": {
+        "model_id": "cohere.embed-english-v3",
+        "dimensions": [1024],
+        "default_dimension": 1024,
+        "description": "Optimized for English text"
+    },
+    "Cohere Embed Multilingual V3": {
+        "model_id": "cohere.embed-multilingual-v3",
+        "dimensions": [1024],
+        "default_dimension": 1024,
+        "description": "Supports 100+ languages"
+    }
+}
 
 # ============================================================================
 # METADATA CONFIGURATION
@@ -49,15 +85,48 @@ def get_aws_clients():
 # HELPER FUNCTIONS
 # ============================================================================
 
-def generate_embedding(text: str, bedrock_client) -> List[float]:
-    """Generate embedding vector using Amazon Bedrock"""
+def generate_embedding(text: str, bedrock_client, model_id: str, dimension: int = None) -> List[float]:
+    """
+    Generate embedding vector using Amazon Bedrock
+
+    Args:
+        text: Input text to embed
+        bedrock_client: Boto3 Bedrock client
+        model_id: Bedrock model ID
+        dimension: Optional dimension for Titan V2 (256, 512, or 1024)
+
+    Returns:
+        List of floats representing the embedding vector
+    """
     try:
+        # Prepare request body based on model
+        if "titan-embed-text-v2" in model_id:
+            # Titan V2 supports dimension parameter
+            body = {"inputText": text}
+            if dimension:
+                body["dimensions"] = dimension
+        elif "cohere" in model_id:
+            # Cohere models
+            body = {
+                "texts": [text],
+                "input_type": "search_document"
+            }
+        else:
+            # Titan V1 and other models
+            body = {"inputText": text}
+
         response = bedrock_client.invoke_model(
-            modelId=BEDROCK_MODEL_ID,
-            body=json.dumps({"inputText": text})
+            modelId=model_id,
+            body=json.dumps(body)
         )
         response_body = json.loads(response["body"].read())
-        return response_body["embedding"]
+
+        # Extract embedding based on model response format
+        if "cohere" in model_id:
+            return response_body["embeddings"][0]
+        else:
+            return response_body["embedding"]
+
     except Exception as e:
         st.error(f"Error generating embedding: {str(e)}")
         return None
@@ -66,6 +135,8 @@ def add_documents_to_vector_store(
     texts: List[str], 
     bedrock_client, 
     s3vectors_client,
+    model_id: str,
+    dimension: int = None,
     metadata_list: List[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """Add multiple documents to the vector store"""
@@ -73,7 +144,7 @@ def add_documents_to_vector_store(
     timestamp = datetime.now().isoformat()
 
     for i, text in enumerate(texts):
-        embedding = generate_embedding(text, bedrock_client)
+        embedding = generate_embedding(text, bedrock_client, model_id, dimension)
         if embedding is None:
             continue
 
@@ -81,7 +152,8 @@ def add_documents_to_vector_store(
         metadata = {
             "text": text,
             "document_index": str(i),
-            "created_timestamp": timestamp  # Non-filterable
+            "created_timestamp": timestamp,  # Non-filterable
+            "embedding_model": model_id  # Track which model was used
         }
 
         # Add custom metadata from user
@@ -109,11 +181,13 @@ def query_vector_store(
     question: str,
     bedrock_client,
     s3vectors_client,
+    model_id: str,
+    dimension: int = None,
     top_k: int = 5,
     metadata_filter: Dict[str, Any] = None
 ) -> List[Dict[str, Any]]:
     """Query the vector store for similar documents"""
-    embedding = generate_embedding(question, bedrock_client)
+    embedding = generate_embedding(question, bedrock_client, model_id, dimension)
     if embedding is None:
         return []
 
@@ -152,16 +226,7 @@ def query_vector_store(
         return []
 
 def list_indexes(s3vectors_client, prefix: str = None) -> List[Dict[str, Any]]:
-    """
-    List all indexes in the vector bucket
-
-    Args:
-        s3vectors_client: Boto3 S3 Vectors client
-        prefix: Optional prefix to filter index names
-
-    Returns:
-        List of dictionaries containing index information
-    """
+    """List all indexes in the vector bucket"""
     try:
         indexes = []
         next_token = None
@@ -193,16 +258,7 @@ def list_indexes(s3vectors_client, prefix: str = None) -> List[Dict[str, Any]]:
         return []
 
 def list_all_vectors(s3vectors_client, max_results: int = None) -> List[Dict[str, Any]]:
-    """
-    List all vectors in the index with their metadata
-
-    Args:
-        s3vectors_client: Boto3 S3 Vectors client
-        max_results: Maximum number of vectors to return (None = all)
-
-    Returns:
-        List of dictionaries containing vector information
-    """
+    """List all vectors in the index with their metadata"""
     try:
         vectors = []
         next_token = None
@@ -223,7 +279,6 @@ def list_all_vectors(s3vectors_client, max_results: int = None) -> List[Dict[str
             if 'vectors' in response:
                 vectors.extend(response['vectors'])
 
-            # Check if we've reached the desired max_results
             if max_results and len(vectors) >= max_results:
                 vectors = vectors[:max_results]
                 break
@@ -283,13 +338,11 @@ def delete_vectors(s3vectors_client, vector_keys: List[str]) -> Dict[str, Any]:
 def reset_index(s3vectors_client) -> tuple[bool, int]:
     """Delete all vectors from the index"""
     try:
-        # Get all vector keys
         vector_keys = get_vector_keys(s3vectors_client)
 
         if not vector_keys:
             return True, 0
 
-        # Delete in batches (API might have limits)
         batch_size = 100
         total_deleted = 0
 
@@ -320,13 +373,53 @@ def main():
 
     bedrock_client, s3vectors_client = get_aws_clients()
 
+    # ========================================================================
+    # EMBEDDING MODEL SELECTOR (SIDEBAR)
+    # ========================================================================
+    with st.sidebar:
+        st.header("🤖 Embedding Model")
+
+        # Model selection
+        selected_model_name = st.selectbox(
+            "Select Embedding Model",
+            options=list(EMBEDDING_MODELS.keys()),
+            index=0,  # Default to Titan V2
+            help="Choose the embedding model to use for generating vectors"
+        )
+
+        model_config = EMBEDDING_MODELS[selected_model_name]
+        model_id = model_config["model_id"]
+
+        # Show model info
+        st.info(f"**Model:** {selected_model_name}\n\n{model_config['description']}")
+
+        # Dimension selection (if applicable)
+        dimension = None
+        if len(model_config["dimensions"]) > 1:
+            dimension = st.selectbox(
+                "Select Dimension",
+                options=model_config["dimensions"],
+                index=model_config["dimensions"].index(model_config["default_dimension"]),
+                help="Higher dimensions = better accuracy but more storage"
+            )
+        else:
+            dimension = model_config["dimensions"][0]
+            st.text(f"Dimension: {dimension}")
+
+        st.markdown("---")
+        st.markdown(f"**Model ID:**")
+        st.code(model_id, language=None)
+        st.markdown(f"**Dimension:** {dimension}")
+
     with st.expander("⚙️ Configuration & Metadata Info", expanded=False):
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Configuration:**")
             st.code(f"""
-Embedding Model: {BEDROCK_MODEL_ID}
+Embedding Model: {selected_model_name}
+Model ID: {model_id}
+Dimension: {dimension}
 AWS Region: {AWS_REGION}
 Vector Store: Connected ✓
             """)
@@ -342,6 +435,7 @@ Vector Store: Connected ✓
             st.text("• document_type")
             st.text("• category")
             st.text("• aws_service")
+            st.text("• embedding_model")
             st.text("• (any other metadata)")
 
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -356,6 +450,8 @@ Vector Store: Connected ✓
     # ========================================================================
     with tab1:
         st.header("Add Documents to Vector Store")
+
+        st.info(f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})")
 
         input_method = st.radio(
             "Choose input method:",
@@ -409,6 +505,8 @@ Vector Store: Connected ✓
                             [document_text],
                             bedrock_client,
                             s3vectors_client,
+                            model_id,
+                            dimension,
                             [metadata] if metadata else None
                         )
 
@@ -455,6 +553,8 @@ Vector Store: Connected ✓
                                 documents,
                                 bedrock_client,
                                 s3vectors_client,
+                                model_id,
+                                dimension,
                                 metadata_list
                             )
 
@@ -551,6 +651,8 @@ Vector Store: Connected ✓
                         texts,
                         bedrock_client,
                         s3vectors_client,
+                        model_id,
+                        dimension,
                         metadata_list
                     )
 
@@ -564,6 +666,8 @@ Vector Store: Connected ✓
     # ========================================================================
     with tab2:
         st.header("Query Vector Store")
+
+        st.info(f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})")
 
         col1, col2 = st.columns([3, 1])
 
@@ -624,6 +728,8 @@ Vector Store: Connected ✓
                         query_text,
                         bedrock_client,
                         s3vectors_client,
+                        model_id,
+                        dimension,
                         top_k=top_k,
                         metadata_filter=metadata_filter if metadata_filter else None
                     )
@@ -697,7 +803,7 @@ Vector Store: Connected ✓
             del st.session_state.sample_query
 
     # ========================================================================
-    # TAB 3: LIST INDEXES
+    # TAB 3: MANAGE BUCKET
     # ========================================================================
     with tab3:
         st.header("📋 Manage Bucket")
