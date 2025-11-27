@@ -127,7 +127,6 @@ def query_vector_store(
             "returnDistance": True,
         }
 
-        
         if metadata_filter:
             query_params["filter"] = metadata_filter
 
@@ -151,6 +150,73 @@ def query_vector_store(
     except Exception as e:
         st.error(f"Error querying vectors: {str(e)}")
         return []
+
+def list_all_vectors(s3vectors_client) -> List[str]:
+    """List all vector keys in the index"""
+    try:
+        vector_keys = []
+        next_token = None
+
+        while True:
+            params = {
+                "vectorBucketName": VECTOR_BUCKET_NAME,
+                "indexName": VECTOR_INDEX_NAME,
+                "maxResults": 100
+            }
+
+            if next_token:
+                params["nextToken"] = next_token
+
+            response = s3vectors_client.list_vectors(**params)
+
+            if 'vectors' in response:
+                vector_keys.extend([v['key'] for v in response['vectors']])
+
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
+
+        return vector_keys
+    except Exception as e:
+        st.error(f"Error listing vectors: {str(e)}")
+        return []
+
+def delete_vectors(s3vectors_client, vector_keys: List[str]) -> Dict[str, Any]:
+    """Delete vectors by their keys"""
+    try:
+        result = s3vectors_client.delete_vectors(
+            vectorBucketName=VECTOR_BUCKET_NAME,
+            indexName=VECTOR_INDEX_NAME,
+            keys=vector_keys
+        )
+        return result
+    except Exception as e:
+        st.error(f"Error deleting vectors: {str(e)}")
+        return None
+
+def reset_index(s3vectors_client) -> tuple[bool, int]:
+    """Delete all vectors from the index"""
+    try:
+        # List all vectors
+        vector_keys = list_all_vectors(s3vectors_client)
+
+        if not vector_keys:
+            return True, 0
+
+        # Delete in batches (API might have limits)
+        batch_size = 100
+        total_deleted = 0
+
+        for i in range(0, len(vector_keys), batch_size):
+            batch = vector_keys[i:i + batch_size]
+            result = delete_vectors(s3vectors_client, batch)
+            if result:
+                total_deleted += len(batch)
+
+        return True, total_deleted
+    except Exception as e:
+        st.error(f"Error resetting index: {str(e)}")
+        return False, 0
 
 # ============================================================================
 # STREAMLIT UI
@@ -192,7 +258,7 @@ Vector Store: Connected ✓
             st.text("• aws_service")
             st.text("• (any other metadata)")
 
-    tab1, tab2 = st.tabs(["📝 Add Documents", "🔎 Query Documents"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Documents", "🔎 Query Documents", "🗑️ Manage Index"])
 
     # ========================================================================
     # TAB 1: ADD DOCUMENTS
@@ -538,6 +604,64 @@ Vector Store: Connected ✓
         if 'sample_query' in st.session_state:
             st.info(f"Selected query: {st.session_state.sample_query}")
             del st.session_state.sample_query
+
+    # ========================================================================
+    # TAB 3: MANAGE INDEX
+    # ========================================================================
+    with tab3:
+        st.header("Manage Vector Index")
+
+        st.markdown("### 📊 Index Statistics")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🔄 Refresh Count", type="secondary"):
+                with st.spinner("Counting vectors..."):
+                    vector_keys = list_all_vectors(s3vectors_client)
+                    st.session_state.vector_count = len(vector_keys)
+
+        with col2:
+            if 'vector_count' in st.session_state:
+                st.metric("Total Vectors", st.session_state.vector_count)
+            else:
+                st.info("Click 'Refresh Count' to see total vectors")
+
+        st.markdown("---")
+        st.markdown("### 🗑️ Reset Index")
+
+        st.warning("""
+        ⚠️ **Warning: This action cannot be undone!**
+
+        This will delete ALL vectors from the index. The index structure will remain,
+        but all document embeddings and metadata will be permanently removed.
+        """)
+
+        # Confirmation checkbox
+        confirm_reset = st.checkbox("I understand this will delete all vectors permanently")
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            if st.button(
+                "🗑️ Reset Index",
+                type="primary",
+                disabled=not confirm_reset,
+                help="Delete all vectors from the index"
+            ):
+                with st.spinner("Deleting all vectors..."):
+                    success, count = reset_index(s3vectors_client)
+
+                    if success:
+                        if count > 0:
+                            st.success(f"✅ Successfully deleted {count} vectors!")
+                            st.balloons()
+                            # Update count
+                            st.session_state.vector_count = 0
+                        else:
+                            st.info("ℹ️ Index was already empty")
+                    else:
+                        st.error("❌ Failed to reset index")
 
 if __name__ == "__main__":
     main()
