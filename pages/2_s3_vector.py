@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 import boto3
 import json
@@ -11,12 +10,29 @@ import cmn_settings
 # CONFIGURATION
 # ============================================================================
 
-AWS_REGION = "us-east-1"
-BEDROCK_MODEL_ID = "amazon.titan-embed-text-v2:0"
+AWS_REGION = cmn_settings.VECTOR_REGION_ID
+BEDROCK_MODEL_ID = cmn_settings.VECTOR_EMBEDDING_MODEL_ID
 
 # Your Vector Bucket and Index Names
 VECTOR_BUCKET_NAME = cmn_settings.VECTOR_BUCKET_NAME
 VECTOR_INDEX_NAME = cmn_settings.VECTOR_INDEX_NAME
+
+# ============================================================================
+# METADATA CONFIGURATION
+# ============================================================================
+# Based on CloudFormation template's NonFilterableMetadataKeys
+
+# ❌ NON-FILTERABLE KEYS (from CloudFormation template)
+# These are stored but CANNOT be used in query filters
+NON_FILTERABLE_KEYS = [
+    "document_title",
+    "source_url",
+    "created_timestamp"
+]
+
+# ✅ FILTERABLE KEYS (any key NOT in NonFilterableMetadataKeys)
+# These CAN be used in query filters
+# Examples: document_type, category, aws_service, language, status, etc.
 
 # ============================================================================
 # AWS CLIENTS
@@ -61,12 +77,14 @@ def add_documents_to_vector_store(
         if embedding is None:
             continue
 
+        # Base metadata
         metadata = {
             "text": text,
-            "added_timestamp": timestamp,
-            "document_index": str(i)
+            "document_index": str(i),
+            "created_timestamp": timestamp  # Non-filterable
         }
 
+        # Add custom metadata from user
         if metadata_list and i < len(metadata_list):
             metadata.update(metadata_list[i])
 
@@ -109,8 +127,9 @@ def query_vector_store(
             "returnDistance": True,
         }
 
+        
         if metadata_filter:
-            query_params["metadataFilter"] = metadata_filter
+            query_params["filter"] = metadata_filter
 
         response = s3vectors_client.query_vectors(**query_params)
 
@@ -149,13 +168,29 @@ def main():
 
     bedrock_client, s3vectors_client = get_aws_clients()
 
-    with st.expander("⚙️ Configuration", expanded=False):
-        st.code(f"""
-Vector Bucket: {VECTOR_BUCKET_NAME}
-Vector Index: {VECTOR_INDEX_NAME}
+    with st.expander("⚙️ Configuration & Metadata Info", expanded=False):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Configuration:**")
+            st.code(f"""
 Embedding Model: {BEDROCK_MODEL_ID}
 AWS Region: {AWS_REGION}
-        """)
+Vector Store: Connected ✓
+            """)
+
+        with col2:
+            st.markdown("**❌ Non-Filterable Keys:**")
+            st.caption("Cannot be used in query filters")
+            for key in NON_FILTERABLE_KEYS:
+                st.text(f"• {key}")
+
+            st.markdown("**✅ Filterable Keys:**")
+            st.caption("Can be used in query filters")
+            st.text("• document_type")
+            st.text("• category")
+            st.text("• aws_service")
+            st.text("• (any other metadata)")
 
     tab1, tab2 = st.tabs(["📝 Add Documents", "🔎 Query Documents"])
 
@@ -183,21 +218,35 @@ AWS Region: {AWS_REGION}
                 )
 
             with col2:
-                st.markdown("**Optional Metadata**")
+                st.markdown("**✅ Filterable Metadata**")
+                st.caption("Can be used in queries")
                 doc_type = st.text_input("Document Type", placeholder="e.g., article")
                 category = st.text_input("Category", placeholder="e.g., technical")
                 service = st.text_input("AWS Service", placeholder="e.g., S3")
+
+                st.markdown("**❌ Non-Filterable Metadata**")
+                st.caption("Display only, cannot filter")
+                doc_title = st.text_input("Document Title", placeholder="e.g., S3 Guide")
+                source_url = st.text_input("Source URL", placeholder="e.g., https://...")
 
             if st.button("➕ Add Document", type="primary"):
                 if document_text.strip():
                     with st.spinner("Adding document to vector store..."):
                         metadata = {}
+
+                        # ✅ FILTERABLE metadata
                         if doc_type:
                             metadata["document_type"] = doc_type
                         if category:
                             metadata["category"] = category
                         if service:
                             metadata["aws_service"] = service
+
+                        # ❌ NON-FILTERABLE metadata
+                        if doc_title:
+                            metadata["document_title"] = doc_title
+                        if source_url:
+                            metadata["source_url"] = source_url
 
                         result = add_documents_to_vector_store(
                             [document_text],
@@ -208,7 +257,8 @@ AWS Region: {AWS_REGION}
 
                         if result:
                             st.success("✅ Document added successfully!")
-                            st.json(result)
+                            with st.expander("View API Response"):
+                                st.json(result)
                 else:
                     st.warning("⚠️ Please enter document text")
 
@@ -222,11 +272,12 @@ AWS Region: {AWS_REGION}
                 placeholder="Document 1\nDocument 2\nDocument 3\n..."
             )
 
+            st.markdown("**✅ Filterable Metadata (applies to all)**")
             col1, col2 = st.columns(2)
             with col1:
-                bulk_doc_type = st.text_input("Document Type (all)", placeholder="e.g., article")
+                bulk_doc_type = st.text_input("Document Type", placeholder="e.g., article")
             with col2:
-                bulk_category = st.text_input("Category (all)", placeholder="e.g., technical")
+                bulk_category = st.text_input("Category", placeholder="e.g., technical")
 
             if st.button("➕ Add All Documents", type="primary"):
                 if bulk_text.strip():
@@ -252,7 +303,8 @@ AWS Region: {AWS_REGION}
 
                             if result:
                                 st.success(f"✅ Successfully added {len(documents)} documents!")
-                                st.json(result)
+                                with st.expander("View API Response"):
+                                    st.json(result)
                     else:
                         st.warning("⚠️ No valid documents found")
                 else:
@@ -262,51 +314,93 @@ AWS Region: {AWS_REGION}
             st.subheader("Add Sample AWS Services Data")
             st.info("📚 This will add sample AWS service descriptions")
 
-            sample_texts = [
-                "Amazon S3 is an object storage service offering industry-leading scalability, data availability, security, and performance.",
-                "Amazon EC2 provides secure and resizable compute capacity in the cloud, allowing you to launch virtual servers as needed.",
-                "AWS Lambda lets you run code without provisioning or managing servers, paying only for the compute time you consume.",
-                "Amazon RDS makes it easy to set up, operate, and scale a relational database in the cloud with automated backups.",
-                "Amazon DynamoDB is a fully managed NoSQL database service that provides fast and predictable performance with seamless scalability.",
-                "Amazon VPC lets you provision a logically isolated section of the AWS Cloud where you can launch AWS resources.",
-                "Amazon CloudFront is a fast content delivery network service that securely delivers data, videos, and applications globally.",
-                "AWS IAM enables you to manage access to AWS services and resources securely with fine-grained permissions.",
-                "Amazon SQS is a fully managed message queuing service that enables you to decouple and scale microservices.",
-                "Amazon SNS is a fully managed messaging service for both application-to-application and application-to-person communication.",
-                "Amazon ECS is a fully managed container orchestration service that makes it easy to deploy and scale containerized applications.",
-                "AWS CloudFormation provides a common language for describing and provisioning infrastructure resources in your cloud environment.",
-                "Amazon Bedrock is a fully managed service that offers foundation models from leading AI companies through a single API.",
-                "Amazon SageMaker helps data scientists and developers prepare, build, train, and deploy machine learning models quickly.",
-                "AWS Glue is a serverless data integration service that makes it easy to discover, prepare, and combine data for analytics."
+            sample_data = [
+                {
+                    "text": "Amazon S3 is an object storage service offering industry-leading scalability, data availability, security, and performance.",
+                    "service": "S3",
+                    "category": "Storage"
+                },
+                {
+                    "text": "Amazon EC2 provides secure and resizable compute capacity in the cloud, allowing you to launch virtual servers as needed.",
+                    "service": "EC2",
+                    "category": "Compute"
+                },
+                {
+                    "text": "AWS Lambda lets you run code without provisioning or managing servers, paying only for the compute time you consume.",
+                    "service": "Lambda",
+                    "category": "Compute"
+                },
+                {
+                    "text": "Amazon RDS makes it easy to set up, operate, and scale a relational database in the cloud with automated backups.",
+                    "service": "RDS",
+                    "category": "Database"
+                },
+                {
+                    "text": "Amazon DynamoDB is a fully managed NoSQL database service that provides fast and predictable performance with seamless scalability.",
+                    "service": "DynamoDB",
+                    "category": "Database"
+                },
+                {
+                    "text": "Amazon VPC lets you provision a logically isolated section of the AWS Cloud where you can launch AWS resources.",
+                    "service": "VPC",
+                    "category": "Networking"
+                },
+                {
+                    "text": "Amazon CloudFront is a fast content delivery network service that securely delivers data, videos, and applications globally.",
+                    "service": "CloudFront",
+                    "category": "Networking"
+                },
+                {
+                    "text": "AWS IAM enables you to manage access to AWS services and resources securely with fine-grained permissions.",
+                    "service": "IAM",
+                    "category": "Security"
+                },
+                {
+                    "text": "Amazon SQS is a fully managed message queuing service that enables you to decouple and scale microservices.",
+                    "service": "SQS",
+                    "category": "Application Integration"
+                },
+                {
+                    "text": "Amazon SNS is a fully managed messaging service for both application-to-application and application-to-person communication.",
+                    "service": "SNS",
+                    "category": "Application Integration"
+                },
             ]
 
             with st.expander("📄 Preview Sample Documents", expanded=False):
-                for i, text in enumerate(sample_texts, 1):
-                    st.text(f"{i}. {text}")
+                for i, item in enumerate(sample_data, 1):
+                    st.markdown(f"**{i}. {item['service']}** ({item['category']})")
+                    st.text(item['text'])
+                    st.divider()
 
-            st.markdown(f"**Total documents:** {len(sample_texts)}")
+            st.markdown(f"**Total documents:** {len(sample_data)}")
 
             if st.button("➕ Add Sample Data", type="primary"):
-                with st.spinner(f"Adding {len(sample_texts)} sample documents..."):
+                with st.spinner(f"Adding {len(sample_data)} sample documents..."):
+                    texts = [item['text'] for item in sample_data]
                     metadata_list = [
                         {
+                            # ✅ FILTERABLE
                             "document_type": "service_description",
-                            "category": "aws_services",
-                            "aws_service": text.split()[1]  # Extract service name
+                            "category": item['category'],
+                            "aws_service": item['service'],
+                            # ❌ NON-FILTERABLE
+                            "document_title": f"{item['service']} Description"
                         }
-                        for text in sample_texts
+                        for item in sample_data
                     ]
 
                     result = add_documents_to_vector_store(
-                        sample_texts,
+                        texts,
                         bedrock_client,
                         s3vectors_client,
                         metadata_list
                     )
 
                     if result:
-                        st.success(f"✅ Successfully added {len(sample_texts)} sample documents!")
-                        st.json(result)
+                        st.success(f"✅ Successfully added {len(sample_data)} sample documents!")
+                        with st.expander("View API Response"):
+                            st.json(result)
 
     # ========================================================================
     # TAB 2: QUERY DOCUMENTS
@@ -330,21 +424,37 @@ AWS Region: {AWS_REGION}
                 value=5
             )
 
-        with st.expander("🔧 Advanced Filters (Optional)", expanded=False):
-            st.markdown("**Filter by metadata:**")
+        with st.expander("🔧 Metadata Filters (Optional)", expanded=False):
+            st.markdown("**✅ Filter by Filterable Metadata Only**")
+            st.caption("Only keys not in NonFilterableMetadataKeys can be used")
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                filter_doc_type = st.text_input("Document Type", key="filter_doc_type")
+                filter_doc_type = st.text_input(
+                    "Document Type", 
+                    key="filter_doc_type",
+                    placeholder="e.g., service_description"
+                )
             with col2:
-                filter_category = st.text_input("Category", key="filter_category")
+                filter_category = st.text_input(
+                    "Category", 
+                    key="filter_category",
+                    placeholder="e.g., Compute"
+                )
             with col3:
-                filter_service = st.text_input("AWS Service", key="filter_service")
+                filter_service = st.text_input(
+                    "AWS Service", 
+                    key="filter_service",
+                    placeholder="e.g., Lambda"
+                )
+
+            st.warning("⚠️ Cannot filter on: document_title, source_url, created_timestamp")
 
         if st.button("🔎 Search", type="primary"):
             if query_text.strip():
                 with st.spinner("Searching vector store..."):
+                    # Build metadata filter (only filterable keys)
                     metadata_filter = {}
                     if filter_doc_type:
                         metadata_filter["document_type"] = filter_doc_type
@@ -371,7 +481,7 @@ AWS Region: {AWS_REGION}
                                 col1, col2, col3 = st.columns([2, 1, 1])
 
                                 with col1:
-                                    st.metric("Document Key", result['key'])
+                                    st.metric("Document", f"Result #{i}")
                                 with col2:
                                     st.metric("Distance", f"{result['distance']:.4f}")
                                 with col3:
@@ -384,7 +494,23 @@ AWS Region: {AWS_REGION}
 
                                 if result['metadata']:
                                     with st.expander("📋 View Metadata"):
-                                        st.json(result['metadata'])
+                                        # Separate filterable and non-filterable
+                                        filterable = {}
+                                        non_filterable = {}
+
+                                        for key, value in result['metadata'].items():
+                                            if key in NON_FILTERABLE_KEYS:
+                                                non_filterable[key] = value
+                                            else:
+                                                filterable[key] = value
+
+                                        if filterable:
+                                            st.markdown("**✅ Filterable Metadata:**")
+                                            st.json(filterable)
+
+                                        if non_filterable:
+                                            st.markdown("**❌ Non-Filterable Metadata:**")
+                                            st.json(non_filterable)
 
                                 st.divider()
                     else:
