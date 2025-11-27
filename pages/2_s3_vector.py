@@ -151,8 +151,53 @@ def query_vector_store(
         st.error(f"Error querying vectors: {str(e)}")
         return []
 
-def list_all_vectors(s3vectors_client) -> List[str]:
-    """List all vector keys in the index"""
+def list_all_vectors(s3vectors_client, max_results: int = None) -> List[Dict[str, Any]]:
+    """
+    List all vectors in the index with their metadata
+
+    Args:
+        s3vectors_client: Boto3 S3 Vectors client
+        max_results: Maximum number of vectors to return (None = all)
+
+    Returns:
+        List of dictionaries containing vector information
+    """
+    try:
+        vectors = []
+        next_token = None
+
+        while True:
+            params = {
+                "vectorBucketName": VECTOR_BUCKET_NAME,
+                "indexName": VECTOR_INDEX_NAME,
+                "maxResults": 100,
+                "returnMetadata": True
+            }
+
+            if next_token:
+                params["nextToken"] = next_token
+
+            response = s3vectors_client.list_vectors(**params)
+
+            if 'vectors' in response:
+                vectors.extend(response['vectors'])
+
+            # Check if we've reached the desired max_results
+            if max_results and len(vectors) >= max_results:
+                vectors = vectors[:max_results]
+                break
+
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
+
+        return vectors
+    except Exception as e:
+        st.error(f"Error listing vectors: {str(e)}")
+        return []
+
+def get_vector_keys(s3vectors_client) -> List[str]:
+    """Get all vector keys (for deletion)"""
     try:
         vector_keys = []
         next_token = None
@@ -178,7 +223,7 @@ def list_all_vectors(s3vectors_client) -> List[str]:
 
         return vector_keys
     except Exception as e:
-        st.error(f"Error listing vectors: {str(e)}")
+        st.error(f"Error getting vector keys: {str(e)}")
         return []
 
 def delete_vectors(s3vectors_client, vector_keys: List[str]) -> Dict[str, Any]:
@@ -197,8 +242,8 @@ def delete_vectors(s3vectors_client, vector_keys: List[str]) -> Dict[str, Any]:
 def reset_index(s3vectors_client) -> tuple[bool, int]:
     """Delete all vectors from the index"""
     try:
-        # List all vectors
-        vector_keys = list_all_vectors(s3vectors_client)
+        # Get all vector keys
+        vector_keys = get_vector_keys(s3vectors_client)
 
         if not vector_keys:
             return True, 0
@@ -613,19 +658,87 @@ Vector Store: Connected ✓
 
         st.markdown("### 📊 Index Statistics")
 
-        col1, col2 = st.columns(2)
+        # Row 1: Refresh Count button
+        if st.button("🔄 Refresh Count", type="secondary"):
+            with st.spinner("Counting vectors..."):
+                vector_keys = get_vector_keys(s3vectors_client)
+                st.session_state.vector_count = len(vector_keys)
+                st.rerun()
 
-        with col1:
-            if st.button("🔄 Refresh Count", type="secondary"):
-                with st.spinner("Counting vectors..."):
-                    vector_keys = list_all_vectors(s3vectors_client)
-                    st.session_state.vector_count = len(vector_keys)
+        # Display count
+        if 'vector_count' in st.session_state:
+            st.metric("Total Vectors in Index", st.session_state.vector_count)
+        else:
+            st.info("Click 'Refresh Count' to see total vectors")
 
-        with col2:
-            if 'vector_count' in st.session_state:
-                st.metric("Total Vectors", st.session_state.vector_count)
-            else:
-                st.info("Click 'Refresh Count' to see total vectors")
+        st.markdown("---")
+
+        # Row 2: Preview Index
+        st.markdown("### 👁️ Preview Index")
+
+        preview_count = st.number_input(
+            "Number of vectors to preview",
+            min_value=1,
+            max_value=100,
+            value=10,
+            help="Select how many vectors to preview"
+        )
+
+        if st.button("👁️ Load Preview", type="secondary"):
+            with st.spinner(f"Loading {preview_count} vectors..."):
+                vectors = list_all_vectors(s3vectors_client, max_results=preview_count)
+                st.session_state.preview_vectors = vectors
+                # Also update count if not already set
+                if 'vector_count' not in st.session_state:
+                    st.session_state.vector_count = len(get_vector_keys(s3vectors_client))
+                st.rerun()
+
+        # Display preview
+        if 'preview_vectors' in st.session_state and st.session_state.preview_vectors:
+            st.markdown(f"**Showing {len(st.session_state.preview_vectors)} vectors:**")
+
+            for i, vector in enumerate(st.session_state.preview_vectors, 1):
+                with st.expander(f"📄 Vector {i}: {vector.get('key', 'unknown')}", expanded=False):
+                    col1, col2 = st.columns([1, 2])
+
+                    with col1:
+                        st.markdown("**Vector Key:**")
+                        st.code(vector.get('key', 'unknown'))
+
+                    with col2:
+                        metadata = vector.get('metadata', {})
+
+                        # Get text content
+                        text_content = metadata.get('text', '')
+                        if text_content:
+                            st.markdown("**Content:**")
+                            st.info(text_content[:200] + "..." if len(text_content) > 200 else text_content)
+
+                    # Show all metadata
+                    if metadata:
+                        st.markdown("**All Metadata:**")
+
+                        # Separate filterable and non-filterable
+                        filterable = {}
+                        non_filterable = {}
+
+                        for key, value in metadata.items():
+                            if key in NON_FILTERABLE_KEYS:
+                                non_filterable[key] = value
+                            else:
+                                filterable[key] = value
+
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            if filterable:
+                                st.markdown("**✅ Filterable:**")
+                                st.json(filterable)
+
+                        with col2:
+                            if non_filterable:
+                                st.markdown("**❌ Non-Filterable:**")
+                                st.json(non_filterable)
 
         st.markdown("---")
         st.markdown("### 🗑️ Reset Index")
@@ -640,28 +753,28 @@ Vector Store: Connected ✓
         # Confirmation checkbox
         confirm_reset = st.checkbox("I understand this will delete all vectors permanently")
 
-        col1, col2, col3 = st.columns([1, 1, 2])
+        if st.button(
+            "🗑️ Reset Index",
+            type="primary",
+            disabled=not confirm_reset,
+            help="Delete all vectors from the index"
+        ):
+            with st.spinner("Deleting all vectors..."):
+                success, count = reset_index(s3vectors_client)
 
-        with col1:
-            if st.button(
-                "🗑️ Reset Index",
-                type="primary",
-                disabled=not confirm_reset,
-                help="Delete all vectors from the index"
-            ):
-                with st.spinner("Deleting all vectors..."):
-                    success, count = reset_index(s3vectors_client)
-
-                    if success:
-                        if count > 0:
-                            st.success(f"✅ Successfully deleted {count} vectors!")
-                            st.balloons()
-                            # Update count
-                            st.session_state.vector_count = 0
-                        else:
-                            st.info("ℹ️ Index was already empty")
+                if success:
+                    if count > 0:
+                        st.success(f"✅ Successfully deleted {count} vectors!")
+                        st.balloons()
+                        # Clear session state
+                        st.session_state.vector_count = 0
+                        if 'preview_vectors' in st.session_state:
+                            del st.session_state.preview_vectors
+                        st.rerun()
                     else:
-                        st.error("❌ Failed to reset index")
+                        st.info("ℹ️ Index was already empty")
+                else:
+                    st.error("❌ Failed to reset index")
 
 if __name__ == "__main__":
     main()
