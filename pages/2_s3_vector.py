@@ -21,54 +21,70 @@ VECTOR_INDEX_NAME = cmn_settings.VECTOR_INDEX_NAME
 # ============================================================================
 
 EMBEDDING_MODELS = {
+    "Amazon Nova Multimodal": {
+        "model_id": "amazon.nova-2-multimodal-embeddings-v1:0",
+        "dimensions": [256, 384, 1024, 3072],
+        "default_dimension": 1024,
+        "description": "Latest multimodal model supporting text, images, video, and audio",
+        "supports_embedding_purpose": True,
+        "embedding_purposes": {
+            "index": "GENERIC_INDEX",
+            "query": {
+                "document": "DOCUMENT_RETRIEVAL",
+                "text": "TEXT_RETRIEVAL",
+                "image": "IMAGE_RETRIEVAL",
+                "video": "VIDEO_RETRIEVAL",
+                "audio": "AUDIO_RETRIEVAL",
+                "generic": "GENERIC_RETRIEVAL"
+            }
+        }
+    },
     "Amazon Titan Text V2": {
         "model_id": "amazon.titan-embed-text-v2:0",
         "dimensions": [256, 512, 1024],
         "default_dimension": 1024,
-        "description": "Latest Titan model with configurable dimensions"
+        "description": "Latest Titan model with configurable dimensions",
+        "supports_embedding_purpose": False
     },
     "Amazon Titan Text V1": {
         "model_id": "amazon.titan-embed-text-v1",
         "dimensions": [1536],
         "default_dimension": 1536,
-        "description": "First generation Titan text embeddings"
+        "description": "First generation Titan text embeddings",
+        "supports_embedding_purpose": False
     },
     "Amazon Titan Multimodal V1": {
         "model_id": "amazon.titan-embed-image-v1",
         "dimensions": [1024, 384],
         "default_dimension": 1024,
-        "description": "Multimodal embeddings (1024 for images, 384 for text)"
+        "description": "Multimodal embeddings (1024 for images, 384 for text)",
+        "supports_embedding_purpose": False
     },
     "Cohere Embed English V3": {
         "model_id": "cohere.embed-english-v3",
         "dimensions": [1024],
         "default_dimension": 1024,
-        "description": "Optimized for English text"
+        "description": "Optimized for English text",
+        "supports_embedding_purpose": False
     },
     "Cohere Embed Multilingual V3": {
         "model_id": "cohere.embed-multilingual-v3",
         "dimensions": [1024],
         "default_dimension": 1024,
-        "description": "Supports 100+ languages"
+        "description": "Supports 100+ languages",
+        "supports_embedding_purpose": False
     }
 }
 
 # ============================================================================
 # METADATA CONFIGURATION
 # ============================================================================
-# Based on CloudFormation template's NonFilterableMetadataKeys
 
-# ❌ NON-FILTERABLE KEYS (from CloudFormation template)
-# These are stored but CANNOT be used in query filters
 NON_FILTERABLE_KEYS = [
     "document_title",
     "source_url",
     "created_timestamp"
 ]
-
-# ✅ FILTERABLE KEYS (any key NOT in NonFilterableMetadataKeys)
-# These CAN be used in query filters
-# Examples: document_type, category, aws_service, language, status, etc.
 
 # ============================================================================
 # AWS CLIENTS
@@ -85,7 +101,21 @@ def get_aws_clients():
 # HELPER FUNCTIONS
 # ============================================================================
 
-def generate_embedding(text: str, bedrock_client, model_id: str, dimension: int = None) -> List[float]:
+def get_model_name_from_id(model_id: str) -> str:
+    """Get simplified model name from model ID for tracking"""
+    for name, config in EMBEDDING_MODELS.items():
+        if config["model_id"] == model_id:
+            return name
+    return model_id
+
+def generate_embedding(
+    text: str, 
+    bedrock_client, 
+    model_id: str, 
+    dimension: int = None,
+    embedding_purpose: str = None,
+    is_query: bool = False
+) -> List[float]:
     """
     Generate embedding vector using Amazon Bedrock
 
@@ -93,26 +123,57 @@ def generate_embedding(text: str, bedrock_client, model_id: str, dimension: int 
         text: Input text to embed
         bedrock_client: Boto3 Bedrock client
         model_id: Bedrock model ID
-        dimension: Optional dimension for Titan V2 (256, 512, or 1024)
+        dimension: Optional dimension
+        embedding_purpose: For Nova models (GENERIC_INDEX, DOCUMENT_RETRIEVAL, etc.)
+        is_query: Whether this is a query (vs document indexing)
 
     Returns:
         List of floats representing the embedding vector
     """
     try:
-        # Prepare request body based on model
-        if "titan-embed-text-v2" in model_id:
-            # Titan V2 supports dimension parameter
+        # Nova Multimodal Embeddings
+        if "nova" in model_id.lower():
+            # Determine embedding purpose
+            if embedding_purpose is None:
+                embedding_purpose = "GENERIC_INDEX" if not is_query else "DOCUMENT_RETRIEVAL"
+
+            body = {
+                "taskType": "SINGLE_EMBEDDING",
+                "singleEmbeddingParams": {
+                    "embeddingPurpose": embedding_purpose,
+                    "embeddingDimension": dimension or 1024,
+                    "text": {
+                        "truncationMode": "END",
+                        "value": text
+                    }
+                }
+            }
+
+            response = bedrock_client.invoke_model(
+                modelId=model_id,
+                body=json.dumps(body),
+                accept="application/json",
+                contentType="application/json"
+            )
+
+            response_body = json.loads(response["body"].read())
+            return response_body["embeddings"][0]["embedding"]
+
+        # Titan V2
+        elif "titan-embed-text-v2" in model_id:
             body = {"inputText": text}
             if dimension:
                 body["dimensions"] = dimension
+
+        # Cohere models
         elif "cohere" in model_id:
-            # Cohere models
             body = {
                 "texts": [text],
-                "input_type": "search_document"
+                "input_type": "search_document" if not is_query else "search_query"
             }
+
+        # Titan V1 and other models
         else:
-            # Titan V1 and other models
             body = {"inputText": text}
 
         response = bedrock_client.invoke_model(
@@ -144,7 +205,16 @@ def add_documents_to_vector_store(
     timestamp = datetime.now().isoformat()
 
     for i, text in enumerate(texts):
-        embedding = generate_embedding(text, bedrock_client, model_id, dimension)
+        # For Nova: Always use GENERIC_INDEX for indexing
+        embedding = generate_embedding(
+            text, 
+            bedrock_client, 
+            model_id, 
+            dimension,
+            embedding_purpose="GENERIC_INDEX" if "nova" in model_id.lower() else None,
+            is_query=False
+        )
+
         if embedding is None:
             continue
 
@@ -152,8 +222,9 @@ def add_documents_to_vector_store(
         metadata = {
             "text": text,
             "document_index": str(i),
-            "created_timestamp": timestamp,  # Non-filterable
-            "embedding_model": model_id  # Track which model was used
+            "created_timestamp": timestamp,
+            "embedding_model": model_id,
+            "embedding_model_name": get_model_name_from_id(model_id)
         }
 
         # Add custom metadata from user
@@ -183,11 +254,25 @@ def query_vector_store(
     s3vectors_client,
     model_id: str,
     dimension: int = None,
+    embedding_purpose: str = None,
     top_k: int = 5,
     metadata_filter: Dict[str, Any] = None
 ) -> List[Dict[str, Any]]:
     """Query the vector store for similar documents"""
-    embedding = generate_embedding(question, bedrock_client, model_id, dimension)
+
+    # For Nova: Use specified purpose, default to DOCUMENT_RETRIEVAL
+    if "nova" in model_id.lower() and embedding_purpose is None:
+        embedding_purpose = "DOCUMENT_RETRIEVAL"
+
+    embedding = generate_embedding(
+        question, 
+        bedrock_client, 
+        model_id, 
+        dimension,
+        embedding_purpose=embedding_purpose,
+        is_query=True
+    )
+
     if embedding is None:
         return []
 
@@ -201,7 +286,8 @@ def query_vector_store(
             "returnDistance": True,
         }
 
-        if metadata_filter:
+        # Only add filter if it has values
+        if metadata_filter and len(metadata_filter) > 0:
             query_params["filter"] = metadata_filter
 
         response = s3vectors_client.query_vectors(**query_params)
@@ -383,7 +469,7 @@ def main():
         selected_model_name = st.selectbox(
             "Select Embedding Model",
             options=list(EMBEDDING_MODELS.keys()),
-            index=0,  # Default to Titan V2
+            index=0,  # Default to Nova
             help="Choose the embedding model to use for generating vectors"
         )
 
@@ -393,7 +479,7 @@ def main():
         # Show model info
         st.info(f"**Model:** {selected_model_name}\n\n{model_config['description']}")
 
-        # Dimension selection (if applicable)
+        # Dimension selection
         dimension = None
         if len(model_config["dimensions"]) > 1:
             dimension = st.selectbox(
@@ -406,23 +492,55 @@ def main():
             dimension = model_config["dimensions"][0]
             st.text(f"Dimension: {dimension}")
 
+        # Nova-specific: Embedding Purpose for queries
+        embedding_purpose_query = None
+        if model_config.get("supports_embedding_purpose", False):
+            st.markdown("---")
+            st.markdown("**🎯 Query Purpose (Nova only)**")
+
+            purpose_options = {
+                "Document Retrieval": "DOCUMENT_RETRIEVAL",
+                "Text Retrieval": "TEXT_RETRIEVAL",
+                "Generic Retrieval": "GENERIC_RETRIEVAL",
+                "Image Retrieval": "IMAGE_RETRIEVAL",
+                "Video Retrieval": "VIDEO_RETRIEVAL",
+                "Audio Retrieval": "AUDIO_RETRIEVAL"
+            }
+
+            selected_purpose = st.selectbox(
+                "Query Type",
+                options=list(purpose_options.keys()),
+                index=0,  # Default to Document Retrieval
+                help="Optimize query embeddings for specific retrieval tasks"
+            )
+
+            embedding_purpose_query = purpose_options[selected_purpose]
+
+            st.caption(f"📝 Index: GENERIC_INDEX\n🔍 Query: {embedding_purpose_query}")
+
         st.markdown("---")
         st.markdown(f"**Model ID:**")
         st.code(model_id, language=None)
         st.markdown(f"**Dimension:** {dimension}")
+
+        if embedding_purpose_query:
+            st.markdown(f"**Query Purpose:** {embedding_purpose_query}")
 
     with st.expander("⚙️ Configuration & Metadata Info", expanded=False):
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Configuration:**")
-            st.code(f"""
+            config_text = f"""
 Embedding Model: {selected_model_name}
 Model ID: {model_id}
 Dimension: {dimension}
 AWS Region: {AWS_REGION}
 Vector Store: Connected ✓
-            """)
+            """
+            if embedding_purpose_query:
+                config_text += f"\nQuery Purpose: {embedding_purpose_query}"
+            st.code(config_text)
 
         with col2:
             st.markdown("**❌ Non-Filterable Keys:**")
@@ -436,6 +554,7 @@ Vector Store: Connected ✓
             st.text("• category")
             st.text("• aws_service")
             st.text("• embedding_model")
+            st.text("• embedding_model_name")
             st.text("• (any other metadata)")
 
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -451,7 +570,10 @@ Vector Store: Connected ✓
     with tab1:
         st.header("Add Documents to Vector Store")
 
-        st.info(f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})")
+        info_text = f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})"
+        if model_config.get("supports_embedding_purpose", False):
+            info_text += "\n\n📝 Documents will be indexed with **GENERIC_INDEX**"
+        st.info(info_text)
 
         input_method = st.radio(
             "Choose input method:",
@@ -667,7 +789,10 @@ Vector Store: Connected ✓
     with tab2:
         st.header("Query Vector Store")
 
-        st.info(f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})")
+        info_text = f"🤖 Using: **{selected_model_name}** (Dimension: {dimension})"
+        if embedding_purpose_query:
+            info_text += f"\n\n🔍 Query Purpose: **{embedding_purpose_query}**"
+        st.info(info_text)
 
         col1, col2 = st.columns([3, 1])
 
@@ -686,7 +811,7 @@ Vector Store: Connected ✓
             )
 
         with st.expander("🔧 Metadata Filters (Optional)", expanded=False):
-            st.markdown("**✅ Filter by Filterable Metadata Only**")
+            st.markdown("**✅ Filter by Filterable Metadata**")
             st.caption("Only keys not in NonFilterableMetadataKeys can be used")
 
             col1, col2, col3 = st.columns(3)
@@ -724,14 +849,18 @@ Vector Store: Connected ✓
                     if filter_service:
                         metadata_filter["aws_service"] = filter_service
 
+                    # Pass None if no filters
+                    filter_to_use = metadata_filter if metadata_filter else None
+
                     results = query_vector_store(
                         query_text,
                         bedrock_client,
                         s3vectors_client,
                         model_id,
                         dimension,
+                        embedding_purpose=embedding_purpose_query if embedding_purpose_query else None,
                         top_k=top_k,
-                        metadata_filter=metadata_filter if metadata_filter else None
+                        metadata_filter=filter_to_use
                     )
 
                     if results:
