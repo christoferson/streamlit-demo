@@ -20,6 +20,7 @@ DOC_METADATA_TABLE = cmn_settings.CMN_KB_DOC_METADATA_TABLE
 # Embedding Model Configuration
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIMENSION = 1024
+CMN_KB_MODEL_ARN = cmn_settings.MODEL_ARN
 
 # ============================================================================
 # AWS CLIENTS
@@ -143,7 +144,7 @@ def retrieve_and_generate(
     query: str,
     user_id: str,
     kb_id: str,
-    model_arn: str = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0"
+    model_arn: str = CMN_KB_MODEL_ARN
 ) -> dict:
     """Retrieve and Generate answer using RAG"""
 
