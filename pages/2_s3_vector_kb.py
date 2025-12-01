@@ -34,8 +34,9 @@ def get_aws_clients():
     bedrock_runtime_client = session.client("bedrock-runtime")
     s3_client = session.client("s3")
     dynamodb = session.resource("dynamodb")
+    bedrock_agent = session.client("bedrock-agent")
 
-    return bedrock_agent_client, bedrock_runtime_client, s3_client, dynamodb
+    return bedrock_agent_client, bedrock_runtime_client, s3_client, dynamodb, bedrock_agent
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -192,10 +193,10 @@ def list_kb_documents(dynamodb, kb_id: str) -> List[dict]:
 
     return response.get('Items', [])
 
-def get_ingestion_jobs(bedrock_agent_client, max_results: int = 10) -> List[dict]:
+def get_ingestion_jobs(bedrock_agent, max_results: int = 10) -> List[dict]:
     """Get recent ingestion jobs"""
     try:
-        response = bedrock_agent_client.list_ingestion_jobs(
+        response = bedrock_agent.list_ingestion_jobs(
             knowledgeBaseId=KNOWLEDGE_BASE_ID,
             dataSourceId=DATA_SOURCE_ID,
             maxResults=max_results
@@ -204,6 +205,50 @@ def get_ingestion_jobs(bedrock_agent_client, max_results: int = 10) -> List[dict
     except Exception as e:
         st.error(f"Error listing ingestion jobs: {e}")
         return []
+
+def check_s3_documents(s3_client, user_id: str, kb_id: str) -> List[dict]:
+    """Check what documents exist in S3 for this user/kb"""
+    try:
+        prefix = f"{user_id}/{kb_id}/"
+        response = s3_client.list_objects_v2(
+            Bucket=DOCUMENT_BUCKET_NAME,
+            Prefix=prefix
+        )
+
+        objects = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                # Get object metadata
+                head = s3_client.head_object(
+                    Bucket=DOCUMENT_BUCKET_NAME,
+                    Key=obj['Key']
+                )
+                objects.append({
+                    'Key': obj['Key'],
+                    'Size': obj['Size'],
+                    'LastModified': obj['LastModified'],
+                    'Metadata': head.get('Metadata', {})
+                })
+        return objects
+    except Exception as e:
+        st.error(f"Error checking S3: {e}")
+        return []
+
+def test_retrieve_no_filter(bedrock_agent_client, query: str, top_k: int = 5) -> dict:
+    """Test retrieve without any filters to see if there's any data"""
+    try:
+        response = bedrock_agent_client.retrieve(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            retrievalQuery={'text': query},
+            retrievalConfiguration={
+                'vectorSearchConfiguration': {
+                    'numberOfResults': top_k
+                }
+            }
+        )
+        return response
+    except Exception as e:
+        return {'error': str(e)}
 
 # ============================================================================
 # STREAMLIT UI
@@ -221,14 +266,14 @@ def main():
 
     # Initialize clients
     try:
-        bedrock_agent_client, bedrock_runtime_client, s3_client, dynamodb = get_aws_clients()
+        bedrock_agent_client, bedrock_runtime_client, s3_client, dynamodb, bedrock_agent = get_aws_clients()
         st.sidebar.success("✅ Connected to AWS")
     except Exception as e:
         st.error(f"❌ Failed to connect to AWS: {e}")
         st.stop()
 
     # ========================================================================
-    # SIDEBAR - User Selection
+    # SIDEBAR - User Selection & Configuration
     # ========================================================================
     with st.sidebar:
         st.header("👤 User Context")
@@ -246,27 +291,97 @@ def main():
 
         st.markdown("---")
 
-        # Configuration Info
-        with st.expander("⚙️ Configuration", expanded=False):
+        # ===== NEW: Configuration Display =====
+        with st.expander("📋 System Configuration", expanded=False):
+            st.markdown("### Core Settings")
             st.code(f"""
 Region: {AWS_REGION}
 Profile: {AWS_PROFILE}
 KB ID: {KNOWLEDGE_BASE_ID}
 Data Source: {DATA_SOURCE_ID}
-Bucket: {DOCUMENT_BUCKET_NAME}
+Full DS ID: {KNOWLEDGE_BASE_ID}|{DATA_SOURCE_ID}
+            """)
+
+            st.markdown("### Storage")
+            st.code(f"""
+Document Bucket: {DOCUMENT_BUCKET_NAME}
+Vector Bucket: {VECTOR_BUCKET_NAME}
+Vector Index: {VECTOR_INDEX_NAME}
+            """)
+
+            st.markdown("### DynamoDB Tables")
+            st.code(f"""
+KB Metadata: {KB_METADATA_TABLE}
+Doc Metadata: {DOC_METADATA_TABLE}
+            """)
+
+            st.markdown("### Embedding")
+            st.code(f"""
 Model: {EMBEDDING_MODEL_ID}
 Dimension: {EMBEDDING_DIMENSION}
             """)
 
+        # ===== NEW: Connection Test =====
+        with st.expander("🔍 Connection Test", expanded=False):
+            if st.button("Test Connections"):
+                with st.spinner("Testing..."):
+                    results = {}
+
+                    # Test Knowledge Base
+                    try:
+                        kb_info = bedrock_agent.get_knowledge_base(
+                            knowledgeBaseId=KNOWLEDGE_BASE_ID
+                        )
+                        results["Knowledge Base"] = f"✅ {kb_info['knowledgeBase']['status']}"
+                    except Exception as e:
+                        results["Knowledge Base"] = f"❌ {str(e)[:50]}"
+
+                    # Test Data Source
+                    try:
+                        ds_info = bedrock_agent.get_data_source(
+                            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                            dataSourceId=DATA_SOURCE_ID
+                        )
+                        results["Data Source"] = f"✅ {ds_info['dataSource']['status']}"
+                    except Exception as e:
+                        results["Data Source"] = f"❌ {str(e)[:50]}"
+
+                    # Test S3 Bucket
+                    try:
+                        s3_client.head_bucket(Bucket=DOCUMENT_BUCKET_NAME)
+                        results["S3 Bucket"] = "✅ Accessible"
+                    except Exception as e:
+                        results["S3 Bucket"] = f"❌ {str(e)[:50]}"
+
+                    # Test DynamoDB Tables
+                    try:
+                        kb_table = dynamodb.Table(KB_METADATA_TABLE)
+                        kb_table.table_status
+                        results["KB Table"] = "✅ Accessible"
+                    except Exception as e:
+                        results["KB Table"] = f"❌ {str(e)[:50]}"
+
+                    try:
+                        doc_table = dynamodb.Table(DOC_METADATA_TABLE)
+                        doc_table.table_status
+                        results["Doc Table"] = "✅ Accessible"
+                    except Exception as e:
+                        results["Doc Table"] = f"❌ {str(e)[:50]}"
+
+                    # Display results
+                    for service, status in results.items():
+                        st.text(f"{service}: {status}")
+
     # ========================================================================
     # MAIN TABS
     # ========================================================================
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📚 My Knowledge Bases",
         "➕ Create KB",
         "📤 Upload Documents",
         "🔍 Query KB",
-        "📊 System Status"
+        "📊 System Status",
+        "🐛 Debug Search"  # NEW DEBUG TAB
     ])
 
     # ========================================================================
@@ -472,6 +587,9 @@ Dimension: {EMBEDDING_DIMENSION}
                     if query_mode == "Retrieve Only":
                         top_k = st.slider("Number of results", 1, 10, 5)
 
+                    # Show debug info
+                    show_debug = st.checkbox("Show debug info", value=True)  # Changed to True by default
+
                 if st.button("🔍 Search", type="primary"):
                     if not query_text:
                         st.warning("Please enter a question")
@@ -479,6 +597,24 @@ Dimension: {EMBEDDING_DIMENSION}
                         try:
                             with st.spinner("Searching..."):
                                 if query_mode == "Retrieve Only":
+                                    # Show debug info if requested
+                                    if show_debug:
+                                        with st.expander("🔍 Debug: Request Details", expanded=True):
+                                            debug_info = {
+                                                "knowledgeBaseId": KNOWLEDGE_BASE_ID,
+                                                "query": query_text,
+                                                "user_id": user_id,
+                                                "kb_id": selected_kb_id,
+                                                "filter": {
+                                                    'andAll': [
+                                                        {'equals': {'key': 'user_id', 'value': user_id}},
+                                                        {'equals': {'key': 'kb_id', 'value': selected_kb_id}}
+                                                    ]
+                                                },
+                                                "numberOfResults": top_k
+                                            }
+                                            st.json(debug_info)
+
                                     # Retrieve only
                                     response = query_knowledge_base(
                                         bedrock_agent_client,
@@ -488,7 +624,17 @@ Dimension: {EMBEDDING_DIMENSION}
                                         top_k
                                     )
 
+                                    # DEBUG: Show full response
+                                    if show_debug:
+                                        with st.expander("🔍 Debug: Full API Response", expanded=True):
+                                            st.json(response)
+
                                     results = response.get('retrievalResults', [])
+
+                                    # DEBUG: Show what we got
+                                    st.write(f"**Debug:** Response keys: {list(response.keys())}")
+                                    st.write(f"**Debug:** Number of results: {len(results)}")
+                                    st.write(f"**Debug:** Results type: {type(results)}")
 
                                     if results:
                                         st.success(f"✅ Found {len(results)} result(s)")
@@ -496,7 +642,8 @@ Dimension: {EMBEDDING_DIMENSION}
                                         for i, result in enumerate(results, 1):
                                             with st.expander(f"📄 Result {i} (Score: {result.get('score', 0):.4f})", expanded=(i==1)):
                                                 st.markdown("**Content:**")
-                                                st.info(result.get('content', {}).get('text', 'N/A'))
+                                                content_text = result.get('content', {}).get('text', 'N/A')
+                                                st.info(content_text)
 
                                                 st.markdown("**Metadata:**")
                                                 metadata = result.get('metadata', {})
@@ -506,8 +653,69 @@ Dimension: {EMBEDDING_DIMENSION}
                                                 location = result.get('location', {})
                                                 if 's3Location' in location:
                                                     st.code(location['s3Location'].get('uri', 'N/A'))
+
+                                                # Show full result in debug mode
+                                                if show_debug:
+                                                    with st.expander("Full Result Object"):
+                                                        st.json(result)
                                     else:
-                                        st.warning("No results found")
+                                        st.warning("⚠️ No results found")
+
+                                        # Show helpful debugging info
+                                        st.markdown("### 🔍 Troubleshooting")
+                                        st.markdown("No results were returned. This could mean:")
+                                        st.markdown("""
+                                        1. **Documents not ingested yet** - Check System Status tab
+                                        2. **Metadata mismatch** - Documents may not have correct user_id/kb_id
+                                        3. **Query doesn't match content** - Try a different query
+                                        4. **Ingestion failed** - Check ingestion job status
+                                        """)
+
+                                        # Check S3 documents
+                                        with st.expander("📁 Check S3 Documents", expanded=True):
+                                            s3_docs = check_s3_documents(s3_client, user_id, selected_kb_id)
+                                            if s3_docs:
+                                                st.success(f"Found {len(s3_docs)} document(s) in S3:")
+                                                for doc in s3_docs:
+                                                    st.text(f"• {doc['Key']}")
+                                                    st.json(doc['Metadata'])
+                                            else:
+                                                st.warning(f"No documents found in S3 at: {user_id}/{selected_kb_id}/")
+
+                                        # Check ingestion status
+                                        with st.expander("📥 Check Recent Ingestion Jobs", expanded=True):
+                                            try:
+                                                jobs = bedrock_agent.list_ingestion_jobs(
+                                                    knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                                                    dataSourceId=DATA_SOURCE_ID,
+                                                    maxResults=5
+                                                )
+
+                                                job_summaries = jobs.get('ingestionJobSummaries', [])
+                                                if job_summaries:
+                                                    for job in job_summaries:
+                                                        status = job.get('status', 'UNKNOWN')
+                                                        status_emoji = {
+                                                            'COMPLETE': '✅',
+                                                            'IN_PROGRESS': '⏳',
+                                                            'FAILED': '❌',
+                                                            'STARTING': '🔄'
+                                                        }.get(status, '❓')
+
+                                                        st.text(f"{status_emoji} {job.get('ingestionJobId', 'N/A')}: {status}")
+
+                                                        if status == 'COMPLETE':
+                                                            stats = job.get('statistics', {})
+                                                            st.text(f"   Scanned: {stats.get('numberOfDocumentsScanned', 0)}, "
+                                                                f"Modified: {stats.get('numberOfModifiedDocuments', 0)}, "
+                                                                f"Deleted: {stats.get('numberOfDocumentsDeleted', 0)}")
+                                                else:
+                                                    st.warning("No ingestion jobs found")
+                                            except Exception as e:
+                                                st.error(f"Error checking ingestion: {e}")
+
+                                        # Suggest going to debug tab
+                                        st.info("💡 Go to the **Debug Search** tab for more detailed diagnostics")
 
                                 else:
                                     # Retrieve and Generate
@@ -517,6 +725,11 @@ Dimension: {EMBEDDING_DIMENSION}
                                         user_id,
                                         selected_kb_id
                                     )
+
+                                    # DEBUG: Show full response
+                                    if show_debug:
+                                        with st.expander("🔍 Debug: Full API Response", expanded=False):
+                                            st.json(response)
 
                                     # Display answer
                                     st.markdown("### 💬 Answer")
@@ -540,13 +753,17 @@ Dimension: {EMBEDDING_DIMENSION}
                                                     location = ref.get('location', {})
                                                     if 's3Location' in location:
                                                         st.code(location['s3Location'].get('uri', 'N/A'))
+
+                                                    st.markdown("**Metadata:**")
+                                                    st.json(ref.get('metadata', {}))
                                     else:
                                         st.info("No citations available")
 
                         except Exception as e:
-                            st.error(f"Error querying Knowledge Base: {e}")
+                            st.error(f"❌ Error querying Knowledge Base: {e}")
                             import traceback
-                            st.code(traceback.format_exc())
+                            with st.expander("Full Error Traceback"):
+                                st.code(traceback.format_exc())
 
         except Exception as e:
             st.error(f"Error: {e}")
@@ -564,11 +781,6 @@ Dimension: {EMBEDDING_DIMENSION}
         st.subheader("📥 Recent Ingestion Jobs")
 
         try:
-            # Note: bedrock-agent-runtime doesn't have list_ingestion_jobs
-            # We need bedrock-agent client for this
-            session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
-            bedrock_agent = session.client("bedrock-agent")
-
             jobs = bedrock_agent.list_ingestion_jobs(
                 knowledgeBaseId=KNOWLEDGE_BASE_ID,
                 dataSourceId=DATA_SOURCE_ID,
@@ -594,7 +806,10 @@ Dimension: {EMBEDDING_DIMENSION}
                         with col1:
                             st.metric("Status", status)
                         with col2:
-                            st.metric("Started", job.get('startedAt', 'N/A'))
+                            started = job.get('startedAt', 'N/A')
+                            if started != 'N/A':
+                                started = started.strftime('%Y-%m-%d %H:%M:%S')
+                            st.metric("Started", started)
                         with col3:
                             stats = job.get('statistics', {})
                             st.metric("Documents", stats.get('numberOfDocumentsScanned', 0))
@@ -616,7 +831,10 @@ Dimension: {EMBEDDING_DIMENSION}
             "AWS Profile": AWS_PROFILE,
             "Knowledge Base ID": KNOWLEDGE_BASE_ID,
             "Data Source ID": DATA_SOURCE_ID,
+            "Full Data Source ID": f"{KNOWLEDGE_BASE_ID}|{DATA_SOURCE_ID}",
             "Document Bucket": DOCUMENT_BUCKET_NAME,
+            "Vector Bucket": VECTOR_BUCKET_NAME,
+            "Vector Index": VECTOR_INDEX_NAME,
             "KB Metadata Table": KB_METADATA_TABLE,
             "Doc Metadata Table": DOC_METADATA_TABLE,
             "Embedding Model": EMBEDDING_MODEL_ID,
@@ -624,6 +842,265 @@ Dimension: {EMBEDDING_DIMENSION}
         }
 
         st.json(config_data)
+
+    # ========================================================================
+    # TAB 6: DEBUG SEARCH (NEW)
+    # ========================================================================
+    with tab6:
+        st.header("🐛 Debug Search Issues")
+
+        st.markdown("""
+        This tab helps diagnose why searches return no results.
+        """)
+
+        # Select KB for debugging
+        try:
+            user_kbs = list_user_kbs(dynamodb, user_id)
+
+            if not user_kbs:
+                st.warning("No Knowledge Bases found. Create one first.")
+            else:
+                kb_options = {kb['kb_name']: kb['kb_id'] for kb in user_kbs}
+
+                debug_kb_name = st.selectbox(
+                    "Select Knowledge Base to Debug",
+                    options=list(kb_options.keys()),
+                    key="debug_kb_select"
+                )
+
+                debug_kb_id = kb_options[debug_kb_name]
+
+                st.info(f"Debugging KB: **{debug_kb_name}** (`{debug_kb_id}`)")
+
+                # Step 1: Check S3 Documents
+                st.subheader("1️⃣ Check S3 Documents")
+                if st.button("Check S3", key="debug_check_s3"):
+                    with st.spinner("Checking S3..."):
+                        s3_docs = check_s3_documents(s3_client, user_id, debug_kb_id)
+                        if s3_docs:
+                            st.success(f"✅ Found {len(s3_docs)} document(s) in S3")
+                            for doc in s3_docs:
+                                with st.expander(f"📄 {doc['Key']}"):
+                                    st.json(doc)
+                        else:
+                            st.error(f"❌ No documents found in S3 at: {user_id}/{debug_kb_id}/")
+                            st.markdown("**Action:** Upload documents in the Upload tab")
+
+                # Step 2: Check Ingestion Status
+                st.subheader("2️⃣ Check Ingestion Status")
+                if st.button("Check Ingestion", key="debug_check_ingestion"):
+                    with st.spinner("Checking ingestion jobs..."):
+                        try:
+                            jobs = bedrock_agent.list_ingestion_jobs(
+                                knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                                dataSourceId=DATA_SOURCE_ID,
+                                maxResults=5
+                            )
+
+                            job_summaries = jobs.get('ingestionJobSummaries', [])
+                            if job_summaries:
+                                st.success(f"✅ Found {len(job_summaries)} ingestion job(s)")
+                                for job in job_summaries:
+                                    status = job.get('status', 'UNKNOWN')
+                                    status_emoji = {
+                                        'COMPLETE': '✅',
+                                        'IN_PROGRESS': '⏳',
+                                        'FAILED': '❌',
+                                        'STARTING': '🔄'
+                                    }.get(status, '❓')
+
+                                    with st.expander(f"{status_emoji} {job.get('ingestionJobId', 'N/A')} - {status}"):
+                                        st.json(job)
+
+                                        if status == 'FAILED':
+                                            st.error("This job failed. Check CloudWatch logs for details.")
+                                        elif status == 'IN_PROGRESS':
+                                            st.info("Job is still running. Wait for completion.")
+                                        elif status == 'COMPLETE':
+                                            stats = job.get('statistics', {})
+                                            if stats.get('numberOfDocumentsScanned', 0) == 0:
+                                                st.warning("Job completed but no documents were scanned!")
+                            else:
+                                st.warning("❌ No ingestion jobs found")
+                                st.markdown("**Action:** Upload a document to trigger ingestion")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                # Step 3: Test Retrieve WITHOUT Filter
+                st.subheader("3️⃣ Test Retrieve (No Filter)")
+                st.markdown("Test if ANY data exists in the knowledge base (ignoring metadata filters)")
+
+                test_query = st.text_input("Test Query", value="Amazon S3", key="debug_test_query")
+
+                if st.button("Test Retrieve (No Filter)", key="debug_test_retrieve"):
+                    with st.spinner("Testing..."):
+                        response = test_retrieve_no_filter(bedrock_agent_client, test_query, 10)
+
+                        # Show full response
+                        with st.expander("Full API Response", expanded=True):
+                            st.json(response)
+
+                        if 'error' in response:
+                            st.error(f"❌ Error: {response['error']}")
+                        else:
+                            results = response.get('retrievalResults', [])
+                            st.write(f"**Response keys:** {list(response.keys())}")
+                            st.write(f"**Number of results:** {len(results)}")
+
+                            if results:
+                                st.success(f"✅ Found {len(results)} result(s) WITHOUT filter")
+                                st.markdown("**This means:**")
+                                st.markdown("- ✅ Knowledge base has data")
+                                st.markdown("- ❌ But metadata filters are blocking results")
+                                st.markdown("- 🔍 Check that documents have correct user_id and kb_id metadata")
+
+                                for i, result in enumerate(results, 1):
+                                    with st.expander(f"Result {i} - Score: {result.get('score', 0):.4f}"):
+                                        st.markdown("**Content Preview:**")
+                                        content = result.get('content', {}).get('text', 'N/A')
+                                        st.info(content[:500] + "..." if len(content) > 500 else content)
+
+                                        st.markdown("**Metadata:**")
+                                        metadata = result.get('metadata', {})
+                                        st.json(metadata)
+
+                                        st.markdown("**Location:**")
+                                        location = result.get('location', {})
+                                        st.json(location)
+                            else:
+                                st.error("❌ No results found even WITHOUT filter")
+                                st.markdown("**This means:**")
+                                st.markdown("- ❌ Knowledge base is empty OR")
+                                st.markdown("- ❌ Ingestion hasn't completed successfully")
+                                st.markdown("- 🔍 Check ingestion job status above")
+
+                # Step 4: Test Retrieve WITH Filter
+                st.subheader("4️⃣ Test Retrieve (With Filter)")
+                st.markdown("Test with metadata filters (normal search)")
+
+                if st.button("Test Retrieve (With Filter)", key="debug_test_retrieve_filter"):
+                    with st.spinner("Testing..."):
+                        try:
+                            response = query_knowledge_base(
+                                bedrock_agent_client,
+                                test_query,
+                                user_id,
+                                debug_kb_id,
+                                10
+                            )
+
+                            # Show full response
+                            with st.expander("Full API Response", expanded=True):
+                                st.json(response)
+
+                            results = response.get('retrievalResults', [])
+                            st.write(f"**Response keys:** {list(response.keys())}")
+                            st.write(f"**Number of results:** {len(results)}")
+
+                            if results:
+                                st.success(f"✅ Found {len(results)} result(s) WITH filter")
+                                st.markdown("**Search is working correctly!**")
+
+                                for i, result in enumerate(results, 1):
+                                    with st.expander(f"Result {i} - Score: {result.get('score', 0):.4f}"):
+                                        st.markdown("**Content Preview:**")
+                                        content = result.get('content', {}).get('text', 'N/A')
+                                        st.info(content[:500] + "..." if len(content) > 500 else content)
+
+                                        st.markdown("**Metadata:**")
+                                        metadata = result.get('metadata', {})
+                                        st.json(metadata)
+
+                                        # Check if metadata matches what we're filtering for
+                                        if metadata:
+                                            meta_user_id = metadata.get('user_id')
+                                            meta_kb_id = metadata.get('kb_id')
+
+                                            if meta_user_id == user_id and meta_kb_id == debug_kb_id:
+                                                st.success(f"✅ Metadata matches: user_id={meta_user_id}, kb_id={meta_kb_id}")
+                                            else:
+                                                st.error(f"❌ Metadata mismatch!")
+                                                st.error(f"Expected: user_id={user_id}, kb_id={debug_kb_id}")
+                                                st.error(f"Got: user_id={meta_user_id}, kb_id={meta_kb_id}")
+
+                                        st.markdown("**Location:**")
+                                        location = result.get('location', {})
+                                        st.json(location)
+                            else:
+                                st.error("❌ No results found WITH filter")
+                                st.markdown("**Possible causes:**")
+                                st.markdown("1. Documents don't have correct metadata (user_id, kb_id)")
+                                st.markdown("2. Metadata values don't match exactly")
+                                st.markdown(f"3. Expected: user_id=`{user_id}`, kb_id=`{debug_kb_id}`")
+
+                                # Show what we're filtering for
+                                with st.expander("Filter Details"):
+                                    st.json({
+                                        'andAll': [
+                                            {'equals': {'key': 'user_id', 'value': user_id}},
+                                            {'equals': {'key': 'kb_id', 'value': debug_kb_id}}
+                                        ]
+                                    })
+
+                                st.markdown("---")
+                                st.markdown("**Next Steps:**")
+                                st.markdown("1. Run 'Test Retrieve (No Filter)' above to see if ANY data exists")
+                                st.markdown("2. If data exists without filter, the problem is metadata")
+                                st.markdown("3. Check the metadata on documents that DO return (without filter)")
+                                st.markdown("4. Ensure ingestion job completed successfully")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
+                # Step 5: Check DynamoDB Metadata
+                st.subheader("5️⃣ Check DynamoDB Metadata")
+                if st.button("Check DynamoDB", key="debug_check_dynamodb"):
+                    with st.spinner("Checking DynamoDB..."):
+                        # Check KB metadata
+                        try:
+                            kb_table = dynamodb.Table(KB_METADATA_TABLE)
+                            kb_response = kb_table.get_item(Key={'kb_id': debug_kb_id})
+
+                            if 'Item' in kb_response:
+                                st.success("✅ KB metadata found")
+                                with st.expander("KB Metadata"):
+                                    st.json(kb_response['Item'])
+                            else:
+                                st.warning("❌ KB metadata not found")
+                        except Exception as e:
+                            st.error(f"Error checking KB metadata: {e}")
+
+                        # Check document metadata
+                        try:
+                            docs = list_kb_documents(dynamodb, debug_kb_id)
+                            if docs:
+                                st.success(f"✅ Found {len(docs)} document(s) in metadata table")
+                                for doc in docs:
+                                    with st.expander(f"📄 {doc.get('filename', 'Unknown')}"):
+                                        st.json(doc)
+                            else:
+                                st.warning("❌ No document metadata found")
+                        except Exception as e:
+                            st.error(f"Error checking document metadata: {e}")
+
+                # Summary
+                st.markdown("---")
+                st.subheader("📋 Diagnostic Summary")
+                st.markdown("""
+                **Run all checks above in order:**
+
+                1. ✅ S3 has documents → Documents uploaded
+                2. ✅ Ingestion job COMPLETE → Documents processed
+                3. ✅ Retrieve without filter works → Data in knowledge base
+                4. ✅ Retrieve with filter works → Metadata correct
+                5. ✅ DynamoDB has metadata → Tracking working
+
+                **If any step fails, that's where the problem is!**
+                """)
+
+        except Exception as e:
+            st.error(f"Error in debug tab: {e}")
 
 if __name__ == "__main__":
     main()
