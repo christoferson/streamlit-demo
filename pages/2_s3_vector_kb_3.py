@@ -160,6 +160,52 @@ def upload_document_to_kb(s3_client, user_id: str, kb_id: str, file, metadata: d
 
     return s3_key
 
+def delete_document(s3_client, dynamodb, bedrock_agent, doc: dict, user_id: str, kb_id: str) -> bool:
+    """Delete document from S3, DynamoDB, and trigger re-sync"""
+    try:
+        s3_key = doc['s3_key']
+        document_id = doc['document_id']
+
+        # 1. Delete from S3
+        s3_client.delete_object(
+            Bucket=DOCUMENT_BUCKET_NAME,
+            Key=s3_key
+        )
+
+        # 2. Delete metadata.json if exists
+        try:
+            s3_client.delete_object(
+                Bucket=DOCUMENT_BUCKET_NAME,
+                Key=f"{s3_key}.metadata.json"
+            )
+        except:
+            pass  # Metadata file might not exist
+
+        # 3. Delete from DynamoDB
+        table = dynamodb.Table(DOC_METADATA_TABLE)
+        table.delete_item(
+            Key={'document_id': document_id}
+        )
+
+        # 4. Trigger re-sync to remove from Bedrock
+        try:
+            bedrock_agent.start_ingestion_job(
+                knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                dataSourceId=DATA_SOURCE_ID,
+                description=f"Sync after deleting: {doc['filename']}"
+            )
+        except Exception as e:
+            # If ingestion job is already running, that's okay
+            if "ConflictException" not in str(e):
+                raise
+
+        return True
+
+    except Exception as e:
+        st.error(f"Error deleting document: {e}")
+        return False
+
+
 def query_knowledge_base(
     bedrock_agent_client,
     query: str,
@@ -450,13 +496,14 @@ Dimension: {EMBEDDING_DIMENSION}
     # ========================================================================
     # MAIN TABS
     # ========================================================================
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📚 My Knowledge Bases",
         "➕ Create KB",
         "📤 Upload Documents",
         "🔍 Query KB",
         "📊 System Status",
-        "🐛 Debug Search"  # NEW DEBUG TAB
+        "📝 Manage Documents",  # NEW
+        "🐛 Debug Search"
     ])
 
     # ========================================================================
@@ -539,8 +586,10 @@ Dimension: {EMBEDDING_DIMENSION}
                                         st.json(doc['custom_metadata'])
                         else:
                             st.info("No documents uploaded yet")
+                            st.markdown(f"Upload to: `s3://{DOCUMENT_BUCKET_NAME}/{kb['s3_prefix']}`")
             else:
                 st.info(f"No Knowledge Bases found for user: {user_id}")
+                st.markdown("👉 Go to **Create KB** tab to create your first Knowledge Base")
 
         except Exception as e:
             st.error(f"Error loading Knowledge Bases: {e}")
@@ -959,9 +1008,133 @@ Dimension: {EMBEDDING_DIMENSION}
         st.json(config_data)
 
     # ========================================================================
-    # TAB 6: DEBUG SEARCH (NEW)
+    # TAB 6: MANAGE DOCUMENTS (NEW)
     # ========================================================================
     with tab6:
+        st.header("📝 Manage Documents")
+
+        try:
+            user_kbs = list_user_kbs(dynamodb, user_id)
+
+            if not user_kbs:
+                st.warning("No Knowledge Bases found. Please create one first.")
+            else:
+                kb_options = {kb['kb_name']: kb['kb_id'] for kb in user_kbs}
+
+                selected_kb_name = st.selectbox(
+                    "Select Knowledge Base",
+                    options=list(kb_options.keys()),
+                    key="manage_kb_select"
+                )
+
+                selected_kb_id = kb_options[selected_kb_name]
+                selected_kb = next(kb for kb in user_kbs if kb['kb_id'] == selected_kb_id)
+
+                st.info(f"📁 Managing: **{selected_kb_name}** (`{selected_kb_id}`)")
+
+                # Get documents
+                docs = list_kb_documents(dynamodb, selected_kb_id)
+
+                if docs:
+                    st.markdown(f"**{len(docs)} document(s)**")
+
+                    # Bulk actions
+                    col1, col2 = st.columns([1, 3])
+
+                    with col1:
+                        if st.button("🔄 Sync All", key="manage_sync_all", help="Trigger re-ingestion of all documents"):
+                            try:
+                                bedrock_agent.start_ingestion_job(
+                                    knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                                    dataSourceId=DATA_SOURCE_ID,
+                                    description=f"Manual sync for {selected_kb_name}"
+                                )
+                                st.success("✅ Sync started")
+                            except Exception as e:
+                                if "ConflictException" in str(e):
+                                    st.warning("⏳ Sync already in progress")
+                                else:
+                                    st.error(f"Error: {e}")
+
+                    st.markdown("---")
+
+                    # Document list with actions
+                    for idx, doc in enumerate(docs):
+                        with st.container():
+                            col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
+
+                            with col1:
+                                st.markdown(f"**📄 {doc['filename']}**")
+
+                            with col2:
+                                size = doc.get('file_size', 0)
+                                if size < 1024:
+                                    size_str = f"{size} B"
+                                elif size < 1024 * 1024:
+                                    size_str = f"{size / 1024:.1f} KB"
+                                else:
+                                    size_str = f"{size / (1024 * 1024):.1f} MB"
+                                st.caption(size_str)
+
+                            with col3:
+                                uploaded = doc.get('uploaded_at', '')
+                                if uploaded:
+                                    try:
+                                        from datetime import datetime
+                                        upload_time = datetime.fromisoformat(uploaded.replace('Z', '+00:00'))
+                                        now = datetime.utcnow()
+                                        delta = now - upload_time.replace(tzinfo=None)
+
+                                        if delta.days > 0:
+                                            time_str = f"{delta.days}d ago"
+                                        elif delta.seconds > 3600:
+                                            time_str = f"{delta.seconds // 3600}h ago"
+                                        elif delta.seconds > 60:
+                                            time_str = f"{delta.seconds // 60}m ago"
+                                        else:
+                                            time_str = "just now"
+                                        st.caption(time_str)
+                                    except:
+                                        st.caption(uploaded[:10])
+
+                            with col4:
+                                # Download button
+                                try:
+                                    obj = s3_client.get_object(
+                                        Bucket=DOCUMENT_BUCKET_NAME,
+                                        Key=doc['s3_key']
+                                    )
+                                    st.download_button(
+                                        label="⬇️",
+                                        data=obj['Body'].read(),
+                                        file_name=doc['filename'],
+                                        key=f"manage_download_{idx}_{doc['document_id']}"  # Unique key
+                                    )
+                                except Exception as e:
+                                    st.caption("N/A")
+
+                            with col5:
+                                # Delete button with unique key
+                                if st.button("🗑️", key=f"manage_delete_{idx}_{doc['document_id']}", help="Delete document"):
+                                    if delete_document(s3_client, dynamodb, bedrock_agent, doc, user_id, selected_kb_id):
+                                        st.success(f"Deleted {doc['filename']}")
+                                        st.rerun()
+
+                            st.markdown("---")
+                else:
+                    st.info("No documents in this Knowledge Base")
+                    st.markdown(f"Upload documents to: `s3://{DOCUMENT_BUCKET_NAME}/{selected_kb['s3_prefix']}`")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
+
+    # ========================================================================
+    # TAB 7: DEBUG SEARCH (NEW)
+    # ========================================================================
+    with tab7:
         st.header("🐛 Debug Search Issues")
 
         st.markdown("""
