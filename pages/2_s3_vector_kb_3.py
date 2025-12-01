@@ -241,7 +241,7 @@ def retrieve_and_generate(
     return response
 
 def list_kb_documents(dynamodb, kb_id: str) -> List[dict]:
-    """List all documents in a Knowledge Base"""
+    """List all documents in a Knowledge Base (excluding .metadata.json files)"""
     table = dynamodb.Table(DOC_METADATA_TABLE)
 
     response = table.query(
@@ -250,7 +250,9 @@ def list_kb_documents(dynamodb, kb_id: str) -> List[dict]:
         ExpressionAttributeValues={':kid': kb_id}
     )
 
-    return response.get('Items', [])
+    # Filter out .metadata.json files
+    documents = response.get('Items', [])
+    return [doc for doc in documents if not doc.get('filename', '').endswith('.metadata.json')]
 
 def get_ingestion_jobs(bedrock_agent, max_results: int = 10) -> List[dict]:
     """Get recent ingestion jobs"""
@@ -473,33 +475,72 @@ Dimension: {EMBEDDING_DIMENSION}
                 st.success(f"Found {len(user_kbs)} Knowledge Base(s)")
 
                 for kb in user_kbs:
-                    with st.expander(f"📁 {kb['kb_name']} ({kb['kb_id']})", expanded=True):
-                        col1, col2, col3 = st.columns(3)
+                    with st.expander(f"📁 {kb['kb_name']}", expanded=True):
+                        col1, col2 = st.columns([2, 1])
 
                         with col1:
-                            st.metric("KB ID", kb['kb_id'])
+                            st.markdown(f"**Description:** {kb.get('description', 'No description')}")
+                            st.caption(f"Created: {kb['created_at']}")
+
                         with col2:
-                            st.metric("Status", kb.get('status', 'unknown'))
-                        with col3:
-                            st.metric("Documents", kb.get('document_count', 0))
+                            docs = list_kb_documents(dynamodb, kb['kb_id'])
+                            st.metric("Documents", len(docs))
 
-                        st.markdown(f"**Description:** {kb.get('description', 'N/A')}")
-                        st.markdown(f"**S3 Prefix:** `{kb['s3_prefix']}`")
-                        st.markdown(f"**Created:** {kb['created_at']}")
+                        st.markdown("**Knowledge Base ID:**")
+                        st.code(kb['kb_id'], language=None)
 
-                        # List documents in this KB
+                        st.markdown("**S3 Upload Path:**")
+                        st.code(f"s3://{DOCUMENT_BUCKET_NAME}/{kb['s3_prefix']}", language=None)
+
                         st.markdown("---")
                         st.markdown("**📄 Documents:**")
 
-                        docs = list_kb_documents(dynamodb, kb['kb_id'])
                         if docs:
                             for doc in docs:
-                                st.text(f"• {doc['filename']} ({doc.get('ingestion_status', 'unknown')})")
+                                col1, col2, col3 = st.columns([3, 1, 1])
+
+                                with col1:
+                                    st.text(f"📄 {doc['filename']}")
+
+                                with col2:
+                                    size = doc.get('file_size', 0)
+                                    if size < 1024:
+                                        size_str = f"{size} B"
+                                    elif size < 1024 * 1024:
+                                        size_str = f"{size / 1024:.1f} KB"
+                                    else:
+                                        size_str = f"{size / (1024 * 1024):.1f} MB"
+                                    st.caption(size_str)
+
+                                with col3:
+                                    uploaded = doc.get('uploaded_at', '')
+                                    if uploaded:
+                                        try:
+                                            from datetime import datetime
+                                            upload_time = datetime.fromisoformat(uploaded.replace('Z', '+00:00'))
+                                            now = datetime.utcnow()
+                                            delta = now - upload_time.replace(tzinfo=None)
+
+                                            if delta.days > 0:
+                                                time_str = f"{delta.days}d ago"
+                                            elif delta.seconds > 3600:
+                                                time_str = f"{delta.seconds // 3600}h ago"
+                                            elif delta.seconds > 60:
+                                                time_str = f"{delta.seconds // 60}m ago"
+                                            else:
+                                                time_str = "just now"
+                                            st.caption(time_str)
+                                        except:
+                                            st.caption(uploaded[:10])
+
+                                # Show custom metadata if present
+                                if doc.get('custom_metadata'):
+                                    with st.expander("📋 Metadata", expanded=False):
+                                        st.json(doc['custom_metadata'])
                         else:
-                            st.info("No documents yet")
+                            st.info("No documents uploaded yet")
             else:
                 st.info(f"No Knowledge Bases found for user: {user_id}")
-                st.markdown("👉 Go to **Create KB** tab to create your first Knowledge Base")
 
         except Exception as e:
             st.error(f"Error loading Knowledge Bases: {e}")
