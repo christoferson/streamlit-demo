@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 import os
 import cmn_settings
+import json
 
 AWS_REGION = "us-east-1"
 AWS_PROFILE = os.environ.get("AWS_PROFILE", "default")
@@ -20,7 +21,7 @@ DOC_METADATA_TABLE = cmn_settings.CMN_KB_DOC_METADATA_TABLE
 # Embedding Model Configuration
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIMENSION = 1024
-CMN_KB_MODEL_ARN = cmn_settings.MODEL_ARN
+MODEL_ARN = cmn_settings.CMN_KB_MODEL_ARN
 
 # ============================================================================
 # AWS CLIENTS
@@ -78,27 +79,77 @@ def list_user_kbs(dynamodb, user_id: str) -> List[dict]:
 
     return response.get('Items', [])
 
-def upload_document_to_kb(s3_client, user_id: str, kb_id: str, file, metadata: dict = None) -> str:
-    """Upload document to S3 with proper prefix structure"""
-    s3_key = f"{user_id}/{kb_id}/{file.name}"
+def upload_document_with_metadata_json(s3_client, user_id: str, kb_id: str, file, metadata: dict = None):
+    """Upload document with accompanying metadata.json"""
 
-    extra_args = {
-        'Metadata': {
-            'user_id': user_id,
-            'kb_id': kb_id,
-            'uploaded_by': 'streamlit-app'
+    # Upload the document
+    s3_key = f"{user_id}/{kb_id}/{file.name}"
+    s3_client.upload_fileobj(
+        file,
+        DOCUMENT_BUCKET_NAME,
+        s3_key
+    )
+
+    # Create metadata.json
+    metadata_content = {
+        "metadataAttributes": {
+            "user_id": user_id,
+            "kb_id": kb_id,
+            "filename": file.name,
+            "uploaded_at": datetime.utcnow().isoformat()
+        }
+    }
+
+    # Upload metadata.json with same prefix
+    metadata_key = f"{user_id}/{kb_id}/{file.name}.metadata.json"
+    s3_client.put_object(
+        Bucket=DOCUMENT_BUCKET_NAME,
+        Key=metadata_key,
+        Body=json.dumps(metadata_content),
+        ContentType='application/json'
+    )
+
+    return s3_key
+
+def upload_document_to_kb(s3_client, user_id: str, kb_id: str, file, metadata: dict = None) -> str:
+    """Upload document to S3 with metadata.json"""
+
+    # Read file content
+    file_content = file.read()
+    file.seek(0)  # Reset file pointer
+
+    # Upload the document
+    s3_key = f"{user_id}/{kb_id}/{file.name}"
+    s3_client.put_object(
+        Bucket=DOCUMENT_BUCKET_NAME,
+        Key=s3_key,
+        Body=file_content
+    )
+
+    # Create and upload metadata.json
+    metadata_json = {
+        "metadataAttributes": {
+            "user_id": user_id,
+            "kb_id": kb_id,
+            "filename": file.name,
+            "uploaded_at": datetime.utcnow().isoformat()
         }
     }
 
     if metadata:
-        extra_args['Metadata'].update(metadata)
+        metadata_json["metadataAttributes"].update(metadata)
 
-    s3_client.upload_fileobj(
-        file,
-        DOCUMENT_BUCKET_NAME,
-        s3_key,
-        ExtraArgs=extra_args
+    # Upload metadata.json (same name with .metadata.json suffix)
+    metadata_key = f"{s3_key}.metadata.json"
+    s3_client.put_object(
+        Bucket=DOCUMENT_BUCKET_NAME,
+        Key=metadata_key,
+        Body=json.dumps(metadata_json),
+        ContentType='application/json'
     )
+
+    st.info(f"📄 Uploaded document: {s3_key}")
+    st.info(f"📋 Uploaded metadata: {metadata_key}")
 
     return s3_key
 
@@ -144,7 +195,7 @@ def retrieve_and_generate(
     query: str,
     user_id: str,
     kb_id: str,
-    model_arn: str = CMN_KB_MODEL_ARN
+    model_arn: str = MODEL_ARN
 ) -> dict:
     """Retrieve and Generate answer using RAG"""
 
