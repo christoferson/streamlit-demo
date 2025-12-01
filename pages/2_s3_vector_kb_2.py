@@ -101,8 +101,8 @@ def upload_document_with_metadata_json(s3_client, user_id: str, kb_id: str, file
         "metadataAttributes": {
             "user_id": user_id,
             "kb_id": kb_id,
-            "filename": file.name,
-            "uploaded_at": datetime.utcnow().isoformat()
+            #"filename": file.name,
+            #"uploaded_at": datetime.utcnow().isoformat()
         }
     }
 
@@ -133,12 +133,13 @@ def upload_document_to_kb(s3_client, user_id: str, kb_id: str, file, metadata: d
     )
 
     # Create and upload metadata.json
+    # Filterable metadata must have at most 2048 bytes 
     metadata_json = {
         "metadataAttributes": {
             "user_id": user_id,
             "kb_id": kb_id,
-            "filename": file.name,
-            "uploaded_at": datetime.utcnow().isoformat()
+            #"filename": file.name,
+            #"uploaded_at": datetime.utcnow().isoformat()
         }
     }
 
