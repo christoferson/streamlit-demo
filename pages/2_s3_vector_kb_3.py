@@ -2,7 +2,7 @@ import streamlit as st
 import boto3
 import json
 from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import cmn_settings
 import json
@@ -24,9 +24,10 @@ EMBEDDING_DIMENSION = 1024
 MODEL_ARN = cmn_settings.CMN_KB_MODEL_ARN
 
 AVAILABLE_MODELS = {
-    "Amazon Nova Pro": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0",
-    "Meta Llama 4 Maverick": "arn:aws:bedrock:us-east-1::foundation-model/meta.llama4-maverick-17b-instruct-v1:0",
-    "Claude Sonnet 4.5": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
+    "Amazon Nova Pro": "amazon.nova-pro-v1:0",
+    "Meta Llama 4 Maverick": "us.meta.llama4-maverick-17b-instruct-v1:0",
+    "Claude Sonnet 4": "global.anthropic.claude-sonnet-4-20250514-v1:0",
+    "Claude Sonnet 4.5": "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 # ============================================================================
@@ -63,7 +64,7 @@ def create_logical_kb(dynamodb, user_id: str, kb_name: str, description: str = "
         'description': description,
         'user_id': user_id,
         's3_prefix': s3_prefix,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'status': 'active',
         'document_count': 0
     }
@@ -102,7 +103,7 @@ def upload_document_with_metadata_json(s3_client, user_id: str, kb_id: str, file
             "user_id": user_id,
             "kb_id": kb_id,
             #"filename": file.name,
-            #"uploaded_at": datetime.utcnow().isoformat()
+            #"uploaded_at": datetime.now(timezone.utc).isoformat()
         }
     }
 
@@ -139,7 +140,7 @@ def upload_document_to_kb(s3_client, user_id: str, kb_id: str, file, metadata: d
             "user_id": user_id,
             "kb_id": kb_id,
             #"filename": file.name,
-            #"uploaded_at": datetime.utcnow().isoformat()
+            #"uploaded_at": datetime.now(timezone.utc).isoformat()
         }
     }
 
@@ -565,7 +566,7 @@ Dimension: {EMBEDDING_DIMENSION}
                                         try:
                                             from datetime import datetime
                                             upload_time = datetime.fromisoformat(uploaded.replace('Z', '+00:00'))
-                                            now = datetime.utcnow()
+                                            now = datetime.now(timezone.utc)
                                             delta = now - upload_time.replace(tzinfo=None)
 
                                             if delta.days > 0:
@@ -1082,7 +1083,7 @@ Dimension: {EMBEDDING_DIMENSION}
                                     try:
                                         from datetime import datetime
                                         upload_time = datetime.fromisoformat(uploaded.replace('Z', '+00:00'))
-                                        now = datetime.utcnow()
+                                        now = datetime.now(timezone.utc)
                                         delta = now - upload_time.replace(tzinfo=None)
 
                                         if delta.days > 0:
