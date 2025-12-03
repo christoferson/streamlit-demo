@@ -23,6 +23,12 @@ EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIMENSION = 1024
 MODEL_ARN = cmn_settings.CMN_KB_MODEL_ARN
 
+AVAILABLE_MODELS = {
+    "Amazon Nova Pro": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0",
+    "Meta Llama 4 Maverick": "arn:aws:bedrock:us-east-1::foundation-model/meta.llama4-maverick-17b-instruct-v1:0",
+    "Claude Sonnet 4.5": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
+}
+
 # ============================================================================
 # AWS CLIENTS
 # ============================================================================
@@ -340,6 +346,20 @@ def main():
         if not user_id:
             st.warning("Please enter a User ID")
             st.stop()
+
+        st.markdown("---")
+
+        st.header("🤖 Model Selection")
+
+        selected_model_name = st.selectbox(
+            "Select LLM Model",
+            options=list(AVAILABLE_MODELS.keys()),
+            help="Choose the model for RAG generation"
+        )
+
+        selected_model_arn = AVAILABLE_MODELS[selected_model_name]
+
+        st.caption(f"Model: {selected_model_name}")
 
         st.markdown("---")
 
@@ -775,7 +795,8 @@ Dimension: {EMBEDDING_DIMENSION}
                                         bedrock_agent_client,
                                         query_text,
                                         user_id,
-                                        selected_kb_id
+                                        selected_kb_id,
+                                        selected_model_arn
                                     )
 
                                     # DEBUG: Show full response
