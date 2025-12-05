@@ -109,6 +109,13 @@ class FoundationModel:
                 "TopP": InferenceParameter("p", 0, 0.75, 1),
                 "TopK": InferenceParameter("k", 0, 0, 500)
             }
+        elif self.provider == "Qwen":
+            return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
+                "TopP": InferenceParameter("p", 0, 0.75, 1),
+                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+            }
         else:
             return {
                 "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 0, 2048, 4096),
@@ -158,7 +165,7 @@ foundation_models = {
     "us.mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "us.mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
     "us.writer.palmyra-x4-v1:0": FoundationModel("Writer", "us.writer.palmyra-x4-v1:0", True, True, True, True, False, True, False, True),
     "us.writer.palmyra-x5-v1:0": FoundationModel("Writer", "us.writer.palmyra-x5-v1:0", True, True, True, True, False, True, False, True),
-
+    "qwen.qwen3-next-80b-a3b": FoundationModel("Qwen", "us.qwen.qwen3-next-80b-a3b", True, True, True, True, False, True, False, True),
     # Models defined in the documentation but not in opt_model_id_list
     "AI21 Jamba-Instruct": FoundationModel("AI21", "AI21 Jamba-Instruct", True, True, True, False, False, False, False, False),
     "AI21 Labs Jurassic-2 (Text)": FoundationModel("AI21", "AI21 Labs Jurassic-2 (Text)", True, False, False, False, False, False, False, True),
