@@ -166,6 +166,8 @@ foundation_models = {
     "us.writer.palmyra-x4-v1:0": FoundationModel("Writer", "us.writer.palmyra-x4-v1:0", True, True, True, True, False, True, False, True),
     "us.writer.palmyra-x5-v1:0": FoundationModel("Writer", "us.writer.palmyra-x5-v1:0", True, True, True, True, False, True, False, True),
     "qwen.qwen3-next-80b-a3b": FoundationModel("Qwen", "us.qwen.qwen3-next-80b-a3b", True, True, True, True, False, True, False, True),
+    "qwen.qwen3-vl-235b-a22b": FoundationModel("Qwen", "us.qwen.qwen3-vl-235b-a22b", True, True, True, True, True, True, True, True),
+    
     # Models defined in the documentation but not in opt_model_id_list
     "AI21 Jamba-Instruct": FoundationModel("AI21", "AI21 Jamba-Instruct", True, True, True, False, False, False, False, False),
     "AI21 Labs Jurassic-2 (Text)": FoundationModel("AI21", "AI21 Labs Jurassic-2 (Text)", True, False, False, False, False, False, False, True),
