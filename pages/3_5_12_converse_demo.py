@@ -275,6 +275,7 @@ opt_model_id_list = [
     "google.gemma-3-4b-it",
     "google.gemma-3-12b-it",
     "google.gemma-3-27b-it",
+    "nvidia.nemotron-nano-9b-v2",
 ]
 
 opt_model_id_list_default = "us.anthropic.claude-sonnet-4-20250514-v1:0"

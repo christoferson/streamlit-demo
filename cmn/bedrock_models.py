@@ -130,7 +130,13 @@ class FoundationModel:
                 "TopP": InferenceParameter("p", 0, 0.75, 1),
                 "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
             }
-            #
+        elif self.provider == "NVIDIA":
+            return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
+                "TopP": InferenceParameter("p", 0, 0.75, 1),
+                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+            }
         else:
             return {
                 "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 0, 2048, 4096),
@@ -187,6 +193,8 @@ foundation_models = {
     "google.gemma-3-4b-it": FoundationModel("Google", "google.gemma-3-4b-it", True, True, True, True, False, True, False, True),
     "google.gemma-3-12b-it": FoundationModel("Google", "google.gemma-3-12b-it", True, True, True, True, False, True, False, True),
     "google.gemma-3-27b-it": FoundationModel("Google", "google.gemma-3-27b-it", True, True, True, True, False, True, False, True),
+    "nvidia.nemotron-nano-9b-v2": FoundationModel("NVIDIA", "nvidia.nemotron-nano-9b-v2", True, True, True, True, False, True, False, True),
+
 
     # Models defined in the documentation but not in opt_model_id_list
     "AI21 Jamba-Instruct": FoundationModel("AI21", "AI21 Jamba-Instruct", True, True, True, False, False, False, False, False),
