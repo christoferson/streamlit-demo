@@ -270,6 +270,11 @@ opt_model_id_list = [
     "us.writer.palmyra-x5-v1:0",
     "qwen.qwen3-next-80b-a3b",
     "qwen.qwen3-vl-235b-a22b",
+    "openai.gpt-oss-safeguard-20b", #KeyError: 'text'
+    "openai.gpt-oss-safeguard-120b", #KeyError: 'text'
+    "google.gemma-3-4b-it",
+    "google.gemma-3-12b-it",
+    "google.gemma-3-27b-it",
 ]
 
 opt_model_id_list_default = "us.anthropic.claude-sonnet-4-20250514-v1:0"
