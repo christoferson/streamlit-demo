@@ -691,7 +691,7 @@ class MultimodalSearchService:
                     # Strategy 1: Standard KNN
                     {
                         "size": limit,
-                        "_source": ["product_id", "title", "description"],
+                        "_source": ["product_id", "title", "description", "trade_code"], #["product_id", "title", "description"],
                         "query": {
                             "knn": {
                                 "image_embedding": {
@@ -704,7 +704,7 @@ class MultimodalSearchService:
                     # Strategy 2: Script score with manual similarity
                     {
                         "size": limit,
-                        "_source": ["product_id", "title", "description"],
+                        "_source": ["product_id", "title", "description", "trade_code"], #["product_id", "title", "description"],
                         "query": {
                             "script_score": {
                                 "query": {"match_all": {}},
@@ -731,10 +731,14 @@ class MultimodalSearchService:
                         if response['hits']['total']['value'] > 0:
                             results = []
                             for hit in response['hits']['hits']:
+                                trade_code = hit['_source'].get('trade_code', '')
+                                image_url = self.generate_image_url_from_trade_code(trade_code) if trade_code else ""
+
                                 results.append({
                                     'product_id': hit['_source']['product_id'],
                                     'title': hit['_source']['title'],
                                     'description': hit['_source']['description'],
+                                    'trade_code': trade_code,
                                     'score': hit['_score']
                                 })
 
