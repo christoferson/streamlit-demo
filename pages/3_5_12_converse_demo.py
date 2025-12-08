@@ -249,6 +249,9 @@ opt_model_id_list = [
     "us.anthropic.claude-opus-4-20250514-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0",
     "amazon.nova-pro-v1:0",
+    "global.amazon.nova-2-lite-v1:0",
+    #"global.amazon.nova-2-pro-v1:0",
+    
     
     "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
     "cohere.command-r-plus-v1:0",
@@ -276,6 +279,8 @@ opt_model_id_list = [
     "google.gemma-3-12b-it",
     "google.gemma-3-27b-it",
     "nvidia.nemotron-nano-9b-v2",
+    "nvidia.nemotron-nano-12b-v2",
+    "us.amazon.nova-2-lite-v1:0",
 ]
 
 opt_model_id_list_default = "us.anthropic.claude-sonnet-4-20250514-v1:0"

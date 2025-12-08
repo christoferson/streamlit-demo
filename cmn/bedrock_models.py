@@ -169,6 +169,8 @@ foundation_models = {
     "us.anthropic.claude-sonnet-4-20250514-v1:0" : FoundationModel("Anthropic", "us.anthropic.claude-sonnet-4-20250514-v1:0", True, True, True, True, True, True, True, True),
 
     "amazon.nova-pro-v1:0": FoundationModel("Amazon", "amazon.nova-pro-v1:0", True, True, True, True, True, True, True, True),
+    "global.amazon.nova-2-lite-v1:0": FoundationModel("Amazon", "global.amazon.nova-2-lite-v1:0", True, True, True, True, True, True, True, True),
+    #"global.amazon.nova-2-pro-v1:0": FoundationModel("Amazon", "global.amazon.nova-2-pro-v1:0", True, True, True, True, True, True, True, True),
     "us.amazon.nova-premier-v1:0": FoundationModel("Amazon", "us.amazon.nova-premier-v1:0", True, True, True, True, True, True, True, True),
     "cohere.command-r-v1:0": FoundationModel("Cohere", "cohere.command-r-v1:0", True, True, True, True, False, True, True, False),
     "cohere.command-r-plus-v1:0": FoundationModel("Cohere", "cohere.command-r-plus-v1:0", True, True, True, True, False, True, True, False),
@@ -194,6 +196,8 @@ foundation_models = {
     "google.gemma-3-12b-it": FoundationModel("Google", "google.gemma-3-12b-it", True, True, True, True, False, True, False, True),
     "google.gemma-3-27b-it": FoundationModel("Google", "google.gemma-3-27b-it", True, True, True, True, False, True, False, True),
     "nvidia.nemotron-nano-9b-v2": FoundationModel("NVIDIA", "nvidia.nemotron-nano-9b-v2", True, True, True, True, False, True, False, True),
+    "nvidia.nemotron-nano-12b-v2": FoundationModel("NVIDIA", "nvidia.nemotron-nano-12b-v2", True, True, True, True, False, True, False, True),
+    "us.amazon.nova-2-lite-v1:0": FoundationModel("Amazon", "us.amazon.nova-2-lite-v1:0", True, True, True, True, False, False, False, True),
 
 
     # Models defined in the documentation but not in opt_model_id_list
