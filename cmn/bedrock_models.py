@@ -153,6 +153,7 @@ class FoundationModel:
 foundation_models = {
     
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-5-20250929-v1:0", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-sonnet-4-20250514-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-20250514-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
     "anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),
