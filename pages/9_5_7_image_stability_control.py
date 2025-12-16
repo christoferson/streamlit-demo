@@ -74,10 +74,20 @@ st.set_page_config(
 )
 
 st.title("🎨 Stability AI Image Generation Services")
-st.markdown("Transform your images with AI-powered Control Structure, Style Guide, and Style Transfer")
+st.markdown("Transform your images with AI-powered Control Sketch, Control Structure, Style Guide, and Style Transfer")
 
 # Service options with detailed configurations
 services = {
+    "Control Sketch": {
+        "model_id": "us.stability.stable-image-control-sketch-v1:0",
+        "description": "Upgrade rough hand-drawn sketches to refined outputs. Transform sketches or leverage contour lines and edges for detailed control.",
+        "required_fields": ["prompt", "image"],
+        "optional_fields": ["control_strength", "negative_prompt", "seed", "output_format", "style_preset"],
+        "supports_style_preset": True,
+        "supports_control_strength": True,
+        "image_label": "Sketch Image",
+        "image_help": "Upload a sketch or image with clear contours and edges"
+    },
     "Control Structure": {
         "model_id": "us.stability.stable-image-control-structure-v1:0",
         "description": "Generate images while maintaining the structure of an input image. Perfect for recreating scenes or rendering characters.",
@@ -175,11 +185,13 @@ with st.sidebar:
 
     st.divider()
 
-    # Prompt (required for Control Structure and Style Guide, optional for Style Transfer)
+    # Prompt (required for Control Sketch, Control Structure and Style Guide, optional for Style Transfer)
     if "prompt" in service_config["required_fields"] or "prompt" in service_config["optional_fields"]:
         st.markdown("##### 📝 Text Prompts")
 
-        if selected_service == "Control Structure":
+        if selected_service == "Control Sketch":
+            default_prompt = "a house with background of mountains and river flowing nearby"
+        elif selected_service == "Control Structure":
             default_prompt = "surreal structure with motion generated sparks lighting the scene"
         elif selected_service == "Style Guide":
             default_prompt = "wide shot of modern metropolis"
@@ -210,7 +222,7 @@ with st.sidebar:
     # Service-specific controls
     st.markdown("##### 🎨 Creative Controls")
 
-    # Control Strength (Control Structure)
+    # Control Strength (Control Sketch and Control Structure)
     if service_config.get("supports_control_strength", False):
         control_strength = st.slider(
             "Control Strength",
@@ -218,7 +230,7 @@ with st.sidebar:
             max_value=1.0,
             value=0.7,
             step=0.05,
-            help="How much influence the structure image has on generation (0=least, 1=maximum)"
+            help="How much influence the input image has on generation (0=least, 1=maximum)"
         )
     else:
         control_strength = None
@@ -459,7 +471,7 @@ if can_generate:
                     if change_strength is not None:
                         params["change_strength"] = change_strength
                 else:
-                    # Control Structure or Style Guide
+                    # Control Sketch, Control Structure or Style Guide
                     params["image"] = image_base64
 
                     if prompt:
@@ -605,9 +617,43 @@ st.divider()
 
 with st.expander("ℹ️ About Stability AI Image Services"):
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Control Structure", "Style Guide", "Style Transfer", "Tips & Tricks"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Control Sketch", "Control Structure", "Style Guide", "Style Transfer", "Tips & Tricks"])
 
     with tab1:
+        st.markdown("""
+        ### Control Sketch
+        Upgrade rough hand-drawn sketches to refined outputs with precise control.
+
+        **Perfect for:**
+        - Converting hand-drawn sketches to polished images
+        - Transforming rough concepts into detailed artwork
+        - Leveraging contour lines and edges for detailed manipulation
+        - Quick ideation and concept visualization
+
+        **Key Parameters:**
+        - **Prompt:** Describe what you want to see (required)
+        - **Control Strength:** How much the sketch influences generation (0-1, default 0.7)
+        - **Style Preset:** Guide towards specific artistic styles
+
+        **Image Requirements:**
+        - Minimum side: 64px
+        - Maximum pixels: 9,437,184
+        - Aspect ratio: 1:2.5 to 2.5:1
+        - Formats: JPEG, PNG, WebP
+
+        **Best Practices:**
+        - Use clear, well-defined sketches with distinct lines
+        - Works with both hand-drawn sketches and images with clear edges
+        - Higher control_strength preserves more of the original sketch structure
+        - Lower control_strength allows more creative interpretation
+
+        **Example Prompts:**
+        - "a house with background of mountains and river flowing nearby"
+        - "modern sports car with sleek design, photorealistic"
+        - "fantasy castle on a cliff, dramatic lighting"
+        """)
+
+    with tab2:
         st.markdown("""
         ### Control Structure
         Generate images while maintaining the structure of an input image.
@@ -633,9 +679,13 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - 0-1.0: De-emphasize
         - 1.1-2.0: Emphasize
         - Example: `(blue:0.3) and (green:1.8)` = more green than blue
+
+        **Difference from Control Sketch:**
+        - Control Sketch: Best for sketches and line art
+        - Control Structure: Best for maintaining overall structure of photos/renders
         """)
 
-    with tab2:
+    with tab3:
         st.markdown("""
         ### Style Guide
         Extract stylistic elements from an input image and apply them to a new creation.
@@ -661,7 +711,7 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21
         """)
 
-    with tab3:
+    with tab4:
         st.markdown("""
         ### Style Transfer
         Apply visual characteristics from a style image to a content image.
@@ -688,7 +738,7 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - Style Transfer: Transforms EXISTING content with a style
         """)
 
-    with tab4:
+    with tab5:
         st.markdown("""
         ### 💡 Tips & Tricks
 
@@ -698,6 +748,12 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - Use prompt weighting for fine control: `(word:weight)`
         - Experiment with negative prompts to avoid unwanted elements
 
+        **Choosing the Right Service:**
+        - **Control Sketch:** Hand-drawn sketches, line art, rough concepts
+        - **Control Structure:** Maintaining photo/render structure with new content
+        - **Style Guide:** Creating new images in an existing style
+        - **Style Transfer:** Applying style to existing images
+
         **Avoiding Payload Size Errors:**
         - ✅ Use JPEG format (most compressed)
         - ✅ Use WebP for good quality and compression
@@ -705,6 +761,7 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - ✅ Try different seeds if you hit size limits
 
         **Optimizing Results:**
+        - **Control Sketch:** Clear sketches work best; adjust control_strength for creativity
         - **Control Structure:** Higher control_strength = more faithful to structure
         - **Style Guide:** Higher fidelity = closer to reference style
         - **Style Transfer:** Adjust composition_fidelity to balance preservation vs transformation
@@ -716,6 +773,8 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - `digital-art` - Digital artwork
         - `cinematic` - Movie-like quality
         - `enhance` - General enhancement
+        - `line-art` - Clean line drawings
+        - `comic-book` - Comic book style
 
         **Seed Usage:**
         - Use seed=0 for random results
@@ -726,6 +785,7 @@ with st.expander("ℹ️ About Stability AI Image Services"):
         - Start with high-quality input images
         - Ensure good lighting and clarity
         - Avoid heavily compressed or low-resolution sources
+        - For sketches, use clear, well-defined lines
         """)
 
 st.caption("Powered by Stability AI via Amazon Bedrock | ⚠️ Max response size: 16MB")
