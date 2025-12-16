@@ -78,7 +78,7 @@ st.set_page_config(
 st.title("🔍 Stability AI Image Upscale Services")
 st.markdown("Enhance your images with AI-powered upscaling technology")
 
-# Model options
+# Model options with detailed field support
 upscale_models = {
     "Creative Upscale": {
         "model_id": "us.stability.stable-creative-upscale-v1:0",
@@ -87,8 +87,12 @@ upscale_models = {
         "max_pixels": 1048576,
         "min_side": 64,
         "supports_prompt": True,
+        "supports_negative_prompt": True,
         "supports_creativity": True,
-        "typical_upscale": "20-40x"
+        "supports_style_preset": True,
+        "supports_seed": True,
+        "typical_upscale": "20-40x",
+        "available_fields": ["image", "prompt", "negative_prompt", "seed", "creativity", "output_format", "style_preset"]
     },
     "Conservative Upscale": {
         "model_id": "us.stability.stable-conservative-upscale-v1:0",
@@ -97,8 +101,12 @@ upscale_models = {
         "max_pixels": 9437184,
         "min_side": 64,
         "supports_prompt": True,
+        "supports_negative_prompt": True,
         "supports_creativity": True,
-        "typical_upscale": "20-40x"
+        "supports_style_preset": False,  # Does NOT support style_preset
+        "supports_seed": True,
+        "typical_upscale": "20-40x",
+        "available_fields": ["image", "prompt", "negative_prompt", "seed", "creativity", "output_format"]
     },
     "Fast Upscale": {
         "model_id": "us.stability.stable-fast-upscale-v1:0",
@@ -108,8 +116,12 @@ upscale_models = {
         "min_side": 32,
         "max_side": 1536,
         "supports_prompt": False,
+        "supports_negative_prompt": False,
         "supports_creativity": False,
-        "typical_upscale": "4x"
+        "supports_style_preset": False,
+        "supports_seed": False,
+        "typical_upscale": "4x",
+        "available_fields": ["image", "output_format"]
     }
 }
 
@@ -151,9 +163,15 @@ with st.sidebar:
 
     st.info(model_config["description"])
 
+    # Show available fields for this model
+    with st.expander("📋 Available Parameters"):
+        st.write("This model supports:")
+        for field in model_config["available_fields"]:
+            st.write(f"✅ {field}")
+
     st.divider()
 
-    # Output format - moved to top with warning
+    # Output format - always available
     output_format = st.selectbox(
         "Output Format",
         options=output_formats,
@@ -166,8 +184,11 @@ with st.sidebar:
 
     st.divider()
 
-    # Prompt (only for Creative and Conservative)
+    # Conditional parameters based on model support
+
+    # Prompt (only if supported)
     if model_config["supports_prompt"]:
+        st.markdown("##### 📝 Text Prompts")
         prompt = st.text_area(
             "Prompt",
             value="A highly detailed, photorealistic image",
@@ -175,7 +196,12 @@ with st.sidebar:
             max_chars=10000,
             help="Describe what you wish to see in the upscaled image"
         )
+    else:
+        prompt = None
+        st.info("ℹ️ This model does not use text prompts")
 
+    # Negative Prompt (only if supported)
+    if model_config["supports_negative_prompt"]:
         negative_prompt = st.text_area(
             "Negative Prompt (Optional)",
             value="blurry, low quality, distorted, artifacts",
@@ -183,9 +209,14 @@ with st.sidebar:
             max_chars=10000,
             help="Describe what you don't want to see"
         )
+    else:
+        negative_prompt = None
 
-    # Creativity (only for Creative and Conservative)
+    st.divider()
+
+    # Creativity (only if supported)
     if model_config["supports_creativity"]:
+        st.markdown("##### 🎨 Creative Controls")
         creativity = st.slider(
             "Creativity",
             min_value=0.1,
@@ -194,24 +225,37 @@ with st.sidebar:
             step=0.05,
             help="Higher values add more creative details during upscaling"
         )
+    else:
+        creativity = None
 
-    # Style preset (only for Creative and Conservative)
-    if model_config["supports_prompt"]:
+    # Style preset (only if supported)
+    if model_config["supports_style_preset"]:
         style_preset = st.selectbox(
             "Style Preset (Optional)",
             options=style_presets,
             index=0,
             help="Guide the image towards a particular style"
         )
+    else:
+        style_preset = None
+        if model_config["supports_prompt"]:
+            st.info("ℹ️ This model does not support style presets")
 
-    # Seed
-    seed = st.number_input(
-        "Seed (0 for random)",
-        min_value=0,
-        max_value=4294967294,
-        value=0,
-        help="Use a specific seed for reproducible results. Try different seeds if you get size errors."
-    )
+    st.divider()
+
+    # Seed (only if supported)
+    if model_config["supports_seed"]:
+        st.markdown("##### 🎲 Randomization")
+        seed = st.number_input(
+            "Seed (0 for random)",
+            min_value=0,
+            max_value=4294967294,
+            value=0,
+            help="Use a specific seed for reproducible results. Try different seeds if you get size errors."
+        )
+    else:
+        seed = None
+        st.info("ℹ️ This model does not use seed values")
 
 # Main content
 col1, col2 = st.columns(2)
@@ -231,7 +275,7 @@ with col1:
         original_width, original_height = uploaded_image.size
         total_pixels = original_width * original_height
 
-        st.image(uploaded_image, caption=f"Original Image ({original_width}x{original_height}, {total_pixels:,} pixels)", use_container_width=True)
+        st.image(uploaded_image, caption=f"Original Image ({original_width}x{original_height}, {total_pixels:,} pixels)", use_container_width =True)
 
         # Validation
         validation_errors = []
@@ -323,29 +367,35 @@ with col2:
 
                     image_base64 = image_to_base64(uploaded_image, file_type.upper())
 
-                    # Build request parameters
+                    # Build request parameters - only include supported fields
                     params = {
                         "image": image_base64,
                         "output_format": output_format
                     }
 
-                    # Add model-specific parameters
-                    if model_config["supports_prompt"]:
+                    # Add model-specific parameters only if supported
+                    if model_config["supports_prompt"] and prompt:
                         params["prompt"] = prompt
-                        if negative_prompt.strip():
-                            params["negative_prompt"] = negative_prompt
-                        if style_preset != "None":
-                            params["style_preset"] = style_preset
 
-                    if model_config["supports_creativity"]:
+                    if model_config["supports_negative_prompt"] and negative_prompt and negative_prompt.strip():
+                        params["negative_prompt"] = negative_prompt
+
+                    if model_config["supports_creativity"] and creativity is not None:
                         params["creativity"] = creativity
 
-                    if seed > 0:
+                    if model_config["supports_style_preset"] and style_preset and style_preset != "None":
+                        params["style_preset"] = style_preset
+
+                    if model_config["supports_seed"] and seed is not None and seed > 0:
                         params["seed"] = seed
 
-                    # Log request
+                    # Log request (without image data)
                     logger.info(f"Upscaling with model: {model_config['model_id']}")
                     logger.info(f"Parameters: {json.dumps({k: v for k, v in params.items() if k != 'image'}, indent=2)}")
+
+                    # Display request info
+                    with st.expander("🔍 Request Parameters", expanded=False):
+                        st.json({k: v for k, v in params.items() if k != 'image'})
 
                     # Make API call
                     start_time = datetime.now()
@@ -377,7 +427,7 @@ with col2:
                         actual_size_mb = actual_size_kb / 1024
 
                         # Display result
-                        st.image(upscaled_image, caption=f"Upscaled Image ({upscaled_width}x{upscaled_height})", use_container_width=True)
+                        st.image(upscaled_image, caption=f"Upscaled Image ({upscaled_width}x{upscaled_height})", use_container_width =True)
 
                         # Success metrics
                         col_a, col_b, col_c, col_d = st.columns(4)
@@ -409,6 +459,7 @@ with col2:
                         # Display metadata
                         with st.expander("📋 Processing Details"):
                             st.write(f"**Model:** {selected_model}")
+                            st.write(f"**Model ID:** {model_config['model_id']}")
                             st.write(f"**Processing Time:** {processing_time:.2f} seconds")
                             if "seeds" in response_body:
                                 st.write(f"**Seed Used:** {response_body['seeds'][0]}")
@@ -416,15 +467,25 @@ with col2:
                                 st.write(f"**Finish Reason:** {response_body['finish_reasons'][0]}")
                             st.write(f"**Output Format:** {output_format}")
                             st.write(f"**Output File Size:** {actual_size_kb:.2f} KB ({actual_size_mb:.2f} MB)")
-                            if model_config["supports_creativity"]:
-                                st.write(f"**Creativity:** {creativity}")
+
+                            st.write("**Parameters Used:**")
+                            for key, value in params.items():
+                                if key != "image":
+                                    st.write(f"- {key}: {value}")
 
                 except ClientError as err:
                     error_message = err.response["Error"]["Message"]
                     logger.error("A client error occurred: %s", error_message)
 
+                    # Parse error details if available
+                    try:
+                        error_detail = json.loads(error_message)
+                        detail_msg = error_detail.get("detail", error_message)
+                    except:
+                        detail_msg = error_message
+
                     # Check if it's a payload size error
-                    if "payload size" in error_message.lower() or "exceeds the maximum" in error_message.lower():
+                    if "payload size" in detail_msg.lower() or "exceeds the maximum" in detail_msg.lower():
                         st.error("❌ **Payload Size Error**: The upscaled image is too large (>16MB)")
                         st.info("""
                         **Solutions to try:**
@@ -434,8 +495,19 @@ with col2:
                         4. ✅ Try **Fast Upscale** instead (4x vs 20-40x)
                         5. ✅ Use **WebP** format (good compression, smaller than PNG)
                         """)
+                    # Check if it's an invalid field error
+                    elif "invalid field" in detail_msg.lower():
+                        st.error(f"❌ **Invalid Parameter Error**")
+                        st.error(detail_msg)
+                        st.info(f"""
+                        **Available fields for {selected_model}:**
+                        {', '.join(model_config['available_fields'])}
+
+                        This error usually means a parameter was sent that this model doesn't support.
+                        The sidebar has been configured to only show supported options.
+                        """)
                     else:
-                        st.error(f"❌ AWS Error: {error_message}")
+                        st.error(f"❌ AWS Error: {detail_msg}")
 
                 except Exception as e:
                     logger.error(f"An error occurred: {str(e)}")
@@ -449,50 +521,88 @@ with col2:
 # Footer with information
 st.divider()
 
-with st.expander("ℹ️ About Stability AI Upscale Services & Payload Limits"):
-    st.markdown("""
-    ### Creative Upscale
-    - Upscales images to 4K resolution (20-40x)
-    - Best for highly degraded images
-    - Performs heavy reimagining with creative enhancements
-    - Input: 64x64 to 1 megapixel
+with st.expander("ℹ️ About Stability AI Upscale Services & Model Capabilities"):
 
-    ### Conservative Upscale
-    - Upscales images to 4K resolution (20-40x)
-    - Preserves all aspects of the original image
-    - Minimizes alterations
-    - Input: 64x64 to ~9.4 megapixels
+    tab1, tab2, tab3, tab4 = st.tabs(["Creative Upscale", "Conservative Upscale", "Fast Upscale", "Troubleshooting"])
 
-    ### Fast Upscale
-    - Quick 4x resolution enhancement
-    - Lightweight and fast
-    - Ideal for social media and compressed images
-    - Input: 32-1536px per side, 1024 to 1 megapixel
+    with tab1:
+        st.markdown("""
+        ### Creative Upscale
+        - **Upscale Factor:** 20-40x to 4K resolution
+        - **Best For:** Highly degraded images, old photos, low-quality images
+        - **Approach:** Heavy reimagining with creative enhancements
+        - **Input Size:** 64x64 to 1 megapixel
 
-    ### 🚨 Important: 16MB Payload Limit
+        **Supported Parameters:**
+        - ✅ Prompt
+        - ✅ Negative Prompt
+        - ✅ Creativity (0.1-0.5)
+        - ✅ Style Preset
+        - ✅ Seed
+        - ✅ Output Format
+        """)
 
-    Amazon Bedrock has a **16MB maximum response size limit**. Large upscaled images may exceed this.
+    with tab2:
+        st.markdown("""
+        ### Conservative Upscale
+        - **Upscale Factor:** 20-40x to 4K resolution
+        - **Best For:** Preserving original details and characteristics
+        - **Approach:** Minimal alterations, faithful to original
+        - **Input Size:** 64x64 to ~9.4 megapixels
+        - **Aspect Ratio:** Must be between 1:2.5 and 2.5:1
 
-    **Solutions:**
-    - ✅ **Use JPEG format** - Most compressed, typically 3-5x smaller than PNG
-    - ✅ **Use WebP format** - Modern format with excellent compression
-    - ✅ **Avoid PNG format** - Lossless format creates large files
-    - ✅ **Try different seeds** - Different seeds produce different compression ratios
-    - ✅ **Use smaller input images** - Smaller inputs = smaller outputs
-    - ✅ **Use Fast Upscale** - 4x upscale instead of 20-40x
+        **Supported Parameters:**
+        - ✅ Prompt
+        - ✅ Negative Prompt
+        - ✅ Creativity (0.1-0.5)
+        - ❌ Style Preset (NOT supported)
+        - ✅ Seed
+        - ✅ Output Format
+        """)
 
-    **Format Comparison (for 4K image):**
-    - PNG: ~15-25 MB ❌ (may exceed limit)
-    - WebP: ~3-8 MB ✅
-    - JPEG: ~2-5 MB ✅
+    with tab3:
+        st.markdown("""
+        ### Fast Upscale
+        - **Upscale Factor:** 4x resolution
+        - **Best For:** Quick enhancements, social media, compressed images
+        - **Approach:** Lightweight and fast predictive AI
+        - **Input Size:** 32-1536px per side, 1024 to 1 megapixel
 
-    ### Tips for Best Results
-    - Use **Creative Upscale** for old, low-quality, or heavily compressed images
-    - Use **Conservative Upscale** when you want to maintain the original look
-    - Use **Fast Upscale** for quick enhancements and social media content
-    - Provide detailed prompts for Creative and Conservative upscaling
-    - Adjust creativity slider to control the level of enhancement
-    - **Always start with JPEG or WebP format** to avoid size issues
-    """)
+        **Supported Parameters:**
+        - ❌ Prompt (NOT supported)
+        - ❌ Negative Prompt (NOT supported)
+        - ❌ Creativity (NOT supported)
+        - ❌ Style Preset (NOT supported)
+        - ❌ Seed (NOT supported)
+        - ✅ Output Format (only parameter besides image)
+        """)
+
+    with tab4:
+        st.markdown("""
+        ### 🚨 16MB Payload Limit
+
+        Amazon Bedrock has a **16MB maximum response size limit**. Large upscaled images may exceed this.
+
+        **Solutions:**
+        - ✅ **Use JPEG format** - Most compressed, typically 3-5x smaller than PNG
+        - ✅ **Use WebP format** - Modern format with excellent compression
+        - ✅ **Avoid PNG format** - Lossless format creates large files
+        - ✅ **Try different seeds** - Different seeds produce different compression ratios
+        - ✅ **Use smaller input images** - Smaller inputs = smaller outputs
+        - ✅ **Use Fast Upscale** - 4x upscale instead of 20-40x
+
+        **Format Comparison (for 4K image):**
+        - PNG: ~15-25 MB ❌ (may exceed limit)
+        - WebP: ~3-8 MB ✅
+        - JPEG: ~2-5 MB ✅
+
+        ### Invalid Field Errors
+
+        Each model supports different parameters. The sidebar automatically shows only supported options:
+
+        - **Creative Upscale:** All parameters supported
+        - **Conservative Upscale:** No style_preset support
+        - **Fast Upscale:** Only image and output_format supported
+        """)
 
 st.caption("Powered by Stability AI via Amazon Bedrock | ⚠️ Max response size: 16MB")
