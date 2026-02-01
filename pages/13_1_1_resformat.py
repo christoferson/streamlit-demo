@@ -27,9 +27,15 @@ bedrock_runtime = get_bedrock_client()
 
 # Title and description
 st.title("🚗 Driver Risk Assistant")
-st.markdown("**Real-time telemetry analysis using Amazon Bedrock with JSON Mode**")
+st.markdown("**Real-time telemetry analysis using Amazon Bedrock - Multiple Approaches**")
+
 # Create tabs
-tab1, tab2 = st.tabs(["🔄 Streaming Mode", "📋 Structured Output (Tool Use)"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🔄 Streaming (Prompt-based)", 
+    "📋 Tool Use (Schema Enforced)",
+    "📝 Prompt Engineering (AWS Blog)",
+    "🛠️ Tool Use - invoke_model (AWS Blog)"
+])
 
 # Sidebar for configuration
 with st.sidebar:
@@ -37,31 +43,48 @@ with st.sidebar:
     model_id = st.selectbox(
         "Model",
         model_id_list,
-        index=0,
-        help="Select Claude model"
+        index=3,
+        help="Select model"
     )
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     max_tokens = st.slider("Max Tokens", 100, 2000, 1000, 50)
 
     st.divider()
     st.markdown("### About")
-    st.info("Compare streaming responses vs structured output with enforced JSON schema using tool use.")
+    st.info("""
+    **4 Approaches:**
+
+    1. Streaming (real-time)
+    2. Tool Use with Converse
+    3. Prompt Engineering (AWS)
+    4. Tool Use with invoke_model (AWS)
+    """)
+
+    st.divider()
+    st.markdown("### 2025 AWS Guidance")
+    st.success("""
+    **Success Rates:**
+    - Prompt: 93%+
+    - Tool Use: 95%+ ✅
+
+    Tool Use recommended for production!
+    """)
 
 # Shared telemetry inputs function
-def render_telemetry_inputs():
+def render_telemetry_inputs(tab_key):
     col1, col2 = st.columns(2)
 
     with col1:
-        speed = st.number_input("Speed (mph)", min_value=0, max_value=150, value=85, key=f"speed_{st.session_state.get('tab_key', 'default')}")
-        speed_limit = st.number_input("Speed Limit (mph)", min_value=0, max_value=100, value=65, key=f"speed_limit_{st.session_state.get('tab_key', 'default')}")
-        hard_braking = st.number_input("Hard Braking Events", min_value=0, max_value=20, value=3, key=f"hard_braking_{st.session_state.get('tab_key', 'default')}")
-        rapid_acceleration = st.number_input("Rapid Acceleration Events", min_value=0, max_value=20, value=2, key=f"rapid_accel_{st.session_state.get('tab_key', 'default')}")
+        speed = st.number_input("Speed (mph)", min_value=0, max_value=150, value=85, key=f"speed_{tab_key}")
+        speed_limit = st.number_input("Speed Limit (mph)", min_value=0, max_value=100, value=65, key=f"speed_limit_{tab_key}")
+        hard_braking = st.number_input("Hard Braking Events", min_value=0, max_value=20, value=3, key=f"hard_braking_{tab_key}")
+        rapid_acceleration = st.number_input("Rapid Acceleration Events", min_value=0, max_value=20, value=2, key=f"rapid_accel_{tab_key}")
 
     with col2:
-        sharp_turns = st.number_input("Sharp Turns", min_value=0, max_value=20, value=1, key=f"sharp_turns_{st.session_state.get('tab_key', 'default')}")
-        driver_rating = st.selectbox("Driver Rating", [1, 2, 3, 4, 5], index=1, key=f"driver_rating_{st.session_state.get('tab_key', 'default')}")
-        trip_duration = st.number_input("Trip Duration (minutes)", min_value=1, max_value=300, value=45, key=f"trip_duration_{st.session_state.get('tab_key', 'default')}")
-        time_of_day = st.selectbox("Time of Day", ["Morning", "Afternoon", "Evening", "Night"], key=f"time_of_day_{st.session_state.get('tab_key', 'default')}")
+        sharp_turns = st.number_input("Sharp Turns", min_value=0, max_value=20, value=1, key=f"sharp_turns_{tab_key}")
+        driver_rating = st.selectbox("Driver Rating", [1, 2, 3, 4, 5], index=1, key=f"driver_rating_{tab_key}")
+        trip_duration = st.number_input("Trip Duration (minutes)", min_value=1, max_value=300, value=45, key=f"trip_duration_{tab_key}")
+        time_of_day = st.selectbox("Time of Day", ["Morning", "Afternoon", "Evening", "Night"], key=f"time_of_day_{tab_key}")
 
     return {
         "speed_mph": speed,
@@ -151,10 +174,10 @@ def display_results(risk_assessment, latency_info, token_info, mode="streaming")
         st.json(metadata)
 
         # Calculate approximate cost
-        if "claude-3-haiku" in model_id:
+        if "claude-3-haiku" in model_id or "claude-haiku" in model_id:
             input_cost = token_info['input'] * 0.00025 / 1000
             output_cost = token_info['output'] * 0.00125 / 1000
-        elif "claude-3-5-sonnet" in model_id:
+        elif "claude-3-5-sonnet" in model_id or "claude-sonnet" in model_id:
             input_cost = token_info['input'] * 0.003 / 1000
             output_cost = token_info['output'] * 0.015 / 1000
         else:
@@ -166,9 +189,10 @@ def display_results(risk_assessment, latency_info, token_info, mode="streaming")
 
 # TAB 1: Streaming Mode
 with tab1:
-    st.session_state['tab_key'] = 'streaming'
+    st.info("⚡ **Real-time streaming** with prompt-based JSON generation")
+
     st.subheader("📊 Telemetry Input")
-    telemetry_data_stream = render_telemetry_inputs()
+    telemetry_data_stream = render_telemetry_inputs("streaming")
 
     st.subheader("📝 Prompt Template")
     prompt_template_stream = st.text_area(
@@ -190,7 +214,7 @@ Provide your assessment in valid JSON format only, with no additional text.""",
         key="prompt_stream"
     )
 
-    if st.button("🔍 Generate Risk Assessment (Streaming)", type="primary", use_container_width=True, key="btn_stream"):
+    if st.button("🔍 Generate (Streaming)", type="primary", use_container_width=True, key="btn_stream"):
         formatted_prompt = prompt_template_stream.format(
             telemetry=json.dumps(telemetry_data_stream, indent=2)
         )
@@ -208,21 +232,11 @@ Provide your assessment in valid JSON format only, with no additional text.""",
         output_tokens = 0
 
         try:
-            request_params = {
-                "modelId": model_id,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"text": formatted_prompt}]
-                    }
-                ],
-                "inferenceConfig": {
-                    "temperature": temperature,
-                    "maxTokens": max_tokens
-                }
-            }
-
-            response = bedrock_runtime.converse_stream(**request_params)
+            response = bedrock_runtime.converse_stream(
+                modelId=model_id,
+                messages=[{"role": "user", "content": [{"text": formatted_prompt}]}],
+                inferenceConfig={"temperature": temperature, "maxTokens": max_tokens}
+            )
 
             for event in response['stream']:
                 if 'contentBlockDelta' in event:
@@ -230,12 +244,9 @@ Provide your assessment in valid JSON format only, with no additional text.""",
                     if 'text' in delta:
                         chunk = delta['text']
                         accumulated_text += chunk
-
                         if first_token_time is None:
                             first_token_time = datetime.now()
-
                         stream_placeholder.code(accumulated_text, language="json")
-
                 elif 'metadata' in event:
                     usage = event['metadata'].get('usage', {})
                     input_tokens = usage.get('inputTokens', 0)
@@ -267,15 +278,15 @@ Provide your assessment in valid JSON format only, with no additional text.""",
             st.error(f"❌ Error: {str(e)}")
             st.exception(e)
 
-# TAB 2: Structured Output with Tool Use
+# TAB 2: Structured Output with Tool Use (Converse)
 with tab2:
-    st.session_state['tab_key'] = 'structured'
+    st.success("✅ **Schema-enforced** output using Tool Use with Converse API")
+
     st.subheader("📊 Telemetry Input")
-    telemetry_data_struct = render_telemetry_inputs()
+    telemetry_data_struct = render_telemetry_inputs("structured")
 
     st.subheader("📐 JSON Schema Definition")
 
-    # Define the tool/function schema
     tool_schema = {
         "name": "generate_risk_assessment",
         "description": "Generate a structured driver risk assessment based on telemetry data",
@@ -314,12 +325,10 @@ with tab2:
         }
     }
 
-    # Display the schema
     with st.expander("🔍 View Tool Schema", expanded=True):
         st.json(tool_schema)
 
-    # Allow editing of the schema
-    schema_editable = st.checkbox("Edit Schema", value=False)
+    schema_editable = st.checkbox("Edit Schema", value=False, key="edit_schema_tab2")
     if schema_editable:
         schema_text = st.text_area(
             "Edit JSON Schema",
@@ -344,7 +353,7 @@ Consider factors like speeding, aggressive driving behaviors, time of day, and d
         key="prompt_struct"
     )
 
-    if st.button("🔍 Generate Risk Assessment (Structured)", type="primary", use_container_width=True, key="btn_struct"):
+    if st.button("🔍 Generate (Tool Use - Converse)", type="primary", use_container_width=True, key="btn_struct"):
         formatted_prompt = user_prompt_struct.format(
             telemetry=json.dumps(telemetry_data_struct, indent=2)
         )
@@ -352,61 +361,32 @@ Consider factors like speeding, aggressive driving behaviors, time of day, and d
         with st.expander("📋 View Formatted Telemetry Data"):
             st.json(telemetry_data_struct)
 
-        with st.spinner("Analyzing telemetry data with structured output..."):
+        with st.spinner("Analyzing with schema enforcement..."):
             start_time = datetime.now()
 
             try:
-                # Use tool/function calling for structured output
                 response = bedrock_runtime.converse(
                     modelId=model_id,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [{"text": formatted_prompt}]
-                        }
-                    ],
-                    inferenceConfig={
-                        "temperature": temperature,
-                        "maxTokens": max_tokens
-                    },
+                    messages=[{"role": "user", "content": [{"text": formatted_prompt}]}],
+                    inferenceConfig={"temperature": temperature, "maxTokens": max_tokens},
                     toolConfig={
-                        "tools": [
-                            {
-                                "toolSpec": tool_schema
-                            }
-                        ],
-                        "toolChoice": {
-                            "tool": {
-                                "name": "generate_risk_assessment"
-                            }
-                        }
+                        "tools": [{"toolSpec": tool_schema}],
+                        "toolChoice": {"tool": {"name": "generate_risk_assessment"}}
                     }
                 )
 
                 end_time = datetime.now()
                 total_latency = (end_time - start_time).total_seconds() * 1000
 
-                # Extract structured output from tool use
                 content = response['output']['message']['content']
-
-                # Find the tool use block
-                tool_use_block = None
-                for block in content:
-                    if 'toolUse' in block:
-                        tool_use_block = block['toolUse']
-                        break
+                tool_use_block = next((block['toolUse'] for block in content if 'toolUse' in block), None)
 
                 if tool_use_block:
                     risk_assessment = tool_use_block['input']
-
-                    # Get token usage
                     input_tokens = response['usage']['inputTokens']
                     output_tokens = response['usage']['outputTokens']
 
-                    st.success("✅ Structured output generated with enforced schema!")
-
-                    # Show that schema was enforced
-                    st.info("🎯 **Schema Enforcement**: The model output is guaranteed to match the defined JSON schema structure.")
+                    st.info("🎯 **Schema Enforcement**: Output guaranteed to match the defined JSON schema!")
 
                     display_results(
                         risk_assessment,
@@ -415,7 +395,6 @@ Consider factors like speeding, aggressive driving behaviors, time of day, and d
                         mode="structured"
                     )
 
-                    # Show the raw tool use response
                     with st.expander("🔧 View Raw Tool Use Response"):
                         st.json({
                             "toolUseId": tool_use_block.get('toolUseId'),
@@ -430,10 +409,460 @@ Consider factors like speeding, aggressive driving behaviors, time of day, and d
                 st.error(f"❌ Error: {str(e)}")
                 st.exception(e)
 
-# Footer
+# TAB 3: Prompt Engineering (AWS Blog Example)
+with tab3:
+    st.warning("📝 **AWS Blog Approach**: Prompt Engineering (June 2025) - 93%+ success rate")
+
+    st.markdown("""
+    **From AWS Blog**: "Structured data response with Amazon Bedrock"
+
+    This approach uses careful prompt engineering to guide the model to produce structured JSON.
+    """)
+
+    st.subheader("📊 Telemetry Input")
+    telemetry_data_prompt = render_telemetry_inputs("prompt_eng")
+
+    st.subheader("Step 1: Define JSON Schema")
+
+    json_schema = {
+        "type": "object",
+        "properties": {
+            "risk_level": {
+                "type": "string",
+                "enum": ["low", "medium", "high"],
+                "description": "Overall risk classification"
+            },
+            "risk_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Numeric risk score"
+            },
+            "insight": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Brief summary"
+            },
+            "factors": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Risk factors"
+            },
+            "recommendations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Safety recommendations"
+            }
+        },
+        "required": ["risk_level", "risk_score", "insight", "factors", "recommendations"]
+    }
+
+    with st.expander("🔍 View JSON Schema"):
+        st.json(json_schema)
+
+    st.subheader("Step 2: Craft the Prompt")
+
+    prompt_aws = st.text_area(
+        "Prompt (AWS Blog Style)",
+        value="""You are an AI assistant that analyzes driver telemetry and returns structured JSON data.
+
+Your task:
+1. Read the telemetry data provided in the <input> tags
+2. Analyze the risk level and contributing factors
+3. Return a JSON response that strictly follows this schema:
+
+{schema}
+
+Example output:
+{{
+    "risk_level": "high",
+    "risk_score": 85,
+    "insight": "Excessive speeding and aggressive braking indicate high-risk driving behavior",
+    "factors": ["Speeding 20+ mph over limit", "Multiple hard braking events"],
+    "recommendations": ["Reduce speed", "Maintain safe following distance"]
+}}
+
+Rules:
+- risk_level must be "low", "medium", or "high"
+- risk_score must be 0-100
+- insight must be under 200 characters
+- Always include all required fields
+- Return ONLY valid JSON, no additional text
+
+<input>
+{telemetry}
+</input>""",
+        height=500,
+        key="prompt_aws"
+    )
+
+    if st.button("🔍 Generate (Prompt Engineering)", type="primary", use_container_width=True, key="btn_prompt_aws"):
+        with st.spinner("Generating with prompt engineering..."):
+            try:
+                start_time = datetime.now()
+
+                formatted_prompt = prompt_aws.format(
+                    schema=json.dumps(json_schema, indent=2),
+                    telemetry=json.dumps(telemetry_data_prompt, indent=2)
+                )
+
+                # Use invoke_model as shown in AWS blog
+                if "anthropic.claude" in model_id or "claude" in model_id:
+                    body = json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": formatted_prompt}]
+                            }
+                        ]
+                    })
+
+                    response = bedrock_runtime.invoke_model(
+                        modelId=model_id,
+                        body=body
+                    )
+
+                    response_body = json.loads(response['body'].read())
+                    output_text = response_body['content'][0]['text']
+                    input_tokens = response_body['usage']['input_tokens']
+                    output_tokens = response_body['usage']['output_tokens']
+                else:
+                    # Fallback to converse for non-Claude models
+                    response = bedrock_runtime.converse(
+                        modelId=model_id,
+                        messages=[{"role": "user", "content": [{"text": formatted_prompt}]}],
+                        inferenceConfig={"temperature": temperature, "maxTokens": max_tokens}
+                    )
+                    output_text = response['output']['message']['content'][0]['text']
+                    input_tokens = response['usage']['inputTokens']
+                    output_tokens = response['usage']['outputTokens']
+
+                end_time = datetime.now()
+                total_latency = (end_time - start_time).total_seconds() * 1000
+
+                # Parse JSON
+                if "```json" in output_text:
+                    output_text = output_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in output_text:
+                    output_text = output_text.split("```")[1].split("```")[0].strip()
+
+                risk_assessment = json.loads(output_text)
+
+                st.info("📝 **Prompt Engineering**: Output guided by careful prompt crafting (93%+ success rate)")
+
+                display_results(
+                    risk_assessment,
+                    {"total": total_latency, "first_token": 0},
+                    {"input": input_tokens, "output": output_tokens},
+                    mode="prompt_engineering"
+                )
+
+            except json.JSONDecodeError as e:
+                st.error(f"❌ JSON Parsing Error: {str(e)}")
+                st.code(output_text, language="text")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                st.exception(e)
+
+# TAB 4: Tool Use with invoke_model (AWS Blog Example)
+# TAB 4: Tool Use with invoke_model (AWS Blog Example)
+with tab4:
+    st.success("🛠️ **AWS Blog Approach**: Tool Use with invoke_model (June 2025) - 95%+ success rate")
+
+    st.markdown("""
+    **From AWS Blog**: "Structured data response with Amazon Bedrock"
+
+    This approach uses Tool Use with the `invoke_model` API for schema-enforced output.
+
+    **Note**: `invoke_model` has model-specific formats. For Claude models, we use Anthropic's native format.
+    """)
+
+    st.subheader("📊 Telemetry Input")
+    telemetry_data_tool_aws = render_telemetry_inputs("tool_aws")
+
+    st.subheader("Step 1: Define Tool with Schema")
+
+    # Tool definition for Claude's native format (used with invoke_model)
+    tool_definition_claude = {
+        "name": "analyze_driver_risk",
+        "description": "Analyze driver telemetry and return structured risk assessment",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "risk_level": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high"],
+                    "description": "Overall risk classification"
+                },
+                "risk_score": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Numeric risk score"
+                },
+                "insight": {
+                    "type": "string",
+                    "description": "Brief explanation"
+                },
+                "factors": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Risk factors"
+                },
+                "recommendations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Safety recommendations"
+                }
+            },
+            "required": ["risk_level", "risk_score", "insight", "factors", "recommendations"]
+        }
+    }
+
+    with st.expander("🔍 View Tool Definition (Claude Native Format)", expanded=True):
+        st.json(tool_definition_claude)
+        st.info("""
+        **Note**: When using `invoke_model` with Claude, the tool format is:
+        - `input_schema` (not `inputSchema`)
+        - Direct properties (not wrapped in `json`)
+        - This is Claude's native format
+        """)
+
+    st.subheader("Step 2: Create Message")
+
+    message_aws = st.text_area(
+        "User Message",
+        value="""Analyze the following driver telemetry data:
+
+<input>
+{telemetry}
+</input>
+
+Use the analyze_driver_risk tool to provide a structured risk assessment.""",
+        height=150,
+        key="message_aws"
+    )
+
+    if st.button("🔍 Generate (Tool Use - invoke_model)", type="primary", use_container_width=True, key="btn_tool_aws"):
+        with st.spinner("Generating with Tool Use (invoke_model)..."):
+            try:
+                start_time = datetime.now()
+
+                formatted_message = message_aws.format(
+                    telemetry=json.dumps(telemetry_data_tool_aws, indent=2)
+                )
+
+                # Check if model is Claude
+                if "anthropic.claude" in model_id or "claude" in model_id:
+                    # Use invoke_model with Claude's native tool format
+                    body = json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": formatted_message
+                            }
+                        ],
+                        "tools": [tool_definition_claude],
+                        "tool_choice": {
+                            "type": "tool",
+                            "name": "analyze_driver_risk"
+                        }
+                    })
+
+                    st.code(f"""
+# Request body for invoke_model (Claude native format):
+{{
+    "anthropic_version": "bedrock-2023-05-31",
+    "messages": [...],
+    "tools": [
+        {{
+            "name": "analyze_driver_risk",
+            "input_schema": {{...}}  # Note: input_schema, not inputSchema
+        }}
+    ],
+    "tool_choice": {{
+        "type": "tool",
+        "name": "analyze_driver_risk"
+    }}
+}}
+                    """, language="python")
+
+                    response = bedrock_runtime.invoke_model(
+                        modelId=model_id,
+                        body=body
+                    )
+
+                    response_body = json.loads(response['body'].read())
+
+                    # Extract tool use from response
+                    tool_use_content = None
+                    for content_block in response_body.get('content', []):
+                        if content_block.get('type') == 'tool_use':
+                            tool_use_content = content_block
+                            break
+
+                    if tool_use_content:
+                        risk_assessment = tool_use_content['input']
+                        input_tokens = response_body['usage']['input_tokens']
+                        output_tokens = response_body['usage']['output_tokens']
+
+                        end_time = datetime.now()
+                        total_latency = (end_time - start_time).total_seconds() * 1000
+
+                        st.success("✅ Tool use successful with invoke_model!")
+
+                        with st.expander("🔍 View Raw Response"):
+                            st.json(response_body)
+
+                        st.info("🛠️ **Tool Use (invoke_model)**: Schema-enforced output using Claude's native format (95%+ success rate)")
+
+                        display_results(
+                            risk_assessment,
+                            {"total": total_latency, "first_token": 0},
+                            {"input": input_tokens, "output": output_tokens},
+                            mode="tool_use_aws"
+                        )
+                    else:
+                        st.error("No tool use found in response")
+                        st.json(response_body)
+
+                else:
+                    # For non-Claude models, use converse API instead
+                    st.warning("⚠️ invoke_model with tools is Claude-specific. Using converse API instead for this model.")
+
+                    # Convert to converse format
+                    tool_spec_converse = {
+                        "name": "analyze_driver_risk",
+                        "description": "Analyze driver telemetry and return structured risk assessment",
+                        "inputSchema": {
+                            "json": tool_definition_claude["input_schema"]
+                        }
+                    }
+
+                    response = bedrock_runtime.converse(
+                        modelId=model_id,
+                        messages=[{"role": "user", "content": [{"text": formatted_message}]}],
+                        inferenceConfig={"temperature": temperature, "maxTokens": max_tokens},
+                        toolConfig={
+                            "tools": [{"toolSpec": tool_spec_converse}],
+                            "toolChoice": {"tool": {"name": "analyze_driver_risk"}}
+                        }
+                    )
+
+                    content = response['output']['message']['content']
+                    tool_use_block = next((block['toolUse'] for block in content if 'toolUse' in block), None)
+
+                    if tool_use_block:
+                        risk_assessment = tool_use_block['input']
+                        input_tokens = response['usage']['inputTokens']
+                        output_tokens = response['usage']['outputTokens']
+
+                        end_time = datetime.now()
+                        total_latency = (end_time - start_time).total_seconds() * 1000
+
+                        st.info("🛠️ **Tool Use (converse fallback)**: Schema-enforced output (95%+ success rate)")
+
+                        display_results(
+                            risk_assessment,
+                            {"total": total_latency, "first_token": 0},
+                            {"input": input_tokens, "output": output_tokens},
+                            mode="tool_use_aws"
+                        )
+                    else:
+                        st.error("No tool use found in response")
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                st.exception(e)
+
+                st.markdown("""
+                ### Troubleshooting:
+
+                **Common Issues with invoke_model + tools:**
+
+                1. **Format Differences**: 
+                   - `invoke_model` uses model-native formats
+                   - Claude uses `input_schema` (not `inputSchema`)
+                   - Other models may not support tools with `invoke_model`
+
+                2. **Recommendation**: 
+                   - Use `converse` API (Tab 2) for cross-model compatibility
+                   - Use `invoke_model` only when you need model-specific features
+
+                3. **AWS Blog Context**:
+                   - The blog examples use Claude-specific formats
+                   - For production, `converse` API is more portable
+                """)
+
+# Footer with comparison
+st.divider()
+st.header("📊 Approach Comparison")
+
+comparison_data = {
+    "Approach": [
+        "Tab 1: Streaming",
+        "Tab 2: Tool Use (Converse)",
+        "Tab 3: Prompt Engineering",
+        "Tab 4: Tool Use (invoke_model)"
+    ],
+    "API": [
+        "converse_stream",
+        "converse",
+        "invoke_model",
+        "invoke_model"
+    ],
+    "Schema Enforcement": [
+        "❌ No",
+        "✅ Yes",
+        "❌ No",
+        "✅ Yes"
+    ],
+    "Success Rate": [
+        "~93%",
+        "~95%",
+        "93%+ (AWS)",
+        "95%+ (AWS)"
+    ],
+    "Best For": [
+        "Real-time UX",
+        "Production",
+        "Flexibility",
+        "AWS Blog pattern"
+    ]
+}
+
+st.table(comparison_data)
+
+st.info("""
+### 2025 AWS Recommendations:
+
+✅ **Use Tool Use (Tabs 2 & 4)** for:
+- Production applications
+- Regulatory/compliance requirements
+- Complex schemas
+- Guaranteed validation
+
+✅ **Use Prompt Engineering (Tab 3)** for:
+- Rapid prototyping
+- Flexible output formats
+- Simple schemas
+- Models without Tool Use support
+
+✅ **Use Streaming (Tab 1)** for:
+- Better user experience
+- Real-time feedback
+- Lower perceived latency
+""")
+
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: gray;'>
-    <p>Built with Amazon Bedrock | Streaming & Structured Output Comparison</p>
+    <p>Built with Amazon Bedrock | 4 Approaches Demonstrated | Based on AWS 2025 Guidance</p>
 </div>
 """, unsafe_allow_html=True)
