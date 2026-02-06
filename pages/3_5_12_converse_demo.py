@@ -236,6 +236,7 @@ opt_model_id_list = [
     "global.anthropic.claude-sonnet-4-20250514-v1:0",
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "global.anthropic.claude-opus-4-6-v1",
 
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
