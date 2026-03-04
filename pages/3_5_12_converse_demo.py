@@ -345,8 +345,83 @@ with st.sidebar:
             if upload_conversation(uploaded_conversation):
                 st.rerun()
 
-st.markdown("💬 Converse 3-5-12")
+#st.markdown("#### 💬 :blue[Converse 3-5-12]")
 
+header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
+header_flex.markdown("#### 💬 :blue[Converse 3-5-12]")
+header_flex.space("stretch")
+show_guide = header_flex.toggle(":violet[**Guide**]", value=False, key="show_guide_toggle")
+
+if show_guide:
+    with st.container(border=True):
+
+        # Guide header with language toggle
+        guide_header = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="center", border=False)
+        guide_header.markdown("##### 📖 :blue[User Guide]")
+        guide_header.space("stretch")
+        lang_english = guide_header.toggle(":gray[**EN | 日本語**]", value=True, key="guide_lang_toggle")
+
+        if lang_english:
+            st.markdown("""
+            **Getting Started**
+
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+            **Uploading Files**
+
+            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+            Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+            **Managing Conversations**
+
+            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, 
+            totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+
+            **Model Settings**
+
+            Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos 
+            qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
+
+            **Tips & Tricks**
+
+            - 💡 Lorem ipsum dolor sit amet, consectetur adipiscing elit
+            - 💡 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua
+            - 💡 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+            - 💡 Duis aute irure dolor in reprehenderit in voluptate velit
+            - 💡 Excepteur sint occaecat cupidatat non proident deserunt
+            """)
+        else:
+            st.markdown("""
+            **はじめに**
+
+            AIアシスタントとの会話を開始できます。適切なモデルを選択し、
+            パラメータを調整することで最適な結果を得ることができます。
+            様々な主要な大規模言語モデルに対応しており、幅広いシナリオに対応しています。
+
+            **ファイルのアップロード**
+
+            画像（PNG、JPG、JPEG）およびドキュメント（TXT、CSV、PDF、MD）のアップロードに対応しています。
+            ファイルサイズは5MB以内、画像サイズは8000×8000ピクセル以内に制限されています。
+
+            **会話の管理**
+
+            会話履歴はJSONファイルとしてダウンロード保存でき、後から再アップロードして復元できます。
+            システムは最大160件の直近メッセージを保持します。
+
+            **モデル設定**
+
+            サイドバーで温度、Top P、Top K、最大トークン数などのパラメータを調整できます。
+            モデルによってサポートされるパラメータの範囲が異なりますので、用途に応じて調整してください。
+
+            **使い方のヒント**
+
+            - 💡 タスクに適したモデルをサイドバーから選択してください
+            - 💡 温度を下げることでより安定した出力結果が得られます
+            - 💡 ドキュメントをアップロードしてその内容について直接質問できます
+            - 💡 後で参照できるよう定期的に会話履歴をダウンロードしてください
+            - 💡 クリアボタンを使用して新しい会話を開始できます
+            """)
 
 #:markdown/forum:
 st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
