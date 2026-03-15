@@ -11,7 +11,7 @@ import base64
 import uuid
 import pandas as pd
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
-from cmn.bedrock_converse_tools_2 import AcronymBedrockConverseTool
+from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 
@@ -392,7 +392,7 @@ if prompt:
                         if 'metrics' in event['metadata']:
                             latency = metadata['metrics']['latencyMs']
                         if settings["enable_print_invocation_metrics"]:
-                            stats = f"L| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                            stats = f"T| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
                             result_container.write(stats)
 
                     if "internalServerException" in event:
@@ -431,47 +431,47 @@ if prompt:
                     ]
                 }
 
-                if calculator_tool.matches(tool_name):
-                    expr_result = calculator_tool.invoke(tool_args_json['expression'])
-                    tool_result_message = {
-                        "role": "user",
-                        "content": [
-                            {
-                                "toolResult": {
-                                        "toolUseId": tool_invocation['tool_use_id'],
-                                        "content": [{"json": {"expr_result": expr_result}}]
-                                    }
-                            }
-                        ]
-                    }
+                # if calculator_tool.matches(tool_name):
+                #     expr_result = calculator_tool.invoke(tool_args_json['expression'])
+                #     tool_result_message = {
+                #         "role": "user",
+                #         "content": [
+                #             {
+                #                 "toolResult": {
+                #                         "toolUseId": tool_invocation['tool_use_id'],
+                #                         "content": [{"json": {"expr_result": expr_result}}]
+                #                     }
+                #             }
+                #         ]
+                #     }
 
-                if acronym_tool.matches(tool_name):
-                    expr_result = acronym_tool.invoke(tool_args_json['expression'])
-                    tool_result_message = {
-                        "role": "user",
-                        "content": [
-                            {
-                                "toolResult": {
-                                        "toolUseId": tool_invocation['tool_use_id'],
-                                        "content": [{"json": {"expr_result": expr_result}}]
-                                    }
-                            }
-                        ]
-                    }
+                # if acronym_tool.matches(tool_name):
+                #     expr_result = acronym_tool.invoke(tool_args_json['expression'])
+                #     tool_result_message = {
+                #         "role": "user",
+                #         "content": [
+                #             {
+                #                 "toolResult": {
+                #                         "toolUseId": tool_invocation['tool_use_id'],
+                #                         "content": [{"json": {"expr_result": expr_result}}]
+                #                     }
+                #             }
+                #         ]
+                #     }
 
-                if url_loader_tool.matches(tool_name):
-                    expr_result = url_loader_tool.invoke(tool_args_json['expression'])
-                    tool_result_message = {
-                        "role": "user",
-                        "content": [
-                            {
-                                "toolResult": {
-                                        "toolUseId": tool_invocation['tool_use_id'],
-                                        "content": [{"json": {"expr_result": expr_result}}]
-                                    }
-                            }
-                        ]
-                    }
+                # if url_loader_tool.matches(tool_name):
+                #     expr_result = url_loader_tool.invoke(tool_args_json['expression'])
+                #     tool_result_message = {
+                #         "role": "user",
+                #         "content": [
+                #             {
+                #                 "toolResult": {
+                #                         "toolUseId": tool_invocation['tool_use_id'],
+                #                         "content": [{"json": {"expr_result": expr_result}}]
+                #                     }
+                #             }
+                #         ]
+                #     }
 
                 for tool in tools:
                     if tool.matches(tool_name):
