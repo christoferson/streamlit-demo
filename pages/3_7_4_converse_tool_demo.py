@@ -14,6 +14,7 @@ from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
+from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 settings = {
-    "enable_print_invocation_metrics": True
+    "enable_print_invocation_metrics": False
 }
 
 ####################################################################################
@@ -34,8 +35,9 @@ calculator_tool = CalculatorBedrockConverseTool()
 acronym_tool = AcronymBedrockConverseTool()
 url_loader_tool = UrlContentBedrockConverseTool()
 wikipedia_tool = WikipediaBedrockConverseTool()
+datetime_tool = DateTimeBedrockConverseTool()
 
-tools = [calculator_tool, acronym_tool, url_loader_tool, wikipedia_tool]
+tools = [calculator_tool, acronym_tool, url_loader_tool, wikipedia_tool, datetime_tool]
 
 tool_config = {
         "tools": [tool.definition for tool in tools]
@@ -431,51 +433,10 @@ if prompt:
                     ]
                 }
 
-                # if calculator_tool.matches(tool_name):
-                #     expr_result = calculator_tool.invoke(tool_args_json['expression'])
-                #     tool_result_message = {
-                #         "role": "user",
-                #         "content": [
-                #             {
-                #                 "toolResult": {
-                #                         "toolUseId": tool_invocation['tool_use_id'],
-                #                         "content": [{"json": {"expr_result": expr_result}}]
-                #                     }
-                #             }
-                #         ]
-                #     }
-
-                # if acronym_tool.matches(tool_name):
-                #     expr_result = acronym_tool.invoke(tool_args_json['expression'])
-                #     tool_result_message = {
-                #         "role": "user",
-                #         "content": [
-                #             {
-                #                 "toolResult": {
-                #                         "toolUseId": tool_invocation['tool_use_id'],
-                #                         "content": [{"json": {"expr_result": expr_result}}]
-                #                     }
-                #             }
-                #         ]
-                #     }
-
-                # if url_loader_tool.matches(tool_name):
-                #     expr_result = url_loader_tool.invoke(tool_args_json['expression'])
-                #     tool_result_message = {
-                #         "role": "user",
-                #         "content": [
-                #             {
-                #                 "toolResult": {
-                #                         "toolUseId": tool_invocation['tool_use_id'],
-                #                         "content": [{"json": {"expr_result": expr_result}}]
-                #                     }
-                #             }
-                #         ]
-                #     }
 
                 for tool in tools:
                     if tool.matches(tool_name):
-                        expr_result = tool.invoke(tool_args_json['expression'])
+                        expr_result = tool.invoke(tool_args_json['expression'], tool_args=tool_args_json)
                         tool_result_message = {
                             "role": "user",
                             "content": [
