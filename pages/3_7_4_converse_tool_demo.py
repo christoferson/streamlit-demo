@@ -13,6 +13,7 @@ import pandas as pd
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_2 import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
+from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -22,24 +23,25 @@ MAX_MESSAGES = 100 * 2
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+settings = {
+    "enable_print_invocation_metrics": True
+}
+
 ####################################################################################
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 calculator_tool = CalculatorBedrockConverseTool()
 acronym_tool = AcronymBedrockConverseTool()
 url_loader_tool = UrlContentBedrockConverseTool()
+wikipedia_tool = WikipediaBedrockConverseTool()
+
+tools = [calculator_tool, acronym_tool, url_loader_tool, wikipedia_tool]
+
 tool_config = {
-        "tools": [
-            calculator_tool.definition,
-            acronym_tool.definition,
-            url_loader_tool.definition
-        ]
+        "tools": [tool.definition for tool in tools]
     }
 
 ####################################################################################
-
-
-
 
 def image_to_base64(image, mime_type:str):
     buffer = io.BytesIO()
@@ -143,8 +145,10 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
                         total_token_count = metadata['usage']['totalTokens']
                     if 'metrics' in event['metadata']:
                         latency = metadata['metrics']['latencyMs']
-                    stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
-                    result_container.write(stats)
+
+                    if settings["enable_print_invocation_metrics"]:
+                        stats = f"M| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                        result_container.write(stats)
 
                 if "internalServerException" in event:
                     exception = event["internalServerException"]
@@ -310,16 +314,8 @@ if prompt:
     inference_config = {
         "temperature": opt_temperature,
         "maxTokens": opt_max_tokens,
-        #"topP": opt_top_p,
     }
 
-    # additional_model_fields = {"top_k": opt_top_k}
-    # if opt_model_id.startswith("cohere"):
-    #     additional_model_fields = None
-    # if opt_model_id.startswith("meta"):
-    #     additional_model_fields = None
-    # if opt_model_id.startswith("mistral"):
-    #     additional_model_fields = None
     additional_model_fields = None
 
     with st.spinner('Processing...'):
@@ -395,8 +391,9 @@ if prompt:
                             total_token_count = metadata['usage']['totalTokens']
                         if 'metrics' in event['metadata']:
                             latency = metadata['metrics']['latencyMs']
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
-                        result_container.write(stats)
+                        if settings["enable_print_invocation_metrics"]:
+                            stats = f"L| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
+                            result_container.write(stats)
 
                     if "internalServerException" in event:
                         exception = event["internalServerException"]
@@ -475,6 +472,22 @@ if prompt:
                             }
                         ]
                     }
+
+                for tool in tools:
+                    if tool.matches(tool_name):
+                        expr_result = tool.invoke(tool_args_json['expression'])
+                        tool_result_message = {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "toolResult": {
+                                            "toolUseId": tool_invocation['tool_use_id'],
+                                            "content": [{"json": {"expr_result": expr_result}}]
+                                        }
+                                }
+                            ]
+                        }
+                        break
 
                 messages = [message_user_latest, tool_request_message, tool_result_message]
 
