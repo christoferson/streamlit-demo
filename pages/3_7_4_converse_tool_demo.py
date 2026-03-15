@@ -40,34 +40,6 @@ tool_config = {
 
 
 
-st.logo(icon_image="images/logo.png", image="images/logo_text.png")
-
-st.markdown(
-    """
-    <style>
-    button[kind="primary"] {
-        background: none!important;
-        border: none;
-        padding: 0!important;
-        margin: 0;
-        color: black !important;
-        text-decoration: none;
-        cursor: pointer;
-        border: none !important;
-    }
-    button[kind="primary"]:hover {
-        text-decoration: none;
-        color: black !important;
-    }
-    button[kind="primary"]:focus {
-        outline: none !important;
-        box-shadow: none !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 def image_to_base64(image, mime_type:str):
     buffer = io.BytesIO()
@@ -222,7 +194,7 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
 
-st.markdown("💬 Converse Tool 371")
+st.markdown("💬 Converse Tool 375")
 
 if "menu_converse_tool_messages" not in st.session_state:
     st.session_state["menu_converse_tool_messages"] = []
@@ -258,7 +230,8 @@ uploaded_file = st.file_uploader(
         key=f"menu_converse_tool_uploader_key_{st.session_state.menu_converse_tool_uploader_key}"
     )
 
-st.markdown(f"Tools: Calculator")
+tool_names = ", ".join([tool.definition['toolSpec']['name'] for tool in [calculator_tool, acronym_tool, url_loader_tool]])
+st.markdown(f"Tools: {tool_names}")
 
 prompt = st.chat_input()
 
