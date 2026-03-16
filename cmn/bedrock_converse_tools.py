@@ -13,8 +13,8 @@ class AbstractBedrockConverseTool:
     def matches(self, name):
         return self.name == name
     
-    def invoke(self, params):
-        pass
+    def invoke(self, params, tool_args=None):
+        raise NotImplementedError
 
 class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
 
@@ -54,7 +54,7 @@ class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
             }
         super().__init__(name, definition)
 
-    def invoke(self, params):
+    def invoke(self, params, tool_args=None):
         return self.eval_(ast.parse(params, mode='eval').body)
 
     def eval_(self, node):
