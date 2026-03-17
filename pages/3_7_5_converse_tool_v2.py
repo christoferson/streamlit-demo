@@ -18,6 +18,7 @@ from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
+from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -233,6 +234,25 @@ class ToolRegistry:
     def tool_names(self) -> list:
         return list(self._tools.keys())
 
+    def build_tool_summary(self) -> str | None:
+        """
+        Loop through all tools, collect non-null summaries,
+        return formatted string or None if no summaries exist.
+        """
+        lines = [
+            tool.summary()
+            for tool in self._tools.values()
+            if tool.summary() is not None      # ← skip if not overridden
+        ]
+
+        if not lines:
+            return None
+
+        return (
+            "AVAILABLE TOOLS:\n"
+            + "\n".join(f"  - {line}" for line in lines)
+        )
+    
     # ── Dispatch ──────────────────────────────────────────────────────────────
 
     def invoke(self, tool_name: str, tool_args: dict) -> Any:
@@ -507,11 +527,14 @@ def get_tool_registry():
         DateTimeBedrockConverseTool(),
         SalesBedrockConverseTool(),
         ProductBedrockConverseTool(),
+        ChartBedrockConverseTool(),
     ])
 
 
 bedrock_client = get_bedrock_client()
 tool_registry  = get_tool_registry()
+
+tool_summary = tool_registry.build_tool_summary()
 
 
 ################################################################################
@@ -528,26 +551,38 @@ opt_model_id_list = [
     "mistral.mistral-large-2402-v1:0",
 ]
 
-OPT_SYSTEM_MSG_DEFAULT = """You are a BI analyst assistant with access to sales data tools.
+# OPT_SYSTEM_MSG_DEFAULT = """You are a BI analyst assistant with access to sales data tools.
 
-When asked about sales performance, year-over-year comparisons, or trends:
-1. ALWAYS fetch data for BOTH years using the sales_data tool
-2. Compare month-by-month to identify where gaps occurred
-3. Calculate percentage changes: ((current - previous) / previous * 100)
-4. Identify the specific months where performance diverged
-5. Look at profit_margin_pct alongside revenue — revenue can grow while margins shrink
-6. Provide a structured response:
-   - Overall YoY summary (total revenue, growth %)
-   - Monthly trend analysis (which months underperformed and by how much)
-   - Root cause identification (is it volume/units or pricing/margin?)
-   - Actionable insights
+# When asked about sales performance, year-over-year comparisons, or trends:
+# 1. ALWAYS fetch data for BOTH years using the sales_data tool
+# 2. Compare month-by-month to identify where gaps occurred
+# 3. Calculate percentage changes: ((current - previous) / previous * 100)
+# 4. Identify the specific months where performance diverged
+# 5. Look at profit_margin_pct alongside revenue — revenue can grow while margins shrink
+# 6. Provide a structured response:
+#    - Overall YoY summary (total revenue, growth %)
+#    - Monthly trend analysis (which months underperformed and by how much)
+#    - Root cause identification (is it volume/units or pricing/margin?)
+#    - Actionable insights
 
-Be specific with numbers. Always cite the data returned by the tool.
+# Be specific with numbers. Always cite the data returned by the tool.
 
-IMPORTANT: Call tools ONE AT A TIME. 
-Do not make parallel tool calls.
-Wait for each tool result before calling the next tool.
-"""
+
+# IMPORTANT: Call tools ONE AT A TIME. 
+# Do not make parallel tool calls.
+# Wait for each tool result before calling the next tool.
+# """
+
+# ── System Prompt ─────────────────────────────────────────────────────────────
+def build_default_system_prompt(registry: ToolRegistry) -> str:
+    tool_summary = registry.build_tool_summary()
+    return "\n\n".join(filter(None, [
+        "You are a BI analyst assistant.",
+        tool_summary,
+        "Call tools ONE AT A TIME. Wait for each result before calling the next.",
+    ]))
+
+OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
 
 with st.sidebar:
     opt_model_id    = st.selectbox("Model ID", opt_model_id_list, index=0,
@@ -705,6 +740,53 @@ if prompt:
                     f"total={m.total_tokens} latency={m.latency_ms}ms"
                 )
 
+        ##
+        def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
+            """Renders chart using config from tool_args, data from tool_result."""
+
+            data  = tool_result.get("data", [])
+            x     = tool_args["x_label"]
+            y     = tool_args["y_label"]
+            title = tool_args["title"]
+            color = tool_args.get("color", "#4A90D9")
+            ctype = tool_args["chart_type"]
+
+            if not data:
+                st.warning("Chart error: no data in tool result.")
+                return
+
+            df = pd.DataFrame(data)
+
+            if x not in df.columns or y not in df.columns:
+                st.warning(f"Chart error: columns '{x}' or '{y}' not found.")
+                return
+
+            with result_container:
+                st.markdown(f"**{title}**")
+                chart_df = df.set_index(x)[[y]]
+                if ctype == "bar":
+                    st.bar_chart(chart_df, color=color)
+                elif ctype == "line":
+                    st.line_chart(chart_df, color=color)
+                elif ctype == "area":
+                    st.area_chart(chart_df, color=color)
+
+
+        def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
+            """Tool-name based renderer."""
+
+            if tool_name == "product_query":
+                with result_container:
+                    st.markdown(":blue[🗄️ **Generated SQL:**]")
+                    st.code(
+                        tool_args["sql"],
+                        language="sql",
+                        wrap_lines=True,
+                    )
+
+            elif tool_name == "render_chart":
+                on_tool_invoked_render_chart(tool_args, tool_result)
+        ##
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             """Fired after each tool execution."""
             accumulated["text"] += (
@@ -713,20 +795,9 @@ if prompt:
                 f"**Result:** `{tool_result}`\n\n"
             )
 
-            ##
-            # if tool_name == "product_query" and "sql" in tool_args:
-            #     accumulated["text"] += (
-            #         f"```sql\n{tool_args['sql']}\n```\n"
-            #     )
-
-            ##
             result_area.markdown(accumulated["text"])
 
-            # ── SQL tool: render SQL as a separate widget ─────────────────────────
-            if tool_name == "product_query" and "sql" in tool_args:
-                with result_container:
-                    st.caption(":blue[**Generated SQL:**]")
-                    st.code(tool_args["sql"], language="sql", wrap_lines=True)
+            on_tool_invoked_render_part(tool_name, tool_args, tool_result)
 
         # ── Run ───────────────────────────────────────────────────────────────
         manager = ConversationManager(
