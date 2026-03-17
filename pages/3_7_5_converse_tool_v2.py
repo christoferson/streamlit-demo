@@ -16,6 +16,7 @@ from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
+from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -503,6 +504,7 @@ def get_tool_registry():
         UrlContentBedrockConverseTool(),
         WikipediaBedrockConverseTool(),
         DateTimeBedrockConverseTool(),
+        SalesBedrockConverseTool(),
     ])
 
 
@@ -524,6 +526,27 @@ opt_model_id_list = [
     "mistral.mistral-large-2402-v1:0",
 ]
 
+OPT_SYSTEM_MSG_DEFAULT = """You are a BI analyst assistant with access to sales data tools.
+
+When asked about sales performance, year-over-year comparisons, or trends:
+1. ALWAYS fetch data for BOTH years using the sales_data tool
+2. Compare month-by-month to identify where gaps occurred
+3. Calculate percentage changes: ((current - previous) / previous * 100)
+4. Identify the specific months where performance diverged
+5. Look at profit_margin_pct alongside revenue — revenue can grow while margins shrink
+6. Provide a structured response:
+   - Overall YoY summary (total revenue, growth %)
+   - Monthly trend analysis (which months underperformed and by how much)
+   - Root cause identification (is it volume/units or pricing/margin?)
+   - Actionable insights
+
+Be specific with numbers. Always cite the data returned by the tool.
+
+IMPORTANT: Call tools ONE AT A TIME. 
+Do not make parallel tool calls.
+Wait for each tool result before calling the next tool.
+"""
+
 with st.sidebar:
     opt_model_id    = st.selectbox("Model ID", opt_model_id_list, index=0,
                                    key="model_id")
@@ -532,7 +555,7 @@ with st.sidebar:
     opt_max_tokens  = st.slider("Max Tokens", 0, 4096, 2048, 1,
                                 key="max_tokens")
     opt_system_msg  = st.text_area("System Message",
-                                   "You are a question and answering chatbot",
+                                   OPT_SYSTEM_MSG_DEFAULT,
                                    key="system_msg")
     opt_show_metrics = st.checkbox("Show Invocation Metrics", value=False,
                                    key="show_metrics")
