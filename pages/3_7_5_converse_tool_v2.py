@@ -17,6 +17,7 @@ from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
+from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -505,6 +506,7 @@ def get_tool_registry():
         WikipediaBedrockConverseTool(),
         DateTimeBedrockConverseTool(),
         SalesBedrockConverseTool(),
+        ProductBedrockConverseTool(),
     ])
 
 
@@ -565,8 +567,44 @@ with st.sidebar:
 # SECTION: Streamlit Page Setup + Session State
 ################################################################################
 
-st.markdown("💬 Converse Tool")
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.markdown("💬 Converse Tool")
+    show_examples = st.toggle("Examples", value=False)
 st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
+
+if show_examples:
+    st.info("""
+**💡 Example Questions to Try**
+
+**Year-over-Year Analysis**
+- Compare 2024 vs 2023 sales performance. What caused any underperformance?
+- Which months in 2024 were worse than 2023 and by how much?
+- Was the 2024 dip a volume problem or a margin problem?
+
+**Monthly Drill-Down**
+- Show me June 2024 sales breakdown by region and category
+- What was the best performing month in 2023?
+- How did Q4 2024 compare to Q4 2023?
+
+**Regional Analysis**
+- Which region performed better in 2024?
+- Which region recovered faster in Q3 2024?
+- Compare North vs South region for the full year 2024
+
+**General**
+- What is the total revenue for 2024?
+- Which category has better profit margins?
+
+**Product Catalog (NL-to-SQL)**
+- Show me all products under $100
+- Which products come in red?
+- What is the most expensive product in each category?
+- List all color options for the Laptop Pro
+- Which product has the highest rating?
+- How many color variants does each product have?
+- Show products launched in 2023 with rating above 4.5
+- Which color has the most stock across all products?
+            """)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -674,7 +712,21 @@ if prompt:
                 f"```json\n{json.dumps(tool_args, indent=2)}\n```\n"
                 f"**Result:** `{tool_result}`\n\n"
             )
+
+            ##
+            # if tool_name == "product_query" and "sql" in tool_args:
+            #     accumulated["text"] += (
+            #         f"```sql\n{tool_args['sql']}\n```\n"
+            #     )
+
+            ##
             result_area.markdown(accumulated["text"])
+
+            # ── SQL tool: render SQL as a separate widget ─────────────────────────
+            if tool_name == "product_query" and "sql" in tool_args:
+                with result_container:
+                    st.caption(":blue[**Generated SQL:**]")
+                    st.code(tool_args["sql"], language="sql", wrap_lines=True)
 
         # ── Run ───────────────────────────────────────────────────────────────
         manager = ConversationManager(
