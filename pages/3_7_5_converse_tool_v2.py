@@ -19,6 +19,7 @@ from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
 from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
+from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -569,6 +570,7 @@ def get_tool_registry():
         SalesBedrockConverseTool(),
         ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
+        SalesKpiBedrockConverseTool(),
     ])
 
 
@@ -680,6 +682,12 @@ if show_examples:
 - How many color variants does each product have?
 - Show products launched in 2023 with rating above 4.5
 - Which color has the most stock across all products?
+
+**KPI Dashboard**
+- Give me a KPI summary comparing 2024 vs 2023
+- Show me the key metrics for 2024 sales performance
+- Display a KPI dashboard for Q4 2024 vs Q4 2023
+
             """)
 
 if "messages" not in st.session_state:
@@ -825,6 +833,37 @@ if prompt:
                     st.line_chart(chart_df)     # ← no single color for multi-series
                 elif ctype == "area":
                     st.area_chart(chart_df)
+        
+        def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
+            """Renders KPI cards from tool_result."""
+
+            if tool_result.get("status") != "kpi_ready":
+                return
+
+            title   = tool_result.get("title", "")
+            metrics = tool_result.get("metrics", [])
+
+            if not metrics:
+                return
+
+            with result_container:
+                if title:
+                    st.markdown(f"**{title}**")
+
+                # ── Render in rows of 4 ───────────────────────────────────────────
+                chunk_size = 4
+                for i in range(0, len(metrics), chunk_size):
+                    row     = metrics[i : i + chunk_size]
+                    columns = st.columns(len(row))
+
+                    for col, metric in zip(columns, row):
+                        with col:
+                            st.metric(
+                                label       = metric.get("label", ""),
+                                value       = metric.get("value", ""),
+                                delta       = metric.get("delta"),           # None if not provided
+                                delta_color = metric.get("delta_color", "normal"),
+                            )
 
         def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
             """Tool-name based renderer."""
@@ -840,6 +879,9 @@ if prompt:
 
             elif tool_name == "render_chart":
                 on_tool_invoked_render_chart(tool_args, tool_result)
+
+            elif tool_name == "render_sales_kpi":              # ← add this
+                on_tool_invoked_render_kpi(tool_args, tool_result)
         ##
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             """Fired after each tool execution."""
