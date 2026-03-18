@@ -81,18 +81,18 @@ class StreamMetrics:
 @dataclass
 class StreamResult:
     """Everything extracted from one converse_stream call."""
-    text:            str = ""
-    stop_reason:     str = ""
-    tool_invocation: Optional[ToolInvocation] = None
-    metrics:         StreamMetrics = field(default_factory=StreamMetrics)
-    errors:          list = field(default_factory=list)
+    text:             str = ""
+    stop_reason:      str = ""
+    tool_invocation:  Optional[ToolInvocation] = None       # first tool (backward compat)
+    tool_invocations: list = field(default_factory=list)    # ← all tools
+    metrics:          StreamMetrics = field(default_factory=StreamMetrics)
+    errors:           list = field(default_factory=list)
 
     @property
     def has_tool_call(self) -> bool:
         return (
             self.stop_reason == "tool_use"
-            and self.tool_invocation is not None
-            and self.tool_invocation.is_pending
+            and bool(self.tool_invocations)                 # ← check list
         )
 
     @property
@@ -151,18 +151,10 @@ def process_stream(
     stream,
     on_text_delta: Optional[Callable[[str], None]] = None,
 ) -> StreamResult:
-    """
-    Consume a converse_stream EventStream and return a StreamResult.
 
-    Args:
-        stream:        The EventStream from response['stream'].
-        on_text_delta: Optional callback(str) fired for each text chunk.
-                       Use this hook to update the UI incrementally.
-    Returns:
-        StreamResult with all extracted data.
-    """
-    result          = StreamResult()
-    tool_invocation = ToolInvocation()
+    result           = StreamResult()
+    tool_invocations = []       # ← collect all tool calls
+    current_tool     = None     # ← track active streaming tool
 
     for event in stream:
 
@@ -170,24 +162,53 @@ def process_stream(
             logger.debug("messageStart: role=%s", event['messageStart'].get('role'))
 
         elif 'contentBlockStart' in event:
-            _handle_content_block_start(event['contentBlockStart'], tool_invocation)
+            start = event['contentBlockStart'].get('start', {})
+            if 'toolUse' in start:
+                # ── New tool call — create fresh ToolInvocation ───────────
+                tu           = start['toolUse']
+                current_tool = ToolInvocation(
+                    tool_use_id = tu['toolUseId'],
+                    tool_name   = tu['name'],
+                )
+                tool_invocations.append(current_tool)
+                logger.info("Tool call started: id=%s name=%s",
+                            tu['toolUseId'], tu['name'])
+            else:
+                current_tool = None     # text block, not a tool
 
         elif 'contentBlockDelta' in event:
-            _handle_content_block_delta(
-                event['contentBlockDelta']['delta'],
-                result,
-                tool_invocation,
-                on_text_delta,
-            )
+            delta = event['contentBlockDelta']['delta']
+
+            if 'text' in delta:
+                chunk = delta['text']
+                result.text += chunk
+                if on_text_delta:
+                    on_text_delta(chunk)
+
+            elif 'toolUse' in delta:
+                # ── Accumulate into CURRENT tool only ─────────────────────
+                if current_tool is not None:
+                    current_tool.tool_input_raw += delta['toolUse'].get('input', '')
+
+            elif 'reasoningContent' in delta:
+                rc = delta['reasoningContent']
+                if 'text' in rc:
+                    logger.debug("Reasoning delta: %s", rc['text'])
 
         elif 'contentBlockStop' in event:
-            pass  # reserved for future use
+            # ── Block done — finalize current tool ────────────────────────
+            if current_tool is not None:
+                current_tool.finalize()
+                logger.info("Tool call finalized: name=%s args=%s",
+                            current_tool.tool_name,
+                            current_tool.tool_arguments)
+                current_tool = None     # reset for next block
 
         elif 'messageStop' in event:
             result.stop_reason = event['messageStop'].get('stopReason', '')
-            if result.stop_reason == 'tool_use':
-                tool_invocation.finalize()
-                result.tool_invocation = tool_invocation
+            if result.stop_reason == 'tool_use' and tool_invocations:
+                result.tool_invocations = tool_invocations
+                result.tool_invocation  = tool_invocations[0]  # backward compat
 
         elif 'metadata' in event:
             _handle_metadata(event['metadata'], result)
@@ -340,10 +361,7 @@ class ConversationManager:
         on_stream_result: Optional[Callable] = None,
         on_tool_invoked:  Optional[Callable] = None,
     ) -> StreamResult:
-        """
-        Execute one user turn, resolving any tool-use loops automatically.
-        Returns the final StreamResult after all tool calls are resolved.
-        """
+
         messages = message_history.copy()
 
         while True:
@@ -353,21 +371,44 @@ class ConversationManager:
                 on_stream_result(result)
 
             if not result.has_tool_call:
-                return result                   # ← normal end_turn or error
+                return result
 
-            # ── Tool-use loop ─────────────────────────────────────────────────
-            tool_inv    = result.tool_invocation
-            tool_result = self.registry.invoke(tool_inv.tool_name,
-                                               tool_inv.tool_arguments)
+            # ── Build single assistant message for ALL tool calls ─────────────
+            assistant_content = [
+                {
+                    "toolUse": {
+                        "toolUseId": tool_inv.tool_use_id,
+                        "name":      tool_inv.tool_name,
+                        "input":     tool_inv.tool_arguments,
+                    }
+                }
+                for tool_inv in result.tool_invocations
+            ]
+            messages.append({"role": "assistant", "content": assistant_content})
 
-            if on_tool_invoked:
-                on_tool_invoked(tool_inv.tool_name,
-                                tool_inv.tool_arguments,
-                                tool_result)
+            # ── Execute each tool + build ONE user message with all results ────
+            tool_results_content = []
 
-            messages.append(self.registry.build_tool_request_message(tool_inv))
-            messages.append(self.registry.build_tool_result_message(tool_inv, tool_result))
-            # loop → model sees tool result and continues
+            for tool_inv in result.tool_invocations:
+                tool_result = self.registry.invoke(
+                    tool_inv.tool_name,
+                    tool_inv.tool_arguments,
+                )
+
+                if on_tool_invoked:
+                    on_tool_invoked(tool_inv.tool_name,
+                                    tool_inv.tool_arguments,
+                                    tool_result)
+
+                tool_results_content.append({
+                    "toolResult": {
+                        "toolUseId": tool_inv.tool_use_id,
+                        "content":   [{"json": {"result": tool_result}}],
+                    }
+                })
+
+            messages.append({"role": "user", "content": tool_results_content})
+            # loop → model sees all tool results and continues
 
     # ── Private ───────────────────────────────────────────────────────────────
 
@@ -744,7 +785,7 @@ if prompt:
         def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
             """Renders chart using config from tool_args, data from tool_result."""
 
-            data  = tool_result.get("data", [])
+            data  = tool_args.get("data") or tool_result.get("data", [])
             x     = tool_args["x_label"]
             y     = tool_args["y_label"]
             title = tool_args["title"]
@@ -752,25 +793,38 @@ if prompt:
             ctype = tool_args["chart_type"]
 
             if not data:
-                st.warning("Chart error: no data in tool result.")
+                st.warning("Chart error: no data provided.")
                 return
 
             df = pd.DataFrame(data)
 
-            if x not in df.columns or y not in df.columns:
-                st.warning(f"Chart error: columns '{x}' or '{y}' not found.")
+            if x not in df.columns:
+                st.warning(f"Chart error: x column '{x}' not found. Available: {list(df.columns)}")
                 return
+
+            chart_df = df.set_index(x)
+
+            # ── Case 1: y_label column exists → single series ─────────────────────
+            if y in df.columns:
+                chart_df = chart_df[[y]]
+
+            # ── Case 2: y_label not found → use ALL remaining numeric columns ─────
+            # This handles multi-year comparison e.g. {'2023': ..., '2024': ...}
+            else:
+                numeric_cols = chart_df.select_dtypes(include="number").columns.tolist()
+                if not numeric_cols:
+                    st.warning(f"Chart error: no numeric columns found. Available: {list(df.columns)}")
+                    return
+                chart_df = chart_df[numeric_cols]
 
             with result_container:
                 st.markdown(f"**{title}**")
-                chart_df = df.set_index(x)[[y]]
                 if ctype == "bar":
                     st.bar_chart(chart_df, color=color)
                 elif ctype == "line":
-                    st.line_chart(chart_df, color=color)
+                    st.line_chart(chart_df)     # ← no single color for multi-series
                 elif ctype == "area":
-                    st.area_chart(chart_df, color=color)
-
+                    st.area_chart(chart_df)
 
         def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
             """Tool-name based renderer."""
