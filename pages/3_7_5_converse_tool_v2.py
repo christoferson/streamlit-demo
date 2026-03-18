@@ -20,6 +20,8 @@ from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
 from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
+from cmn.bedrock_converse_tools_sales_anomaly import SalesAnomalyBedrockConverseTool
+
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -571,6 +573,7 @@ def get_tool_registry():
         ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
         SalesKpiBedrockConverseTool(),
+        SalesAnomalyBedrockConverseTool(),
     ])
 
 
@@ -688,6 +691,11 @@ if show_examples:
 - Show me the key metrics for 2024 sales performance
 - Display a KPI dashboard for Q4 2024 vs Q4 2023
 
+**Anomaly Detection**
+- Find anomalies in 2024 revenue
+- Which months had unusual sales in 2024?
+- Detect anomalies in 2024 returns — are returns spiking anywhere?
+- Find revenue anomalies in 2023 vs the yearly average
             """)
 
 if "messages" not in st.session_state:
@@ -865,6 +873,52 @@ if prompt:
                                 delta_color = metric.get("delta_color", "normal"),
                             )
 
+        def on_tool_invoked_render_anomaly(tool_args: dict, tool_result: Any):
+            """Renders anomaly detection results."""
+
+            anomalies = tool_result.get("anomalies", [])
+            normal    = tool_result.get("normal",    [])
+            metric    = tool_result.get("metric",    "revenue")
+            year      = tool_result.get("year",      "")
+            mean      = tool_result.get("mean",      0)
+
+            if "error" in tool_result:
+                with result_container:
+                    st.warning(f"Anomaly detection: {tool_result['error']}")
+                return
+
+            with result_container:
+                st.markdown(f"**🔍 Anomaly Detection — {metric.title()} {year}**")
+                st.caption(f"Yearly mean: {mean:,.0f} | Threshold: ±{tool_result.get('threshold', 1.5)} std dev")
+
+                if not anomalies:
+                    st.success("✅ No anomalies detected — all months within normal range.")
+                    return
+
+                # ── Anomaly cards ─────────────────────────────────────────────────
+                cols = st.columns(len(anomalies)) if len(anomalies) <= 4 else st.columns(4)
+
+                for i, entry in enumerate(anomalies):
+                    col = cols[i % 4] if len(anomalies) > 4 else cols[i]
+                    with col:
+                        flag     = entry["flag"]
+                        severity = entry.get("severity", "")
+                        pct      = entry["pct_vs_mean"]
+                        icon     = "🔴" if flag == "below_normal" else "🟢"
+
+                        st.metric(
+                            label       = f"{icon} {entry['month_name']}",
+                            value       = f"{entry['value']:,.0f}",
+                            delta       = f"{pct:+.1f}% vs mean",
+                            delta_color = "normal" if flag == "above_normal" else "inverse",
+                        )
+                        st.caption(f"Z-score: {entry['zscore']} | {severity}")
+
+                # ── Normal months summary ─────────────────────────────────────────
+                if normal:
+                    normal_names = ", ".join(n["month_name"] for n in normal)
+                    st.caption(f"✅ Normal months: {normal_names}")
+
         def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
             """Tool-name based renderer."""
 
@@ -880,8 +934,10 @@ if prompt:
             elif tool_name == "render_chart":
                 on_tool_invoked_render_chart(tool_args, tool_result)
 
-            elif tool_name == "render_sales_kpi":              # ← add this
+            elif tool_name == "render_sales_kpi":
                 on_tool_invoked_render_kpi(tool_args, tool_result)
+            elif tool_name == "sales_anomaly_detector":
+                on_tool_invoked_render_anomaly(tool_args, tool_result)
         ##
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             """Fired after each tool execution."""
