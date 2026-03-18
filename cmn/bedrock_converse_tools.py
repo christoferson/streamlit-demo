@@ -15,6 +15,14 @@ class AbstractBedrockConverseTool:
     
     def invoke(self, params, tool_args=None):
         raise NotImplementedError
+    
+    def summary(self) -> str | None:
+        """
+        Override in subclass to provide a one-line description
+        of when and how to use this tool.
+        Returns None by default — excluded from system prompt if not overridden.
+        """
+        return None
 
 class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
 
@@ -53,6 +61,9 @@ class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
                 }
             }
         super().__init__(name, definition)
+    
+    def summary(self) -> str:
+        return "expr_evaluator : use for math and numerical calculations"
 
     def invoke(self, params, tool_args=None):
         return self.eval_(ast.parse(params, mode='eval').body)
