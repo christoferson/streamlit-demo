@@ -16,7 +16,7 @@ from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
-from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
+#from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
 from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
@@ -32,6 +32,8 @@ from cmn.tools.renderer import (
     SalesForecastToolRenderer,
 )
 from cmn.tools.tool import ToolRegistry
+from cmn.tools.tool import DateTimeBedrockConverseTool
+from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -76,6 +78,8 @@ class ToolInvocation:
         """Parse raw input string into dict. Call once after stream ends."""
         if self.tool_input_raw:
             self.tool_arguments = json.loads(self.tool_input_raw)
+        else:
+            self.tool_arguments = {}    # ← empty dict instead of None
         return self
 
 
@@ -600,6 +604,7 @@ def get_tool_registry():
         SalesKpiBedrockConverseTool(),
         SalesAnomalyBedrockConverseTool(),
         SalesForecastBedrockConverseTool(),
+        HolidayBedrockConverseTool(),
     ])
 
 
