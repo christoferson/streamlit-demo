@@ -814,67 +814,57 @@ if prompt:
             x     = tool_args["x_label"]
             y     = tool_args["y_label"]
             title = tool_args["title"]
-            color = tool_args.get("color", "#4A90D9")
             ctype = tool_args["chart_type"]
 
             if not data:
-                st.warning("Chart error: no data provided.")
+                with result_container:
+                    st.warning("Chart error: no data provided.")
                 return
 
             df = pd.DataFrame(data)
 
             if x not in df.columns:
-                st.warning(f"Chart error: x column '{x}' not found. Available: {list(df.columns)}")
+                with result_container:
+                    st.warning(f"Chart error: x='{x}' not found. Got: {list(df.columns)}")
                 return
 
-            # ── Preserve original row order — do NOT sort ─────────────────────────
-            df = df.reset_index(drop=True)          # ensure clean integer index
-            df["_order"] = df.index                 # capture original order
+            # ── Detect long format — has a series/type/category column ───────────
+            color_col = next(
+                (c for c in ["series", "type", "category"] if c in df.columns),
+                None
+            )
 
-            chart_df = df.set_index(x)
-
-            # ── Drop helper column ────────────────────────────────────────────────
-            chart_df = chart_df.drop(columns=["_order"], errors="ignore")
-
-            # ── Single vs multi series ────────────────────────────────────────────
-            if y in chart_df.columns:
-                chart_df = chart_df[[y]]
-            else:
-                numeric_cols = chart_df.select_dtypes(include="number").columns.tolist()
-                if not numeric_cols:
-                    st.warning(f"Chart error: no numeric columns found.")
-                    return
-                chart_df = chart_df[numeric_cols]
+            x_order = df[x].unique().tolist()   # preserve original order
 
             with result_container:
                 st.markdown(f"**{title}**")
 
-                plot_df = chart_df.reset_index()    # bring x back as column
+                if color_col:
+                    # ── Long format — color by series column ─────────────────────
+                    if ctype == "bar":
+                        fig = px.bar(df, x=x, y=y, color=color_col, barmode="group")
+                    elif ctype == "line":
+                        fig = px.line(df, x=x, y=y, color=color_col, markers=True)
+                    else:
+                        fig = px.area(df, x=x, y=y, color=color_col)
 
-                if ctype == "bar":
-                    fig = px.bar(
-                        plot_df,
-                        x=x,
-                        y=chart_df.columns.tolist(),
-                        barmode="group",
-                        color_discrete_sequence=[color],
+                else:
+                    # ── Wide format — one column per series ───────────────────────
+                    chart_df  = df.set_index(x)
+                    y_columns = (
+                        [y] if y in chart_df.columns
+                        else chart_df.select_dtypes(include="number").columns.tolist()
                     )
-                elif ctype == "line":
-                    fig = px.line(
-                        plot_df,
-                        x=x,
-                        y=chart_df.columns.tolist(),
-                    )
-                elif ctype == "area":
-                    fig = px.area(
-                        plot_df,
-                        x=x,
-                        y=chart_df.columns.tolist(),
-                    )
+                    plot_df = chart_df[y_columns].reset_index()
 
-                # Disable plotly's own sorting
-                fig.update_xaxes(categoryorder="array",
-                                categoryarray=plot_df[x].tolist())
+                    if ctype == "bar":
+                        fig = px.bar(plot_df, x=x, y=y_columns, barmode="group")
+                    elif ctype == "line":
+                        fig = px.line(plot_df, x=x, y=y_columns, markers=True)
+                    else:
+                        fig = px.area(plot_df, x=x, y=y_columns)
+
+                fig.update_xaxes(categoryorder="array", categoryarray=x_order)
                 st.plotly_chart(fig, use_container_width=True)
         
         def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
