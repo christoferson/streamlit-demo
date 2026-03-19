@@ -31,7 +31,10 @@ class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
         }
         super().__init__(name, definition)
 
-    def invoke(self, params):
+    def summary(self) -> str:
+        return "url_content : use to fetch and read content from a URL"
+
+    def invoke(self, params, tool_args=None):
         try:
             target_url = params
             headers = {
