@@ -9,6 +9,7 @@ from PIL import Image
 import io
 import base64
 import pandas as pd
+import plotly.express as px
 from botocore.exceptions import BotoCoreError, ClientError
 
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
@@ -21,6 +22,7 @@ from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
 from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_anomaly import SalesAnomalyBedrockConverseTool
+from cmn.bedrock_converse_tools_sales_forecast import SalesForecastBedrockConverseTool
 
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -574,6 +576,7 @@ def get_tool_registry():
         ChartBedrockConverseTool(),
         SalesKpiBedrockConverseTool(),
         SalesAnomalyBedrockConverseTool(),
+        SalesForecastBedrockConverseTool(),
     ])
 
 
@@ -696,6 +699,13 @@ if show_examples:
 - Which months had unusual sales in 2024?
 - Detect anomalies in 2024 returns — are returns spiking anywhere?
 - Find revenue anomalies in 2023 vs the yearly average
+
+**Forecast**
+- Forecast next 2 months revenue based on 2024 data
+- Show 2024 monthly sales with 3 month forecast as a line chart
+- Predict units sold for next 6 months using 2024 data
+- What is the revenue trend forecast for early 2025?
+            
             """)
 
 if "messages" not in st.session_state:
@@ -799,7 +809,6 @@ if prompt:
 
         ##
         def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
-            """Renders chart using config from tool_args, data from tool_result."""
 
             data  = tool_args.get("data") or tool_result.get("data", [])
             x     = tool_args["x_label"]
@@ -818,29 +827,55 @@ if prompt:
                 st.warning(f"Chart error: x column '{x}' not found. Available: {list(df.columns)}")
                 return
 
+            # ── Preserve original row order — do NOT sort ─────────────────────────
+            df = df.reset_index(drop=True)          # ensure clean integer index
+            df["_order"] = df.index                 # capture original order
+
             chart_df = df.set_index(x)
 
-            # ── Case 1: y_label column exists → single series ─────────────────────
-            if y in df.columns:
-                chart_df = chart_df[[y]]
+            # ── Drop helper column ────────────────────────────────────────────────
+            chart_df = chart_df.drop(columns=["_order"], errors="ignore")
 
-            # ── Case 2: y_label not found → use ALL remaining numeric columns ─────
-            # This handles multi-year comparison e.g. {'2023': ..., '2024': ...}
+            # ── Single vs multi series ────────────────────────────────────────────
+            if y in chart_df.columns:
+                chart_df = chart_df[[y]]
             else:
                 numeric_cols = chart_df.select_dtypes(include="number").columns.tolist()
                 if not numeric_cols:
-                    st.warning(f"Chart error: no numeric columns found. Available: {list(df.columns)}")
+                    st.warning(f"Chart error: no numeric columns found.")
                     return
                 chart_df = chart_df[numeric_cols]
 
             with result_container:
                 st.markdown(f"**{title}**")
+
+                plot_df = chart_df.reset_index()    # bring x back as column
+
                 if ctype == "bar":
-                    st.bar_chart(chart_df, color=color)
+                    fig = px.bar(
+                        plot_df,
+                        x=x,
+                        y=chart_df.columns.tolist(),
+                        barmode="group",
+                        color_discrete_sequence=[color],
+                    )
                 elif ctype == "line":
-                    st.line_chart(chart_df)     # ← no single color for multi-series
+                    fig = px.line(
+                        plot_df,
+                        x=x,
+                        y=chart_df.columns.tolist(),
+                    )
                 elif ctype == "area":
-                    st.area_chart(chart_df)
+                    fig = px.area(
+                        plot_df,
+                        x=x,
+                        y=chart_df.columns.tolist(),
+                    )
+
+                # Disable plotly's own sorting
+                fig.update_xaxes(categoryorder="array",
+                                categoryarray=plot_df[x].tolist())
+                st.plotly_chart(fig, use_container_width=True)
         
         def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
             """Renders KPI cards from tool_result."""
@@ -919,6 +954,93 @@ if prompt:
                     normal_names = ", ".join(n["month_name"] for n in normal)
                     st.caption(f"✅ Normal months: {normal_names}")
 
+        def on_tool_invoked_render_forecast(tool_args: dict, tool_result: Any):
+
+            if "error" in tool_result:
+                with result_container:
+                    st.warning(f"Forecast error: {tool_result['error']}")
+                return
+
+            actuals       = tool_result.get("actuals",  [])
+            forecast      = tool_result.get("forecast", [])
+            metric        = tool_result.get("metric",   "revenue")
+            train_year    = tool_result.get("train_year")
+            forecast_year = tool_result.get("forecast_year")
+            model_info    = tool_result.get("model",    {})
+            summary       = tool_result.get("summary",  {})
+
+            with result_container:
+                st.markdown(f"**📈 Sales Forecast — {metric.title()}**")
+
+                # ── Model metrics ─────────────────────────────────────────────────
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Trend",      summary.get("trend", "").title())
+                col2.metric("Monthly Δ",  f"{model_info.get('slope', 0):+,.0f}")
+                col3.metric("Confidence", summary.get("confidence", "").title(),
+                            delta=f"R²={model_info.get('r2_score', 0)}")
+
+                # ── Build rows — use sequential order, unique labels ──────────────
+                rows = []
+
+                for row in actuals:
+                    rows.append({
+                        "order":  row["month"],                          # 1-12
+                        "label":  f"{row['month_name']} {train_year}",  # "Jan 2023"
+                        "value":  row["actual"],
+                        "series": f"{train_year} Actual",
+                    })
+
+                for i, row in enumerate(forecast):
+                    rows.append({
+                        "order":  12 + (i + 1),                                      # 13, 14, 15
+                        "label":  f"{row['month_name']} {forecast_year}",            # "Jan 2024"
+                        "value":  row["forecasted_value"],
+                        "series": f"{forecast_year} Forecast",
+                    })
+
+                plot_df = pd.DataFrame(rows).sort_values("order")
+
+                # ── Plotly — order locked via categoryarray ───────────────────────
+                st.markdown(f"**{train_year} Actuals vs {forecast_year} Forecast**")
+
+                fig = px.line(
+                    plot_df,
+                    x="label",
+                    y="value",
+                    color="series",
+                    markers=True,
+                    labels={
+                        "label":  "Month",
+                        "value":  metric.title(),
+                        "series": "",
+                    },
+                    color_discrete_map={
+                        f"{train_year} Actual":      "#4A90D9",
+                        f"{forecast_year} Forecast": "#FF6B6B",
+                    },
+                )
+
+                fig.update_xaxes(
+                    categoryorder="array",
+                    categoryarray=plot_df["label"].tolist(),  # ← 15 unique labels in order
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # ── Forecast table ────────────────────────────────────────────────
+                st.markdown(f"**{forecast_year} Monthly Forecast**")
+                st.dataframe(
+                    pd.DataFrame([
+                        {
+                            "Month":                f"{f['month_name']} {forecast_year}",
+                            f"Forecast ({metric})": f"{f['forecasted_value']:,.0f}",
+                        }
+                        for f in forecast
+                    ]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                
         def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
             """Tool-name based renderer."""
 
@@ -938,6 +1060,9 @@ if prompt:
                 on_tool_invoked_render_kpi(tool_args, tool_result)
             elif tool_name == "sales_anomaly_detector":
                 on_tool_invoked_render_anomaly(tool_args, tool_result)
+            elif tool_name == "sales_forecast":                         # ← add
+                on_tool_invoked_render_forecast(tool_args, tool_result)
+
         ##
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             """Fired after each tool execution."""
