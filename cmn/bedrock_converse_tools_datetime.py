@@ -40,6 +40,9 @@ class DateTimeBedrockConverseTool(AbstractBedrockConverseTool):
         }
         super().__init__(name, definition)
 
+    def summary(self) -> str:
+        return "datetime : use to get the current date and time"
+
     def invoke(self, expression, tool_args=None):
         try:
             operation = expression
