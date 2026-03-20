@@ -6,6 +6,14 @@ from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 
 logger = logging.getLogger(__name__)
 
+def _safe_int(value) -> int:
+    try:
+        if pd.isna(value):
+            return 0
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
 
 # ── 1. Mock Sales Data ────────────────────────────────────────────────────────
 
@@ -76,10 +84,17 @@ def _build_mock_sales() -> pd.DataFrame:
     ])
 
     # Derived columns
-    df["gross_profit"]    = df["revenue"] - df["cogs"]
-    df["profit_margin"]   = (df["gross_profit"] / df["revenue"] * 100).round(2)
-    df["net_revenue"]     = df["revenue"] - (df["returns"] * (df["revenue"] / df["units_sold"]))
-    df["month_name"]      = pd.to_datetime(df["month"], format="%m").dt.strftime("%B")
+    # df["gross_profit"]    = df["revenue"] - df["cogs"]
+    # df["profit_margin"]   = (df["gross_profit"] / df["revenue"] * 100).round(2)
+    # df["net_revenue"]     = df["revenue"] - (df["returns"] * (df["revenue"] / df["units_sold"]))
+    # df["month_name"]      = pd.to_datetime(df["month"], format="%m").dt.strftime("%B")
+
+    df["gross_profit"]  = (df["revenue"] - df["cogs"]).fillna(0)
+    df["profit_margin"] = (df["gross_profit"] / df["revenue"] * 100).fillna(0).round(2)
+    df["net_revenue"]   = (df["revenue"] - (df["returns"] * (df["revenue"] / df["units_sold"]))).fillna(0)
+    df["month_name"]    = pd.to_datetime(df["month"], format="%m").dt.strftime("%B")
+
+    df = df.fillna(0)   # ← catch-all at the end
 
     return df
 
@@ -180,6 +195,12 @@ class SalesBedrockConverseTool(AbstractBedrockConverseTool):
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
 
+    def summary(self) -> str:
+        return (
+            "sales_data : fetches sales figures, monthly data and yearly summaries. "
+            "For year-over-year comparisons call once per year. "
+        )
+
     def invoke(self, params, tool_args: dict = None) -> dict:
         args       = tool_args or {}
         query_type = args.get("query_type")
@@ -212,11 +233,7 @@ class SalesBedrockConverseTool(AbstractBedrockConverseTool):
         category: str = "all",
         region:   str = "all",
     ) -> dict:
-        """
-        Returns monthly aggregated sales for the given year.
-        Columns: month, month_name, revenue, units_sold, returns,
-                 gross_profit, profit_margin, net_revenue
-        """
+
         filters = ["year = ?"]
         params  = [year]
 
@@ -247,25 +264,33 @@ class SalesBedrockConverseTool(AbstractBedrockConverseTool):
 
         con = duckdb.connect()
         con.register("sales", _SALES_DF)
-        print(sql)
         df = con.execute(sql, params).df()
 
-        # Add YTD running total — useful for LLM reasoning
+        # ── Guard: no data found ──────────────────────────────────────────────
+        if df.empty:
+            return {
+                "error":    f"No sales data found for year={year} category={category} region={region}",
+                "row_count": 0,
+                "data":     [],
+            }
+        df = df.fillna(0)
+
         df["ytd_revenue"] = df["revenue"].cumsum()
 
         result = _df_to_tool_result(df)
         result["year"]     = year
         result["category"] = category
         result["region"]   = region
-        result["summary"]  = {
-            "total_revenue":    int(df["revenue"].sum()),
-            "total_units":      int(df["units_sold"].sum()),
-            "total_returns":    int(df["returns"].sum()),
-            "avg_monthly_rev":  int(df["revenue"].mean()),
-            "best_month":       df.loc[df["revenue"].idxmax(), "month_name"],
-            "worst_month":      df.loc[df["revenue"].idxmin(), "month_name"],
-            "total_gross_profit": int(df["gross_profit"].sum()),
+        result["summary"] = {
+            "total_revenue":      _safe_int(df["revenue"].sum()),
+            "total_units":        _safe_int(df["units_sold"].sum()),
+            "total_returns":      _safe_int(df["returns"].sum()),
+            "avg_monthly_rev":    _safe_int(df["revenue"].mean()),
+            "best_month":         df.loc[df["revenue"].idxmax(), "month_name"] if not df["revenue"].isna().all() else "N/A",
+            "worst_month":        df.loc[df["revenue"].idxmin(), "month_name"] if not df["revenue"].isna().all() else "N/A",
+            "total_gross_profit": _safe_int(df["gross_profit"].sum()),
         }
+
         return result
 
     def _get_sales_by_month(
@@ -313,13 +338,21 @@ class SalesBedrockConverseTool(AbstractBedrockConverseTool):
         print(sql)
         df = con.execute(sql, params).df()
 
+        # ── Guard: no data found ──────────────────────────────────────────────
+        if df.empty:
+            return {
+                "error":     f"No data found for year={year} month={month} category={category} region={region}",
+                "row_count": 0,
+                "data":      [],
+            }
+
         result = _df_to_tool_result(df)
         result["year"]  = year
         result["month"] = month
         result["summary"] = {
-            "total_revenue":   int(df["revenue"].sum()),
-            "total_units":     int(df["units_sold"].sum()),
-            "total_returns":   int(df["returns"].sum()),
-            "total_gross_profit": int(df["gross_profit"].sum()),
+            "total_revenue":        _safe_int(df["revenue"].sum()),
+            "total_units":          _safe_int(df["units_sold"].sum()),
+            "total_returns":        _safe_int(df["returns"].sum()),
+            "total_gross_profit":   _safe_int(df["gross_profit"].sum()),
         }
         return result
