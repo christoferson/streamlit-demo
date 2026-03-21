@@ -66,6 +66,8 @@ class ChartBedrockConverseTool(AbstractBedrockConverseTool):
             "render_chart : renders a visual chart or graph. "
             "Use when user asks for a chart, plot, bar chart, line chart or visualization. "
             "x_label and y_label must exactly match column names from the data. "
+            "When charting forecast results, always include historical actuals AND "
+            "forecast values together in the data array — never forecast only."
         )
     
     def invoke(self, params, tool_args: dict = None) -> dict:
