@@ -30,6 +30,9 @@ class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
         }
         super().__init__(name, definition)
 
+    def summary(self) -> str:
+        return "wikipedia : use to look up factual information from Wikipedia"
+
     def invoke(self, params, tool_args=None):
         try:
             search_query = params
