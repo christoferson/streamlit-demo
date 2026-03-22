@@ -34,6 +34,8 @@ from cmn.tools.renderer import (
 from cmn.tools.tool import ToolRegistry
 from cmn.tools.tool import DateTimeBedrockConverseTool
 from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
+from cmn.tools.tool import AwsDocsBedrockConverseTool
+
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -605,6 +607,7 @@ def get_tool_registry():
         SalesAnomalyBedrockConverseTool(),
         SalesForecastBedrockConverseTool(),
         HolidayBedrockConverseTool(),
+        AwsDocsBedrockConverseTool(),
     ])
 
 
@@ -733,7 +736,13 @@ if show_examples:
 - Show 2024 monthly sales with 3 month forecast as a line chart
 - Predict units sold for next 6 months using 2024 data
 - What is the revenue trend forecast for early 2025?
-            
+
+** AWS Doc **
+"What is the maximum size of an S3 object?"
+"How does DynamoDB pricing work?"
+"What are the Lambda concurrency limits?"
+"How do I configure S3 lifecycle policies?"
+"What is Amazon Bedrock and what models does it support?"
             """)
 
 if "messages" not in st.session_state:
