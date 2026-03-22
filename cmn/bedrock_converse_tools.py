@@ -66,7 +66,11 @@ class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
         return "expr_evaluator : use for math and numerical calculations"
 
     def invoke(self, params, tool_args=None):
-        return self.eval_(ast.parse(params, mode='eval').body)
+        expression = tool_args.get("expression") if tool_args else None
+        if not expression:
+            return {"error": "No expression provided"}
+        return self.eval_(ast.parse(expression, mode='eval').body)
+        #return self.eval_(ast.parse(params, mode='eval').body)
 
     def eval_(self, node):
         if isinstance(node, ast.Constant):
