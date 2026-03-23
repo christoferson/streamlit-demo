@@ -1,0 +1,59 @@
+// brand/default.json
+{
+  "brand_name": "Default",
+
+  "colors": {
+    "primary":      "#1B3A6B",
+    "secondary":    "#2E86AB",
+    "accent":       "#F4A261",
+    "background":   "#FFFFFF",
+    "surface":      "#F5F7FA",
+    "text_dark":    "#1A1A2E",
+    "text_light":   "#FFFFFF",
+    "text_muted":   "#6B7280",
+    "success":      "#10B981",
+    "warning":      "#F59E0B",
+    "danger":       "#EF4444",
+    "chart_palette": [
+      "#1B3A6B", "#2E86AB", "#F4A261",
+      "#10B981", "#F59E0B", "#EF4444"
+    ]
+  },
+
+  "fonts": {
+    "heading":      "Calibri",
+    "body":         "Calibri",
+    "mono":         "Courier New",
+    "heading_size": 36,
+    "subheading_size": 24,
+    "body_size":    18,
+    "caption_size": 14
+  },
+
+  "slide": {
+    "width_inches":  13.33,
+    "height_inches": 7.5
+  },
+
+  "rules": {
+    "accent_bar_height_inches":  0.08,
+    "accent_bar_position":       "bottom",
+    "logo_position":             "bottom_right",
+    "max_bullets_per_slide":     6,
+    "max_words_per_bullet":      15,
+    "cover_background":          "primary",
+    "section_background":        "secondary",
+    "content_background":        "background",
+    "use_slide_numbers":         true,
+    "tone":                      "professional"
+  },
+
+  "layouts": {
+    "cover":      { "title_y": 0.35, "subtitle_y": 0.55 },
+    "section":    { "title_y": 0.38, "subtitle_y": 0.58 },
+    "content":    { "title_y": 0.05, "body_y": 0.20 },
+    "two_column": { "title_y": 0.05, "body_y": 0.20, "split": 0.5 },
+    "quote":      { "quote_y": 0.30, "attr_y": 0.65 },
+    "closing":    { "title_y": 0.38, "subtitle_y": 0.55 }
+ }
+}
