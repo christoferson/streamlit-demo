@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 from botocore.exceptions import BotoCoreError, ClientError
 
-from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
+#from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
@@ -23,6 +23,7 @@ from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_anomaly import SalesAnomalyBedrockConverseTool
 from cmn.bedrock_converse_tools_sales_forecast import SalesForecastBedrockConverseTool
+
 from cmn.tools.renderer import (
     RendererRegistry,
     ChartToolRenderer,
@@ -35,7 +36,10 @@ from cmn.tools.tool import ToolRegistry
 from cmn.tools.tool import DateTimeBedrockConverseTool
 from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
 from cmn.tools.tool import AwsDocsBedrockConverseTool
-
+from cmn.tools.tool import EDAProfileBedrockConverseTool
+from cmn.tools.tool import EDACorrelationBedrockConverseTool
+from cmn.tools.tool import EDAGroupBedrockConverseTool
+from cmn.tools.tool import CalculatorBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -608,6 +612,9 @@ def get_tool_registry():
         SalesForecastBedrockConverseTool(),
         HolidayBedrockConverseTool(),
         AwsDocsBedrockConverseTool(),
+        EDAProfileBedrockConverseTool(),
+        EDACorrelationBedrockConverseTool(),
+        EDAGroupBedrockConverseTool(),
     ])
 
 
@@ -669,8 +676,7 @@ with st.sidebar:
                                    key="model_id")
     opt_temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1,
                                 key="temperature")
-    opt_max_tokens  = st.slider("Max Tokens", 0, 4096, 2048, 1,
-                                key="max_tokens")
+    opt_max_tokens  = st.slider("Max Tokens", 0, 8192, 4096, 1, key="max_tokens")
     opt_system_msg  = st.text_area("System Message",
                                    OPT_SYSTEM_MSG_DEFAULT,
                                    key="system_msg")
@@ -743,6 +749,23 @@ if show_examples:
 "What are the Lambda concurrency limits?"
 "How do I configure S3 lifecycle policies?"
 "What is Amazon Bedrock and what models does it support?"
+
+**EDA Profile**
+- Profile 2024 sales data
+- What does the 2024 sales dataset look like?
+- Give me a summary of 2023 sales
+            
+**EDA**
+- Profile 2024 sales data
+- What correlates with revenue in 2024 sales?
+- What drives gross profit in 2024?
+- Show correlation between units sold and returns
+            
+**EDA**
+- Compare 2024 revenue by region
+- Which region has the highest average revenue in 2024?
+- Compare units sold by category in 2023
+- Is there a significant difference in revenue between regions?
             """)
 
 if "messages" not in st.session_state:
