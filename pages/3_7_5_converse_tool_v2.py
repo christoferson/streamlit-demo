@@ -115,7 +115,7 @@ class StreamResult:
     def has_tool_call(self) -> bool:
         return (
             self.stop_reason == "tool_use"
-            and bool(self.tool_invocations)                 # ← check list
+            and bool(self.tool_invocations)
         )
 
     @property
@@ -194,8 +194,7 @@ def process_stream(
                     tool_name   = tu['name'],
                 )
                 tool_invocations.append(current_tool)
-                logger.info("Tool call started: id=%s name=%s",
-                            tu['toolUseId'], tu['name'])
+                logger.info("Tool call started: id=%s name=%s", tu['toolUseId'], tu['name'])
             else:
                 current_tool = None     # text block, not a tool
 
@@ -244,105 +243,6 @@ def process_stream(
                     result.errors.append(f"[{exc_key}] {msg}")
 
     return result
-
-
-################################################################################
-# SECTION: ToolRegistry
-################################################################################
-
-# class ToolRegistry:
-#     """
-#     Registers tools and provides O(1) lookup + dispatch.
-
-#     Usage:
-#         registry   = ToolRegistry([calc_tool, wiki_tool, ...])
-#         tool_cfg   = registry.tool_config          # pass to converse_stream
-#         result     = registry.invoke(name, args)   # execute a tool
-#     """
-
-#     def __init__(self, tools: list):
-#         # keyed by toolSpec.name for O(1) lookup
-#         self._tools = {
-#             tool.definition['toolSpec']['name']: tool
-#             for tool in tools
-#         }
-
-#     # ── Properties ────────────────────────────────────────────────────────────
-
-#     @property
-#     def tool_config(self) -> dict:
-#         """Returns toolConfig dict ready for converse_stream."""
-#         return {"tools": [t.definition for t in self._tools.values()]}
-
-#     @property
-#     def tool_names(self) -> list:
-#         return list(self._tools.keys())
-
-#     def build_tool_summary(self) -> str | None:
-#         """
-#         Loop through all tools, collect non-null summaries,
-#         return formatted string or None if no summaries exist.
-#         """
-#         lines = [
-#             tool.summary()
-#             for tool in self._tools.values()
-#             if tool.summary() is not None      # ← skip if not overridden
-#         ]
-
-#         if not lines:
-#             return None
-
-#         return (
-#             "AVAILABLE TOOLS:\n"
-#             + "\n".join(f"  - {line}" for line in lines)
-#         )
-    
-#     # ── Dispatch ──────────────────────────────────────────────────────────────
-
-#     def invoke(self, tool_name: str, tool_args: dict) -> Any:
-#         """
-#         Dispatch to the matching tool.
-#         Raises KeyError if tool_name is not registered.
-#         """
-#         if tool_name not in self._tools:
-#             raise KeyError(
-#                 f"Unknown tool: '{tool_name}'. Available: {self.tool_names}"
-#             )
-#         tool = self._tools[tool_name]
-#         logger.info("Invoking tool '%s' with args: %s", tool_name, tool_args)
-#         return tool.invoke(tool_args.get('expression'), tool_args=tool_args)
-
-#     # ── Message builders ──────────────────────────────────────────────────────
-
-#     def build_tool_request_message(self, tool_invocation: ToolInvocation) -> dict:
-#         """Assistant-role message that records the tool call."""
-#         return {
-#             "role": "assistant",
-#             "content": [{
-#                 "toolUse": {
-#                     "toolUseId": tool_invocation.tool_use_id,
-#                     "name":      tool_invocation.tool_name,
-#                     "input":     tool_invocation.tool_arguments,
-#                 }
-#             }]
-#         }
-
-#     def build_tool_result_message(
-#         self,
-#         tool_invocation: ToolInvocation,
-#         result: Any,
-#     ) -> dict:
-#         """User-role message that delivers the tool result back to the model."""
-#         return {
-#             "role": "user",
-#             "content": [{
-#                 "toolResult": {
-#                     "toolUseId": tool_invocation.tool_use_id,
-#                     "content":   [{"json": {"result": result}}],
-#                 }
-#             }]
-#         }
-
 
 
 @st.cache_resource
