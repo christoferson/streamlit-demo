@@ -34,14 +34,21 @@ class PptxToolRenderer(AbstractToolRenderer):
         titles      = tool_result.get("slide_titles", [])
         warnings    = tool_result.get("warnings",     [])
 
-        # ── File guard ────────────────────────────────────────────────────────
-        if not filepath or not os.path.exists(filepath):
-            with result_container:
-                st.warning(
-                    f"Presentation file not found: `{filepath}`. "
-                    "It may have been cleaned up."
-                )
-            return
+        # ── Load bytes — from file on first call, from session_state on rerun ─
+        cache_key  = f"pptx_bytes_{filepath}"
+        pptx_bytes = st.session_state.get(cache_key)
+
+        if pptx_bytes is None:
+            if not filepath or not os.path.exists(filepath):
+                with result_container:
+                    st.warning(
+                        f"Presentation file not found: `{filepath}`. "
+                        "It may have been cleaned up."
+                    )
+                return
+            with open(filepath, "rb") as f:
+                pptx_bytes = f.read()
+            st.session_state[cache_key] = pptx_bytes
 
         with result_container:
 
@@ -51,9 +58,9 @@ class PptxToolRenderer(AbstractToolRenderer):
                 f"Brand: `{brand}` · {slide_count} slides · `{filename}`"
             )
 
-            # ── Warnings ──────────────────────────────────────────────────────
+            # ── Warnings — info not error ─────────────────────────────────────
             for w in warnings:
-                st.warning(w)
+                st.info(f"💡 {w}")
 
             # ── Slide outline ─────────────────────────────────────────────────
             if titles:
@@ -62,10 +69,7 @@ class PptxToolRenderer(AbstractToolRenderer):
                         label = t if t else "*(untitled)*"
                         st.markdown(f"{i}. {label}")
 
-            # ── Read file here — not in invoke() ──────────────────────────────
-            with open(filepath, "rb") as f:
-                pptx_bytes = f.read()
-
+            # ── Download ──────────────────────────────────────────────────────
             st.download_button(
                 label               = "⬇️ Download PowerPoint",
                 data                = pptx_bytes,
