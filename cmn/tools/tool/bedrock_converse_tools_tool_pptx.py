@@ -57,6 +57,7 @@ class BrandColors:
         return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
     def get(self, name: str) -> str:
+        """Look up color by attribute name — e.g. colors.get('primary')."""
         return getattr(self, name, self.primary)
 
 
@@ -112,13 +113,18 @@ class BrandGuidelines:
     rules:      BrandRules  = field(default_factory=BrandRules)
     layouts:    dict        = field(default_factory=dict)
 
+    # ── Factories ─────────────────────────────────────────────────────────────
+
     @classmethod
     def from_json(cls, path: str) -> "BrandGuidelines":
         with open(path, "r") as f:
             data = json.load(f)
 
         def _filter(dc, raw: dict) -> dict:
-            return {k: v for k, v in raw.items() if k in dc.__dataclass_fields__}
+            return {
+                k: v for k, v in raw.items()
+                if k in dc.__dataclass_fields__
+            }
 
         return cls(
             brand_name = data.get("brand_name", "Default"),
@@ -131,6 +137,11 @@ class BrandGuidelines:
 
     @classmethod
     def load_all(cls, config_dir: str) -> dict:
+        """
+        Load every .json in config_dir.
+        Returns { brand_name_lower: BrandGuidelines }
+        Falls back to { "default": BrandGuidelines() } if dir missing.
+        """
         brands = {}
 
         if not os.path.isdir(config_dir):
@@ -154,9 +165,15 @@ class BrandGuidelines:
 
         return brands
 
+    # ── Helper ────────────────────────────────────────────────────────────────
+
     def layout(self, slide_type: str) -> BrandLayoutConfig:
+        """Return BrandLayoutConfig for slide_type, with safe defaults."""
         raw   = self.layouts.get(slide_type, {})
-        valid = {k: v for k, v in raw.items() if k in BrandLayoutConfig.__dataclass_fields__}
+        valid = {
+            k: v for k, v in raw.items()
+            if k in BrandLayoutConfig.__dataclass_fields__
+        }
         return BrandLayoutConfig(**valid)
 
 
@@ -238,6 +255,15 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                                             "description": (
                                                 "Subtitle text. Used on cover and closing slides only. "
                                                 "Do not use on content or section slides."
+                                            ),
+                                        },
+                                        "section_number": {
+                                            "type":        "integer",
+                                            "description": (
+                                                "Optional section number shown as a small label "
+                                                "above the title on section slides. "
+                                                "e.g. 1 renders as 'SECTION 01'. "
+                                                "Increment by 1 for each section slide in the deck."
                                             ),
                                         },
                                         "bullets": {
@@ -480,46 +506,93 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
     def _build_section(self, slide, slide_def, brand, warnings):
         W  = brand.slide.width_inches
         H  = brand.slide.height_inches
-        lc = brand.layout("section")
 
+        # ── Background: light surface — clearly different from cover ──────────
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.section_background))
+            brand.colors.hex_to_rgb(brand.colors.surface)
         )
 
-        title_top_in    = H * lc.title_y
-        title_height_in = 1.0
+        # ── Left accent stripe ────────────────────────────────────────────────
+        stripe_w = 0.18
+        stripe_h = H * 0.50
+        stripe_t = H * 0.25
+
+        stripe = slide.shapes.add_shape(
+            1,
+            Inches(0.35),
+            Inches(stripe_t),
+            Inches(stripe_w),
+            Inches(stripe_h),
+        )
+        stripe.fill.solid()
+        stripe.fill.fore_color.rgb = RGBColor(
+            *brand.colors.hex_to_rgb(brand.colors.accent)
+        )
+        stripe.line.fill.background()
+
+        # ── Content left margin — starts after stripe + gap ───────────────────
+        content_left = 0.35 + stripe_w + 0.25
+
+        # ── Section label — "SECTION 01" ──────────────────────────────────────
+        section_number = slide_def.get("section_number")
+        label_top_in   = H * 0.28
+
+        label = (
+            f"SECTION {int(section_number):02d}"
+            if section_number is not None
+            else "SECTION"
+        )
+
+        self._add_text_box(
+            slide,
+            text      = label,
+            left      = Inches(content_left),
+            top       = Inches(label_top_in),
+            width     = Inches(W - content_left - 0.5),
+            height    = Inches(0.3),
+            font_name = brand.fonts.body,
+            font_size = brand.fonts.caption_size,
+            bold      = False,
+            color_rgb = brand.colors.hex_to_rgb(brand.colors.text_muted),
+            align     = PP_ALIGN.LEFT,
+        )
+
+        # ── Title ─────────────────────────────────────────────────────────────
+        title_top_in    = label_top_in + 0.35
+        title_height_in = 1.1
 
         if title := slide_def.get("title", ""):
             self._add_text_box(
                 slide,
                 text      = title,
-                left      = Inches(0.8),
+                left      = Inches(content_left),
                 top       = Inches(title_top_in),
-                width     = Inches(W - 1.6),
+                width     = Inches(W - content_left - 0.5),
                 height    = Inches(title_height_in),
                 font_name = brand.fonts.heading,
                 font_size = brand.fonts.heading_size + 4,
                 bold      = True,
-                color_rgb = brand.colors.hex_to_rgb(brand.colors.text_light),
-                align     = PP_ALIGN.CENTER,
+                color_rgb = brand.colors.hex_to_rgb(brand.colors.primary),
+                align     = PP_ALIGN.LEFT,
             )
 
-        subtitle_top_in = title_top_in + title_height_in + 0.2
+        # ── Subtitle ──────────────────────────────────────────────────────────
+        subtitle_top_in = title_top_in + title_height_in + 0.1
 
         if subtitle := slide_def.get("subtitle", ""):
             self._add_text_box(
                 slide,
                 text      = subtitle,
-                left      = Inches(0.8),
+                left      = Inches(content_left),
                 top       = Inches(subtitle_top_in),
-                width     = Inches(W - 1.6),
+                width     = Inches(W - content_left - 0.5),
                 height    = Inches(0.5),
                 font_name = brand.fonts.body,
                 font_size = brand.fonts.subheading_size - 4,
                 bold      = False,
                 color_rgb = brand.colors.hex_to_rgb(brand.colors.accent),
-                align     = PP_ALIGN.CENTER,
+                align     = PP_ALIGN.LEFT,
             )
 
     def _build_content(self, slide, slide_def, brand, warnings):
@@ -686,6 +759,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             )
 
     def _build_closing(self, slide, slide_def, brand, warnings):
+        """Closing reuses cover layout."""
         self._build_cover(slide, slide_def, brand, warnings)
 
     # ── Dispatch table ────────────────────────────────────────────────────────
@@ -731,6 +805,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
         shape.line.fill.background()
 
     def _add_accent_bar(self, slide, brand: BrandGuidelines):
+        """Full-width accent bar at bottom (or top) of every slide."""
         W     = brand.slide.width_inches
         H     = brand.slide.height_inches
         bar_h = brand.rules.accent_bar_height_inches
@@ -792,7 +867,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
         align:     PP_ALIGN = PP_ALIGN.LEFT,
         italic:    bool = False,
     ):
-        tf          = slide.shapes.add_textbox(left, top, width, height).text_frame
+        tf           = slide.shapes.add_textbox(left, top, width, height).text_frame
         tf.word_wrap = True
         p            = tf.paragraphs[0]
         p.alignment  = align
