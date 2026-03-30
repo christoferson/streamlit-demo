@@ -420,40 +420,60 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             "create_pptx : creates a branded PowerPoint (.pptx) "
             "with native editable charts. "
 
-            # ── Slide types ───────────────────────────────────────────────────
+            # ── Slide types ───────────────────────────────────────────────────────
             "Slide types: "
             "cover (title page), "
             "section (divider), "
-            "content (title + bullets — text only), "
+            "content (title + bullets — text only, NO numeric data), "
             "two_column (side-by-side bullets), "
-            "chart (title + full-width native chart — "
-            "USE THIS for data visualisation), "
+            "chart (title + full-width native chart), "
             "content_chart (bullets on left + chart on right — "
-            "USE THIS to combine insights with data, PREFERRED when both exist), "
+            "PREFERRED when you have both insights and data), "
             "quote (pull quote), "
             "closing (end slide). "
 
-            # ── Chart guidance ────────────────────────────────────────────────
-            "IMPORTANT: When the user asks for a chart, graph, trend, line, bar, "
-            "or any visual in the presentation, always use slide_type 'chart' or "
-            "'content_chart'. "
-            "Never put time-series or comparative data into bullet points "
-            "when a chart slide is more appropriate. "
+            # ── Hard rule ─────────────────────────────────────────────────────────
+            "RULE: When you have numeric data (revenue, units, prices, counts) "
+            "always use slide_type 'chart' or 'content_chart'. "
+            "NEVER put time-series or comparative numeric data into bullet points only. "
+
+            # ── Chart types ───────────────────────────────────────────────────────
             "Chart types: "
             "bar (comparisons between categories), "
             "line (trends over time — use for monthly/time-series data), "
-            "pie (proportions, max 6 slices). "
+            "pie (proportions). "
 
-            # ── Data flow ─────────────────────────────────────────────────────
-            "For chart slides: "
-            "if data is already in conversation context use it directly, "
-            "otherwise fetch from the relevant data tool first. "
-            "Reshape into chart_data: "
-            "single series [{label, value}] or "
-            "multi-series [{label, value, series}]. "
-            "label = any category (month, product, region, date, etc.). "
-            "value = any numeric metric (revenue, units, price, count, etc.). "
-            "series = group name for multi-series (year, region, category, etc.). "
+            # ── Concrete reshaping example ────────────────────────────────────────
+            "HOW TO BUILD A CHART SLIDE from sales_data result: "
+            "sales_data returns rows like "
+            "[{month_name: 'January', revenue: 213000, units_sold: 1035}, ...]. "
+            "Reshape into a content_chart slide like this: "
+            "{ "
+            "slide_type: 'content_chart', "
+            "title: 'Monthly Revenue 2024', "
+            "chart_type: 'line', "
+            "x_label: 'Month', "
+            "y_label: 'Revenue ($)', "
+            "chart_data: [ "
+            "{label: 'January', value: 213000}, "
+            "{label: 'February', value: 198000}, "
+            "... one entry per month ... "
+            "], "
+            "bullets: ['Total $3.13M', 'Peak Dec $415K', 'Strong H2 growth'] "
+            "} "
+            "For YoY comparison use series field: "
+            "{label: 'January', value: 213000, series: '2024'}. "
+
+            # ── Recommended structure ─────────────────────────────────────────────
+            "RECOMMENDED slide structure for a data presentation: "
+            "1. cover, "
+            "2. content (executive summary bullets), "
+            "3. content_chart (primary metric line/bar chart + key insights), "
+            "4. content_chart (secondary metric chart + insights), "
+            "5. two_column or content (qualitative analysis), "
+            "6. closing. "
+            "ALWAYS include at least one content_chart or chart slide "
+            "when numeric data is available. "
 
             f"Available brands: {brands}."
         )
@@ -907,13 +927,23 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
         fill.solid()
         fill.fore_color.rgb = RGBColor(*rgb)
 
+    # bedrock_converse_tools_pptx.py
+
     def _add_title_bar(self, slide, brand: BrandGuidelines):
         """Thin primary-color rule under the title area."""
-        W     = brand.slide.width_inches
+        W = brand.slide.width_inches
+
+        # ── Layout ────────────────────────────────────────────────────────────────
+        # title text:  top=0.375"  height=0.6"  bottom=0.975"
+        # upper space: 0.15"  gap between title bottom and bar top
+        # bar top:     0.975 + 0.15 = 1.125"
+        # bar height:  0.03"
+        # lower space: handled by body_y in brand JSON
+
         shape = slide.shapes.add_shape(
             1,
-            Inches(0.4), Inches(0.72),
-            Inches(W - 0.8), Inches(0.04),
+            Inches(0.4),       Inches(1.125),    # ← was 1.0, now 1.125
+            Inches(W - 0.8),   Inches(0.03),
         )
         shape.fill.solid()
         shape.fill.fore_color.rgb = RGBColor(
