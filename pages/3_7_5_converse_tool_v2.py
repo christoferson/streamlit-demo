@@ -31,15 +31,16 @@ from cmn.tools.renderer import (
     SalesKpiToolRenderer,
     SalesAnomalyToolRenderer,
     SalesForecastToolRenderer,
+    PptxToolRenderer,
 )
 from cmn.tools.tool import ToolRegistry
-from cmn.tools.tool import DateTimeBedrockConverseTool
 from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
 from cmn.tools.tool import AwsDocsBedrockConverseTool
 from cmn.tools.tool import EDAProfileBedrockConverseTool
 from cmn.tools.tool import EDACorrelationBedrockConverseTool
 from cmn.tools.tool import EDAGroupBedrockConverseTool
 from cmn.tools.tool import CalculatorBedrockConverseTool
+from cmn.tools.tool import PptxBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -130,34 +131,34 @@ class StreamResult:
 # SECTION: StreamProcessor  (pure EventStream parser — no UI dependencies)
 ################################################################################
 
-def _handle_content_block_start(block_start: dict, tool_invocation: ToolInvocation):
-    start = block_start.get('start', {})
-    if 'toolUse' in start:
-        tu = start['toolUse']
-        tool_invocation.tool_use_id = tu['toolUseId']
-        tool_invocation.tool_name   = tu['name']
-        logger.info("Tool call started: id=%s name=%s", tu['toolUseId'], tu['name'])
+# def _handle_content_block_start(block_start: dict, tool_invocation: ToolInvocation):
+#     start = block_start.get('start', {})
+#     if 'toolUse' in start:
+#         tu = start['toolUse']
+#         tool_invocation.tool_use_id = tu['toolUseId']
+#         tool_invocation.tool_name   = tu['name']
+#         logger.info("Tool call started: id=%s name=%s", tu['toolUseId'], tu['name'])
 
 
-def _handle_content_block_delta(
-    delta: dict,
-    result: StreamResult,
-    tool_invocation: ToolInvocation,
-    on_text_delta: Optional[Callable[[str], None]],
-):
-    if 'text' in delta:
-        chunk = delta['text']
-        result.text += chunk
-        if on_text_delta:
-            on_text_delta(chunk)
+# def _handle_content_block_delta(
+#     delta: dict,
+#     result: StreamResult,
+#     tool_invocation: ToolInvocation,
+#     on_text_delta: Optional[Callable[[str], None]],
+# ):
+#     if 'text' in delta:
+#         chunk = delta['text']
+#         result.text += chunk
+#         if on_text_delta:
+#             on_text_delta(chunk)
 
-    elif 'toolUse' in delta:
-        tool_invocation.tool_input_raw += delta['toolUse'].get('input', '')
+#     elif 'toolUse' in delta:
+#         tool_invocation.tool_input_raw += delta['toolUse'].get('input', '')
 
-    elif 'reasoningContent' in delta:
-        rc = delta['reasoningContent']
-        if 'text' in rc:
-            logger.debug("Reasoning delta: %s", rc['text'])
+#     elif 'reasoningContent' in delta:
+#         rc = delta['reasoningContent']
+#         if 'text' in rc:
+#             logger.debug("Reasoning delta: %s", rc['text'])
 
 
 def _handle_metadata(metadata: dict, result: StreamResult):
@@ -253,6 +254,7 @@ def get_renderer_registry():
         SalesKpiToolRenderer(),
         SalesAnomalyToolRenderer(),
         SalesForecastToolRenderer(),
+        PptxToolRenderer(),
     ])
 
 
@@ -515,6 +517,7 @@ def get_tool_registry():
         EDAProfileBedrockConverseTool(),
         EDACorrelationBedrockConverseTool(),
         EDAGroupBedrockConverseTool(),
+        PptxBedrockConverseTool(),
     ])
 
 
