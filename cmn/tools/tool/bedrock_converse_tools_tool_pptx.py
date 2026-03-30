@@ -1,10 +1,11 @@
+# cmn/tools/tool/bedrock_converse_tools_pptx.py
+
 import json
 import logging
 import os
 import re
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -12,26 +13,17 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt, Emu
 
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
+from cmn.tools.tool.pptx import PptxChartBuilder
 
 logger = logging.getLogger(__name__)
 
-# ── Brand config dir — relative to this file ─────────────────────────────────
 _CONFIG_DIR = os.path.join(
     os.path.dirname(__file__),
-    "..",
-    "config",
-    "pptx",
+    "..", "config", "pptx",
 )
 
-# ── Title layout constants ────────────────────────────────────────────────────
-_TITLE_TOP_FRAC   = 0.05    # title top as fraction of slide height
-_TITLE_HEIGHT_IN  = 0.55    # title text box height in inches
-_TITLE_BAR_GAP_IN = 0.08    # gap between title text bottom and bar
-_TITLE_BAR_H_IN   = 0.03    # bar thickness in inches
-
-
 ################################################################################
-# SECTION: BrandGuidelines dataclasses
+# SECTION: BrandGuidelines
 ################################################################################
 
 @dataclass
@@ -45,7 +37,7 @@ class BrandColors:
     text_light:    str = "#FFFFFF"
     text_muted:    str = "#6B7280"
     success:       str = "#10B981"
-    warning:       str = "#F59E0B"
+    warning_color: str = "#F59E0B"
     danger:        str = "#EF4444"
     chart_palette: list = field(default_factory=lambda: [
         "#1B3A6B", "#2E86AB", "#F4A261",
@@ -57,7 +49,6 @@ class BrandColors:
         return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
     def get(self, name: str) -> str:
-        """Look up color by attribute name — e.g. colors.get('primary')."""
         return getattr(self, name, self.primary)
 
 
@@ -94,14 +85,12 @@ class BrandRules:
 
 @dataclass
 class BrandLayoutConfig:
-    title_y:       float = 0.05
-    subtitle_y:    float = 0.55
-    body_y:        float = 0.20
-    quote_y:       float = 0.30
-    attr_y:        float = 0.65
-    split:         float = 0.50
-    title_height:  float = 0.10
-    title_bar_gap: float = 0.02
+    title_y:    float = 0.05
+    subtitle_y: float = 0.55
+    body_y:     float = 0.20
+    quote_y:    float = 0.30
+    attr_y:     float = 0.65
+    split:      float = 0.50
 
 
 @dataclass
@@ -128,10 +117,10 @@ class BrandGuidelines:
 
         return cls(
             brand_name = data.get("brand_name", "Default"),
-            colors     = BrandColors(**_filter(BrandColors, data.get("colors",  {}))),
-            fonts      = BrandFonts( **_filter(BrandFonts,  data.get("fonts",   {}))),
-            slide      = BrandSlide( **_filter(BrandSlide,  data.get("slide",   {}))),
-            rules      = BrandRules( **_filter(BrandRules,  data.get("rules",   {}))),
+            colors     = BrandColors(**_filter(BrandColors, data.get("colors", {}))),
+            fonts      = BrandFonts( **_filter(BrandFonts,  data.get("fonts",  {}))),
+            slide      = BrandSlide( **_filter(BrandSlide,  data.get("slide",  {}))),
+            rules      = BrandRules( **_filter(BrandRules,  data.get("rules",  {}))),
             layouts    = data.get("layouts", {}),
         )
 
@@ -139,13 +128,16 @@ class BrandGuidelines:
     def load_all(cls, config_dir: str) -> dict:
         """
         Load every .json in config_dir.
-        Returns { brand_name_lower: BrandGuidelines }
-        Falls back to { "default": BrandGuidelines() } if dir missing.
+        Returns { brand_name_lower: BrandGuidelines }.
+        Falls back to { "default": BrandGuidelines() } if dir missing or empty.
         """
         brands = {}
 
         if not os.path.isdir(config_dir):
-            logger.warning("Brand config dir not found: %s — using defaults", config_dir)
+            logger.warning(
+                "Brand config dir not found: %s — using built-in default",
+                config_dir,
+            )
             return {"default": cls()}
 
         for fname in sorted(os.listdir(config_dir)):
@@ -165,16 +157,35 @@ class BrandGuidelines:
 
         return brands
 
-    # ── Helper ────────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def layout(self, slide_type: str) -> BrandLayoutConfig:
-        """Return BrandLayoutConfig for slide_type, with safe defaults."""
+        """Return BrandLayoutConfig for slide_type with safe defaults."""
         raw   = self.layouts.get(slide_type, {})
         valid = {
             k: v for k, v in raw.items()
             if k in BrandLayoutConfig.__dataclass_fields__
         }
         return BrandLayoutConfig(**valid)
+
+    def content_chart_split(self) -> float:
+        """
+        Bullet/chart split ratio for content_chart slides.
+        Read from layouts.content_chart.split in brand JSON.
+        Defaults to 0.45 (45% bullets / 55% chart).
+        """
+        return self.layouts.get("content_chart", {}).get("split", 0.45)
+
+
+################################################################################
+# SECTION: Filename helper
+################################################################################
+
+def _safe_filename(title: str) -> str:
+    """Convert title to a safe cross-platform filename."""
+    safe = re.sub(r'[<>:"/\\|?*]', "-", title)
+    safe = re.sub(r"[-\s]+", "_", safe).strip("_")
+    return safe[:100] or "presentation"
 
 
 ################################################################################
@@ -189,12 +200,18 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             "toolSpec": {
                 "name": name,
                 "description": (
-                    "Creates a branded PowerPoint presentation (.pptx) and saves it "
-                    "to a temporary file. Returns the file path for download. "
-                    "Supported slide types: cover, section, content, "
-                    "two_column, quote, closing. "
-                    "Brand guidelines (colors, fonts, layout) are applied automatically "
-                    "— do not specify colors or fonts in the slide definitions."
+                    "Creates a branded PowerPoint presentation (.pptx) "
+                    "with native editable charts. "
+                    "Supports text slides and chart slides. "
+                    "IMPORTANT: When the user asks for a chart, graph, trend, "
+                    "or visual in the presentation, always use slide_type 'chart' "
+                    "or 'content_chart'. "
+                    "Do NOT put data into bullet points when a chart is more appropriate. "
+                    "For chart slides: fetch data from the relevant tool first if not "
+                    "already in conversation context, then reshape into chart_data. "
+                    "The tool is domain-agnostic — works for sales, inventory, "
+                    "stock prices, headcount, or any numeric data. "
+                    "Brand guidelines (colors, fonts, layout) are applied automatically."
                 ),
                 "inputSchema": {
                     "json": {
@@ -202,10 +219,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                         "properties": {
                             "title": {
                                 "type":        "string",
-                                "description": (
-                                    "Presentation title. Used in document properties "
-                                    "and as the base for the saved filename."
-                                ),
+                                "description": "Presentation title.",
                             },
                             "author": {
                                 "type":        "string",
@@ -225,113 +239,163 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                                 "items": {
                                     "type": "object",
                                     "properties": {
+
+                                        # ── Slide type ────────────────────────
                                         "slide_type": {
                                             "type": "string",
                                             "enum": [
-                                                "cover", "section", "content",
-                                                "two_column", "quote", "closing",
+                                                "cover",
+                                                "section",
+                                                "content",
+                                                "two_column",
+                                                "quote",
+                                                "chart",
+                                                "content_chart",
+                                                "closing",
                                             ],
                                             "description": (
-                                                "Layout type for this slide. Choose carefully:\n"
-                                                "  cover      — title slide only. First slide of the deck.\n"
-                                                "  section    — visual divider between major topics. "
-                                                               "Title only, no body content. "
-                                                               "Use ONLY as a separator, not for slides with content.\n"
-                                                "  content    — ANY slide with a title + bullet points. "
-                                                               "Use this for summaries, analysis, highlights, recommendations.\n"
-                                                "  two_column — title + two side-by-side bullet columns. "
-                                                               "Use for comparisons or before/after.\n"
-                                                "  quote      — single large pull quote with attribution.\n"
-                                                "  closing    — final thank you / contact slide.\n"
-                                                "When in doubt, use 'content'."
+                                                "cover: title page. "
+                                                "section: divider slide. "
+                                                "content: title + bullets only — use for text insights with no data visual. "
+                                                "two_column: side-by-side bullet lists. "
+                                                "chart: title + full-width native chart. "
+                                                "  USE THIS when showing trends, comparisons, or distributions. "
+                                                "content_chart: bullets on left + chart on right. "
+                                                "  USE THIS to show insights alongside the supporting data visual. "
+                                                "  This is the PREFERRED layout when you have both analysis and data. "
+                                                "quote: pull quote. "
+                                                "closing: end slide."
                                             ),
                                         },
+
+                                        # ── Common fields ─────────────────────
                                         "title": {
                                             "type":        "string",
-                                            "description": "Slide title. Keep under 8 words.",
+                                            "description": "Slide title.",
                                         },
                                         "subtitle": {
                                             "type":        "string",
-                                            "description": (
-                                                "Subtitle text. Used on cover and closing slides only. "
-                                                "Do not use on content or section slides."
-                                            ),
+                                            "description": "Subtitle (cover and closing slides).",
                                         },
-                                        "section_number": {
-                                            "type":        "integer",
-                                            "description": (
-                                                "Optional section number shown as a small label "
-                                                "above the title on section slides. "
-                                                "e.g. 1 renders as 'SECTION 01'. "
-                                                "Increment by 1 for each section slide in the deck."
-                                            ),
-                                        },
+
+                                        # ── Bullet fields ─────────────────────
                                         "bullets": {
-                                            "type":        "array",
-                                            "items":       {"type": "string"},
-                                            "maxItems":    6,
+                                            "type":     "array",
+                                            "items":    {"type": "string"},
+                                            "maxItems": 6,
                                             "description": (
-                                                "Bullet points for this slide. "
-                                                "Maximum 6 bullets. "
-                                                "Keep each bullet under 15 words. "
-                                                "If you have more than 6 points, "
-                                                "split across multiple slides."
+                                                "Bullet points for content and content_chart slides. "
+                                                "Maximum 6. Each bullet under 15 words. "
+                                                "Split across multiple slides if more are needed."
                                             ),
                                         },
+
+                                        # ── Two-column fields ─────────────────
                                         "left_header": {
                                             "type":        "string",
-                                            "description": (
-                                                "Left column heading. "
-                                                "Used on two_column slides only."
-                                            ),
+                                            "description": "Left column header (two_column slides).",
                                         },
                                         "left_bullets": {
-                                            "type":        "array",
-                                            "items":       {"type": "string"},
-                                            "maxItems":    6,
-                                            "description": (
-                                                "Left column bullets. "
-                                                "Maximum 6. Keep each under 15 words."
-                                            ),
+                                            "type":     "array",
+                                            "items":    {"type": "string"},
+                                            "maxItems": 6,
+                                            "description": "Left column bullets (two_column slides).",
                                         },
                                         "right_header": {
                                             "type":        "string",
-                                            "description": (
-                                                "Right column heading. "
-                                                "Used on two_column slides only."
-                                            ),
+                                            "description": "Right column header (two_column slides).",
                                         },
                                         "right_bullets": {
-                                            "type":        "array",
-                                            "items":       {"type": "string"},
-                                            "maxItems":    6,
-                                            "description": (
-                                                "Right column bullets. "
-                                                "Maximum 6. Keep each under 15 words."
-                                            ),
+                                            "type":     "array",
+                                            "items":    {"type": "string"},
+                                            "maxItems": 6,
+                                            "description": "Right column bullets (two_column slides).",
                                         },
+
+                                        # ── Quote fields ──────────────────────
                                         "quote": {
                                             "type":        "string",
-                                            "description": (
-                                                "Pull quote text. "
-                                                "Used on quote slides only. One sentence."
-                                            ),
+                                            "description": "Pull quote text (quote slides).",
                                         },
                                         "attribution": {
                                             "type":        "string",
+                                            "description": "Quote attribution (quote slides).",
+                                        },
+
+                                        # ── Chart fields ──────────────────────
+                                        "chart_type": {
+                                            "type": "string",
+                                            "enum": ["bar", "line", "pie"],
                                             "description": (
-                                                "Quote attribution. "
-                                                "Used on quote slides only. "
-                                                "e.g. '— VP Sales'"
+                                                "Chart type. REQUIRED for chart and content_chart slides. "
+                                                "bar: comparisons between categories. "
+                                                "line: trends over time — USE THIS for monthly/time-series data. "
+                                                "pie: proportions (max 6 slices recommended)."
                                             ),
                                         },
-                                        "speaker_notes": {
+                                        "chart_data": {
+                                            "type": "array",
+                                            "description": (
+                                                "REQUIRED for chart and content_chart slides. "
+                                                "Fetch from the relevant data tool first if not in "
+                                                "conversation context, then reshape into this format. "
+                                                "The tool is domain-agnostic — works for any numeric data. "
+                                                "For monthly sales trend: use month_name as label, revenue as value. "
+                                                "For comparisons: use category/product/region as label. "
+                                                "For multi-year: add series field with year as value. "
+                                                "Single series:  [{\"label\": \"January\", \"value\": 213000}, ...]. "
+                                                "Multi-series:   [{\"label\": \"January\", \"value\": 213000, \"series\": \"2024\"}, ...]."
+                                            ),
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "label": {
+                                                        "type":        "string",
+                                                        "description": (
+                                                            "Category label shown on x-axis. "
+                                                            "Examples: month name, product name, "
+                                                            "region, date, department."
+                                                        ),
+                                                    },
+                                                    "value": {
+                                                        "type":        "number",
+                                                        "description": (
+                                                            "Numeric value for this data point. "
+                                                            "Examples: revenue, units, price, count, percentage."
+                                                        ),
+                                                    },
+                                                    "series": {
+                                                        "type":        "string",
+                                                        "description": (
+                                                            "Series name for multi-series charts. "
+                                                            "Examples: year (2023, 2024), region (North, South). "
+                                                            "Omit for single-series charts."
+                                                        ),
+                                                    },
+                                                },
+                                                "required": ["label", "value"],
+                                            },
+                                        },
+                                        "chart_title": {
                                             "type":        "string",
                                             "description": (
-                                                "Speaker notes for presenter view. "
-                                                "2-3 sentences of additional context "
-                                                "not shown on the slide."
+                                                "Title shown inside the chart. "
+                                                "Defaults to slide title if omitted."
                                             ),
+                                        },
+                                        "x_label": {
+                                            "type":        "string",
+                                            "description": "X-axis label. Example: 'Month', 'Product', 'Region'.",
+                                        },
+                                        "y_label": {
+                                            "type":        "string",
+                                            "description": "Y-axis label. Example: 'Revenue ($)', 'Units Sold'.",
+                                        },
+
+                                        # ── Speaker notes ─────────────────────
+                                        "speaker_notes": {
+                                            "type":        "string",
+                                            "description": "Speaker notes for this slide.",
                                         },
                                     },
                                     "required": ["slide_type"],
@@ -344,26 +408,55 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             }
         }
         super().__init__(name, definition)
-        self._brands = BrandGuidelines.load_all(config_dir)
+
+        self._brands        = BrandGuidelines.load_all(config_dir)
+        self._chart_builder = PptxChartBuilder()
 
     # ── Summary ───────────────────────────────────────────────────────────────
 
     def summary(self) -> str:
         brands = ", ".join(sorted(self._brands.keys()))
         return (
-            "create_pptx : creates a branded PowerPoint (.pptx) saved to a temp file. "
-            "Provide slides list with slide_type, title, bullets, speaker_notes. "
+            "create_pptx : creates a branded PowerPoint (.pptx) "
+            "with native editable charts. "
+
+            # ── Slide types ───────────────────────────────────────────────────
+            "Slide types: "
+            "cover (title page), "
+            "section (divider), "
+            "content (title + bullets — text only), "
+            "two_column (side-by-side bullets), "
+            "chart (title + full-width native chart — "
+            "USE THIS for data visualisation), "
+            "content_chart (bullets on left + chart on right — "
+            "USE THIS to combine insights with data, PREFERRED when both exist), "
+            "quote (pull quote), "
+            "closing (end slide). "
+
+            # ── Chart guidance ────────────────────────────────────────────────
+            "IMPORTANT: When the user asks for a chart, graph, trend, line, bar, "
+            "or any visual in the presentation, always use slide_type 'chart' or "
+            "'content_chart'. "
+            "Never put time-series or comparative data into bullet points "
+            "when a chart slide is more appropriate. "
+            "Chart types: "
+            "bar (comparisons between categories), "
+            "line (trends over time — use for monthly/time-series data), "
+            "pie (proportions, max 6 slices). "
+
+            # ── Data flow ─────────────────────────────────────────────────────
+            "For chart slides: "
+            "if data is already in conversation context use it directly, "
+            "otherwise fetch from the relevant data tool first. "
+            "Reshape into chart_data: "
+            "single series [{label, value}] or "
+            "multi-series [{label, value, series}]. "
+            "label = any category (month, product, region, date, etc.). "
+            "value = any numeric metric (revenue, units, price, count, etc.). "
+            "series = group name for multi-series (year, region, category, etc.). "
+
             f"Available brands: {brands}."
         )
-
-    # ── Filename helper ───────────────────────────────────────────────────────
-
-    @staticmethod
-    def _safe_filename(title: str) -> str:
-        """Safe cross-platform filename — strips chars invalid on Windows/macOS/URLs."""
-        safe = re.sub(r'[<>:"/\\|?*]', '-', title)
-        safe = re.sub(r'[-\s]+', '_', safe).strip('_')
-        return safe[:100] or "presentation"
 
     # ── Invoke ────────────────────────────────────────────────────────────────
 
@@ -378,10 +471,12 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             return {
                 "error": (
                     "No slides provided. "
-                    "Pass a list of slide definitions with slide_type, title, bullets."
+                    "Pass a list of slide definitions with slide_type, title, "
+                    "bullets, and/or chart_data."
                 )
             }
 
+        # ── Resolve brand ─────────────────────────────────────────────────────
         warnings = []
         brand    = self._brands.get(brand_key)
 
@@ -392,13 +487,15 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             )
             brand = self._brands.get("default", BrandGuidelines())
 
+        # ── Build presentation ────────────────────────────────────────────────
         try:
             prs = self._build_presentation(brand, slides, title, author, warnings)
         except Exception as exc:
             logger.exception("PptxTool: build failed")
             return {"error": f"Failed to build presentation: {exc}"}
 
-        safe_title = self._safe_filename(title)
+        # ── Save to temp file ─────────────────────────────────────────────────
+        safe_title = _safe_filename(title)
         filename   = f"{safe_title}.pptx"
 
         tmp = tempfile.NamedTemporaryFile(
@@ -441,7 +538,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
         core.title  = title
         core.author = author
 
-        blank_layout = prs.slide_layouts[6]
+        blank_layout = prs.slide_layouts[6]   # fully blank
 
         for idx, slide_def in enumerate(slides):
             slide_type = slide_def.get("slide_type", "content")
@@ -470,7 +567,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
 
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.cover_background))
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.cover_background)),
         )
 
         if title := slide_def.get("title", ""):
@@ -506,118 +603,47 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
     def _build_section(self, slide, slide_def, brand, warnings):
         W  = brand.slide.width_inches
         H  = brand.slide.height_inches
+        lc = brand.layout("section")
 
-        # ── Background: light surface — clearly different from cover ──────────
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.surface)
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.section_background)),
         )
-
-        # ── Left accent stripe ────────────────────────────────────────────────
-        stripe_w = 0.18
-        stripe_h = H * 0.50
-        stripe_t = H * 0.25
-
-        stripe = slide.shapes.add_shape(
-            1,
-            Inches(0.35),
-            Inches(stripe_t),
-            Inches(stripe_w),
-            Inches(stripe_h),
-        )
-        stripe.fill.solid()
-        stripe.fill.fore_color.rgb = RGBColor(
-            *brand.colors.hex_to_rgb(brand.colors.accent)
-        )
-        stripe.line.fill.background()
-
-        # ── Content left margin — starts after stripe + gap ───────────────────
-        content_left = 0.35 + stripe_w + 0.25
-
-        # ── Section label — "SECTION 01" ──────────────────────────────────────
-        section_number = slide_def.get("section_number")
-        label_top_in   = H * 0.28
-
-        label = (
-            f"SECTION {int(section_number):02d}"
-            if section_number is not None
-            else "SECTION"
-        )
-
-        self._add_text_box(
-            slide,
-            text      = label,
-            left      = Inches(content_left),
-            top       = Inches(label_top_in),
-            width     = Inches(W - content_left - 0.5),
-            height    = Inches(0.3),
-            font_name = brand.fonts.body,
-            font_size = brand.fonts.caption_size,
-            bold      = False,
-            color_rgb = brand.colors.hex_to_rgb(brand.colors.text_muted),
-            align     = PP_ALIGN.LEFT,
-        )
-
-        # ── Title ─────────────────────────────────────────────────────────────
-        title_top_in    = label_top_in + 0.35
-        title_height_in = 1.1
 
         if title := slide_def.get("title", ""):
             self._add_text_box(
                 slide,
                 text      = title,
-                left      = Inches(content_left),
-                top       = Inches(title_top_in),
-                width     = Inches(W - content_left - 0.5),
-                height    = Inches(title_height_in),
+                left      = Inches(0.8),
+                top       = Inches(H * lc.title_y),
+                width     = Inches(W - 1.6),
+                height    = Inches(1.2),
                 font_name = brand.fonts.heading,
                 font_size = brand.fonts.heading_size + 4,
                 bold      = True,
-                color_rgb = brand.colors.hex_to_rgb(brand.colors.primary),
-                align     = PP_ALIGN.LEFT,
-            )
-
-        # ── Subtitle ──────────────────────────────────────────────────────────
-        subtitle_top_in = title_top_in + title_height_in + 0.1
-
-        if subtitle := slide_def.get("subtitle", ""):
-            self._add_text_box(
-                slide,
-                text      = subtitle,
-                left      = Inches(content_left),
-                top       = Inches(subtitle_top_in),
-                width     = Inches(W - content_left - 0.5),
-                height    = Inches(0.5),
-                font_name = brand.fonts.body,
-                font_size = brand.fonts.subheading_size - 4,
-                bold      = False,
-                color_rgb = brand.colors.hex_to_rgb(brand.colors.accent),
-                align     = PP_ALIGN.LEFT,
+                color_rgb = brand.colors.hex_to_rgb(brand.colors.text_light),
+                align     = PP_ALIGN.CENTER,
             )
 
     def _build_content(self, slide, slide_def, brand, warnings):
         W  = brand.slide.width_inches
         H  = brand.slide.height_inches
+        lc = brand.layout("content")
 
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background))
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background)),
         )
-
-        title_top_in = H * _TITLE_TOP_FRAC
-        bar_top_in   = self._title_bar_top(brand)
-        body_top_in  = self._body_top(brand)
-
-        self._add_title_bar(slide, brand, top_inches=bar_top_in)
+        self._add_title_bar(slide, brand)
 
         if title := slide_def.get("title", ""):
             self._add_text_box(
                 slide,
                 text      = title,
                 left      = Inches(0.4),
-                top       = Inches(title_top_in),
+                top       = Inches(H * lc.title_y),
                 width     = Inches(W - 0.8),
-                height    = Inches(_TITLE_HEIGHT_IN),
+                height    = Inches(0.6),
                 font_name = brand.fonts.heading,
                 font_size = brand.fonts.subheading_size,
                 bold      = True,
@@ -631,7 +657,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                 f"Slide '{slide_def.get('title', '')}': "
                 f"{len(bullets)} bullets exceeds recommended max "
                 f"{brand.rules.max_bullets_per_slide}. "
-                f"Consider splitting into two slides."
+                "Consider splitting into two slides."
             )
 
         if bullets:
@@ -639,9 +665,9 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                 slide,
                 bullets = bullets,
                 left    = Inches(0.5),
-                top     = Inches(body_top_in),
+                top     = Inches(H * lc.body_y),
                 width   = Inches(W - 1.0),
-                height  = Inches(H - body_top_in - 0.4),
+                height  = Inches(H - lc.body_y - 0.5),
                 brand   = brand,
             )
 
@@ -652,23 +678,18 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
 
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background))
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background)),
         )
-
-        title_top_in = H * _TITLE_TOP_FRAC
-        bar_top_in   = self._title_bar_top(brand)
-        body_top_in  = self._body_top(brand)
-
-        self._add_title_bar(slide, brand, top_inches=bar_top_in)
+        self._add_title_bar(slide, brand)
 
         if title := slide_def.get("title", ""):
             self._add_text_box(
                 slide,
                 text      = title,
                 left      = Inches(0.4),
-                top       = Inches(title_top_in),
+                top       = Inches(H * lc.title_y),
                 width     = Inches(W - 0.8),
-                height    = Inches(_TITLE_HEIGHT_IN),
+                height    = Inches(0.6),
                 font_name = brand.fonts.heading,
                 font_size = brand.fonts.subheading_size,
                 bold      = True,
@@ -676,8 +697,9 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                 align     = PP_ALIGN.LEFT,
             )
 
-        col_w     = (W - 1.2) * lc.split
-        body_h_in = H - body_top_in - 0.4
+        col_w    = (W - 1.2) * lc.split
+        body_top = Inches(H * lc.body_y)
+        body_h   = Inches(H - lc.body_y - 0.5)
 
         for side, x_left, header_key, bullets_key in [
             ("left",  Inches(0.5),         "left_header",  "left_bullets"),
@@ -688,7 +710,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                     slide,
                     text      = header,
                     left      = x_left,
-                    top       = Inches(body_top_in),
+                    top       = body_top,
                     width     = Inches(col_w),
                     height    = Inches(0.4),
                     font_name = brand.fonts.heading,
@@ -697,7 +719,6 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                     color_rgb = brand.colors.hex_to_rgb(brand.colors.secondary),
                     align     = PP_ALIGN.LEFT,
                 )
-
             if bullets := slide_def.get(bullets_key, []):
                 if len(bullets) > brand.rules.max_bullets_per_slide:
                     warnings.append(
@@ -709,13 +730,13 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                     slide,
                     bullets = bullets,
                     left    = x_left,
-                    top     = Inches(body_top_in + 0.45),
+                    top     = Inches(H * lc.body_y + 0.45),
                     width   = Inches(col_w),
-                    height  = Inches(body_h_in),
+                    height  = body_h,
                     brand   = brand,
                 )
 
-        self._add_vertical_divider(slide, brand, col_w, body_top_in / H, H)
+        self._add_vertical_divider(slide, brand, col_w, lc.body_y, H)
 
     def _build_quote(self, slide, slide_def, brand, warnings):
         W  = brand.slide.width_inches
@@ -724,7 +745,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
 
         self._fill_background(
             slide,
-            brand.colors.hex_to_rgb(brand.colors.surface)
+            brand.colors.hex_to_rgb(brand.colors.surface),
         )
 
         if quote := slide_def.get("quote", ""):
@@ -758,6 +779,110 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
                 align     = PP_ALIGN.RIGHT,
             )
 
+    def _build_chart(self, slide, slide_def, brand, warnings):
+        """Full-width native chart slide."""
+        W  = brand.slide.width_inches
+        H  = brand.slide.height_inches
+        lc = brand.layout("content")
+
+        self._fill_background(
+            slide,
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background)),
+        )
+        self._add_title_bar(slide, brand)
+
+        if title := slide_def.get("title", ""):
+            self._add_text_box(
+                slide,
+                text      = title,
+                left      = Inches(0.4),
+                top       = Inches(H * lc.title_y),
+                width     = Inches(W - 0.8),
+                height    = Inches(0.6),
+                font_name = brand.fonts.heading,
+                font_size = brand.fonts.subheading_size,
+                bold      = True,
+                color_rgb = brand.colors.hex_to_rgb(brand.colors.primary),
+                align     = PP_ALIGN.LEFT,
+            )
+
+        self._chart_builder.add_chart(
+            slide     = slide,
+            slide_def = slide_def,
+            brand     = brand,
+            warnings  = warnings,
+            left      = Inches(0.5),
+            top       = Inches(H * lc.body_y),
+            width     = Inches(W - 1.0),
+            height    = Inches(H - lc.body_y - 0.4),
+        )
+
+    def _build_content_chart(self, slide, slide_def, brand, warnings):
+        """Left: bullets  |  Right: native chart."""
+        W  = brand.slide.width_inches
+        H  = brand.slide.height_inches
+        lc = brand.layout("content")
+
+        self._fill_background(
+            slide,
+            brand.colors.hex_to_rgb(brand.colors.get(brand.rules.content_background)),
+        )
+        self._add_title_bar(slide, brand)
+
+        if title := slide_def.get("title", ""):
+            self._add_text_box(
+                slide,
+                text      = title,
+                left      = Inches(0.4),
+                top       = Inches(H * lc.title_y),
+                width     = Inches(W - 0.8),
+                height    = Inches(0.6),
+                font_name = brand.fonts.heading,
+                font_size = brand.fonts.subheading_size,
+                bold      = True,
+                color_rgb = brand.colors.hex_to_rgb(brand.colors.primary),
+                align     = PP_ALIGN.LEFT,
+            )
+
+        # ── Split ratio from brand JSON, default 45/55 ────────────────────────
+        split    = brand.content_chart_split()
+        col_w    = (W - 1.2) * split
+        body_top = H * lc.body_y
+
+        # ── Left: bullets ─────────────────────────────────────────────────────
+        if bullets := slide_def.get("bullets", []):
+            if len(bullets) > brand.rules.max_bullets_per_slide:
+                warnings.append(
+                    f"Slide '{slide_def.get('title', '')}': "
+                    f"{len(bullets)} bullets exceeds recommended max "
+                    f"{brand.rules.max_bullets_per_slide}."
+                )
+            self._add_bullet_box(
+                slide,
+                bullets = bullets,
+                left    = Inches(0.5),
+                top     = Inches(body_top),
+                width   = Inches(col_w),
+                height  = Inches(H - body_top - 0.5),
+                brand   = brand,
+            )
+
+        # ── Divider ───────────────────────────────────────────────────────────
+        self._add_vertical_divider(slide, brand, col_w, lc.body_y, H)
+
+        # ── Right: native chart ───────────────────────────────────────────────
+        chart_left = 0.7 + col_w
+        self._chart_builder.add_chart(
+            slide     = slide,
+            slide_def = slide_def,
+            brand     = brand,
+            warnings  = warnings,
+            left      = Inches(chart_left),
+            top       = Inches(body_top),
+            width     = Inches(W - chart_left - 0.3),
+            height    = Inches(H - body_top - 0.4),
+        )
+
     def _build_closing(self, slide, slide_def, brand, warnings):
         """Closing reuses cover layout."""
         self._build_cover(slide, slide_def, brand, warnings)
@@ -765,38 +890,30 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
     # ── Dispatch table ────────────────────────────────────────────────────────
 
     _BUILDERS = {
-        "cover":      _build_cover,
-        "section":    _build_section,
-        "content":    _build_content,
-        "two_column": _build_two_column,
-        "quote":      _build_quote,
-        "closing":    _build_closing,
+        "cover":         _build_cover,
+        "section":       _build_section,
+        "content":       _build_content,
+        "two_column":    _build_two_column,
+        "quote":         _build_quote,
+        "chart":         _build_chart,
+        "content_chart": _build_content_chart,
+        "closing":       _build_closing,
     }
 
     # ── Drawing Helpers ───────────────────────────────────────────────────────
-
-    def _title_bar_top(self, brand: BrandGuidelines) -> float:
-        """Bar top in inches: title_top + title_height + small gap above bar."""
-        H = brand.slide.height_inches
-        return (H * _TITLE_TOP_FRAC) + _TITLE_HEIGHT_IN + _TITLE_BAR_GAP_IN
-
-    def _body_top(self, brand: BrandGuidelines) -> float:
-        """Body starts immediately after bar — no extra gap below."""
-        return self._title_bar_top(brand) + _TITLE_BAR_H_IN + 0.10
 
     def _fill_background(self, slide, rgb: tuple):
         fill = slide.background.fill
         fill.solid()
         fill.fore_color.rgb = RGBColor(*rgb)
 
-    def _add_title_bar(self, slide, brand: BrandGuidelines, top_inches: float):
+    def _add_title_bar(self, slide, brand: BrandGuidelines):
+        """Thin primary-color rule under the title area."""
         W     = brand.slide.width_inches
         shape = slide.shapes.add_shape(
             1,
-            Inches(0.4),
-            Inches(top_inches),
-            Inches(W - 0.8),
-            Inches(_TITLE_BAR_H_IN),
+            Inches(0.4), Inches(0.72),
+            Inches(W - 0.8), Inches(0.04),
         )
         shape.fill.solid()
         shape.fill.fore_color.rgb = RGBColor(
@@ -815,7 +932,8 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             else Inches(0)
         )
         shape = slide.shapes.add_shape(
-            1, Inches(0), top, Inches(W), Inches(bar_h),
+            1,
+            Inches(0), top, Inches(W), Inches(bar_h),
         )
         shape.fill.solid()
         shape.fill.fore_color.rgb = RGBColor(
@@ -840,7 +958,14 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             align     = PP_ALIGN.RIGHT,
         )
 
-    def _add_vertical_divider(self, slide, brand, col_w, body_y, H):
+    def _add_vertical_divider(
+        self,
+        slide,
+        brand:  BrandGuidelines,
+        col_w:  float,
+        body_y: float,
+        H:      float,
+    ):
         shape = slide.shapes.add_shape(
             1,
             Inches(0.6 + col_w), Inches(H * body_y),
@@ -871,7 +996,7 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
         tf.word_wrap = True
         p            = tf.paragraphs[0]
         p.alignment  = align
-        run                = p.add_run()
+        run          = p.add_run()
         run.text           = text
         run.font.name      = font_name
         run.font.size      = Pt(font_size)
@@ -899,12 +1024,14 @@ class PptxBedrockConverseTool(AbstractBedrockConverseTool):
             p.alignment    = PP_ALIGN.LEFT
             p.space_before = Pt(4)
 
+            # Bullet marker in accent color
             marker                = p.add_run()
             marker.text           = "▪  "
             marker.font.name      = brand.fonts.body
             marker.font.size      = Pt(brand.fonts.body_size)
             marker.font.color.rgb = RGBColor(*accent_rgb)
 
+            # Bullet text in dark color
             run                = p.add_run()
             run.text           = bullet
             run.font.name      = brand.fonts.body
