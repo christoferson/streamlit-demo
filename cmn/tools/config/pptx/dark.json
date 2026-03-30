@@ -1,32 +1,32 @@
 {
-  "brand_name": "Default",
+  "brand_name": "Dark",
 
   "colors": {
-    "primary":      "#1B3A6B",
-    "secondary":    "#2E86AB",
-    "accent":       "#F4A261",
-    "background":   "#FFFFFF",
-    "surface":      "#F5F7FA",
-    "text_dark":    "#1A1A2E",
-    "text_light":   "#FFFFFF",
-    "text_muted":   "#6B7280",
-    "success":      "#10B981",
-    "warning":      "#F59E0B",
-    "danger":       "#EF4444",
+    "primary":      "#E2E8F0",
+    "secondary":    "#63B3ED",
+    "accent":       "#F6AD55",
+    "background":   "#1A202C",
+    "surface":      "#2D3748",
+    "text_dark":    "#E2E8F0",
+    "text_light":   "#F7FAFC",
+    "text_muted":   "#A0AEC0",
+    "success":      "#68D391",
+    "warning":      "#F6AD55",
+    "danger":       "#FC8181",
     "chart_palette": [
-      "#1B3A6B", "#2E86AB", "#F4A261",
-      "#10B981", "#F59E0B", "#EF4444"
+      "#63B3ED", "#F6AD55", "#68D391",
+      "#FC8181", "#B794F4", "#76E4F7"
     ]
   },
 
   "fonts": {
-    "heading":          "Calibri",
-    "body":             "Calibri",
-    "mono":             "Courier New",
-    "heading_size":     36,
-    "subheading_size":  24,
-    "body_size":        18,
-    "caption_size":     14
+    "heading":         "Calibri",
+    "body":            "Calibri",
+    "mono":            "Courier New",
+    "heading_size":    36,
+    "subheading_size": 24,
+    "body_size":       18,
+    "caption_size":    14
   },
 
   "slide": {
@@ -40,8 +40,8 @@
     "logo_position":            "bottom_right",
     "max_bullets_per_slide":    6,
     "max_words_per_bullet":     15,
-    "cover_background":         "primary",
-    "section_background":       "secondary",
+    "cover_background":         "background",
+    "section_background":       "surface",
     "content_background":       "background",
     "use_slide_numbers":        true,
     "tone":                     "professional"
