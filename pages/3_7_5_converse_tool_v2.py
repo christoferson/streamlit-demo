@@ -1051,7 +1051,7 @@ if prompt:
             system_prompts=[{"text": opt_system_msg}],
         )
 
-        with st.spinner("Processing..."):
+        with st.spinner("Processing...", show_time=True, width="content"):
             final_result = manager.run(
                 message_history,
                 on_text_delta=on_text_delta,
