@@ -5,6 +5,7 @@ PyJWT >= 2.8.0
 pydub >= 0.25.1
 #st-copy-to-clipboard == 0.1.6
 pillow == 10.3.0
-awscrt 0.26.1
-pip install aws-crt
-    
+duckdb>=1.2.0
+awscrt == 0.26.1
+python-pptx == 1.0.2
+reportlab == 4.4.10

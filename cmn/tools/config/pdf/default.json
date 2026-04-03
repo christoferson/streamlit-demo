@@ -1,0 +1,52 @@
+{
+  "brand_name": "Default",
+
+  "colors": {
+    "primary":       "#1B3A6B",
+    "secondary":     "#2E86AB",
+    "accent":        "#F4A261",
+    "background":    "#FFFFFF",
+    "surface":       "#F5F7FA",
+    "text_dark":     "#1A1A2E",
+    "text_light":    "#FFFFFF",
+    "text_muted":    "#6B7280",
+    "success":       "#10B981",
+    "warning":       "#F59E0B",
+    "danger":        "#EF4444",
+    "chart_palette": [
+      "#1B3A6B", "#2E86AB", "#F4A261",
+      "#10B981", "#F59E0B", "#EF4444"
+    ]
+  },
+
+  "fonts": {
+    "heading":          "Helvetica-Bold",
+    "body":             "Helvetica",
+    "mono":             "Courier",
+    "cover_title_size": 32,
+    "h1_size":          20,
+    "h2_size":          16,
+    "body_size":        11,
+    "caption_size":     9,
+    "footer_size":      8
+  },
+
+  "page": {
+    "size":          "A4",
+    "margin_top":    1.0,
+    "margin_bottom": 1.0,
+    "margin_left":   1.0,
+    "margin_right":  1.0
+  },
+
+  "rules": {
+    "show_page_numbers":    true,
+    "show_footer_brand":    true,
+    "show_header_line":     true,
+    "accent_bar_height":    0.08,
+    "table_row_height":     0.3,
+    "section_space_before": 0.2,
+    "bullet_indent":        0.3,
+    "chart_height_inches":  3.5
+  }
+}
