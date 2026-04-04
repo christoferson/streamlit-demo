@@ -32,6 +32,7 @@ from cmn.tools.renderer import (
     SalesAnomalyToolRenderer,
     SalesForecastToolRenderer,
     PptxToolRenderer,
+    PdfToolRenderer,
 )
 from cmn.tools.tool import ToolRegistry
 from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
@@ -41,6 +42,7 @@ from cmn.tools.tool import EDACorrelationBedrockConverseTool
 from cmn.tools.tool import EDAGroupBedrockConverseTool
 from cmn.tools.tool import CalculatorBedrockConverseTool
 from cmn.tools.tool import PptxBedrockConverseTool
+from cmn.tools.tool import PdfBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -255,6 +257,7 @@ def get_renderer_registry():
         SalesAnomalyToolRenderer(),
         SalesForecastToolRenderer(),
         PptxToolRenderer(),
+        PdfToolRenderer(),
     ])
 
 
@@ -518,6 +521,7 @@ def get_tool_registry():
         EDACorrelationBedrockConverseTool(),
         EDAGroupBedrockConverseTool(),
         PptxBedrockConverseTool(),
+        PdfBedrockConverseTool(),
     ])
 
 
