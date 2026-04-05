@@ -8,6 +8,7 @@ from cmn.tools.tool.bedrock_converse_tools_tool_eda_group import EDAGroupBedrock
 from cmn.tools.tool.bedrock_converse_tools_tool_calculator import CalculatorBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_pptx import PptxBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_pdf import PdfBedrockConverseTool
+from cmn.tools.tool.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 
 __all__ = [
 

@@ -15,7 +15,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
-from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
+#from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 #from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
 from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
@@ -43,6 +43,7 @@ from cmn.tools.tool import EDAGroupBedrockConverseTool
 from cmn.tools.tool import CalculatorBedrockConverseTool
 from cmn.tools.tool import PptxBedrockConverseTool
 from cmn.tools.tool import PdfBedrockConverseTool
+from cmn.tools.tool import WikipediaBedrockConverseTool
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2

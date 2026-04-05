@@ -1,7 +1,8 @@
-# cmn/bedrock_converse_tools_wikipedia.py
-
 import wikipedia
+import logging
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
+
+logger = logging.getLogger(__name__)
 
 
 class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
@@ -41,7 +42,7 @@ class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
 
     def invoke(self, params, tool_args=None):
         args         = tool_args or {}
-        search_query = args.get("expression", "").strip()   # ← fix: read from tool_args
+        search_query = args.get("expression", "").strip()
 
         if not search_query:
             return "No search query provided. Pass 'expression' with a search term."
