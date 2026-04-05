@@ -12,6 +12,8 @@ import pandas as pd
 import plotly.express as px
 from botocore.exceptions import BotoCoreError, ClientError
 
+from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
+
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
@@ -43,7 +45,9 @@ from cmn.tools.tool import EDAGroupBedrockConverseTool
 from cmn.tools.tool import CalculatorBedrockConverseTool
 from cmn.tools.tool import PptxBedrockConverseTool
 from cmn.tools.tool import PdfBedrockConverseTool
-from cmn.tools.tool import WikipediaBedrockConverseTool
+from cmn.tools.tool import (
+    WikipediaBedrockConverseTool
+)
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -388,20 +392,20 @@ class ConversationManager:
 # SECTION: File / Media Utilities
 ################################################################################
 
-mime_mapping_image = {
-    "image/png":  "png",
-    "image/jpeg": "jpeg",
-    "image/jpg":  "jpeg",
-    "image/gif":  "gif",
-    "image/webp": "webp",
-}
+# mime_mapping_image = {
+#     "image/png":  "png",
+#     "image/jpeg": "jpeg",
+#     "image/jpg":  "jpeg",
+#     "image/gif":  "gif",
+#     "image/webp": "webp",
+# }
 
-mime_mapping_document = {
-    "text/plain":                "txt",
-    "application/vnd.ms-excel":  "csv",
-    "application/pdf":           "pdf",
-    "text/markdown":             "md",
-}
+# mime_mapping_document = {
+#     "text/plain":                "txt",
+#     "application/vnd.ms-excel":  "csv",
+#     "application/pdf":           "pdf",
+#     "text/markdown":             "md",
+# }
 
 
 def image_to_base64(image: Image.Image, fmt: str) -> str:
