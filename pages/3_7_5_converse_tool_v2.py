@@ -528,7 +528,7 @@ def get_tool_registry():
 bedrock_client = get_bedrock_client()
 tool_registry  = get_tool_registry()
 
-tool_summary = tool_registry.build_tool_summary()
+#tool_summary = tool_registry.build_tool_summary()
 
 
 ################################################################################
@@ -579,17 +579,11 @@ def build_default_system_prompt(registry: ToolRegistry) -> str:
 OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
 
 with st.sidebar:
-    opt_model_id    = st.selectbox("Model ID", opt_model_id_list, index=0,
-                                   key="model_id")
-    opt_temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1,
-                                key="temperature")
+    opt_model_id    = st.selectbox("Model ID", opt_model_id_list, index=0, key="model_id")
+    opt_temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1, key="temperature")
     opt_max_tokens  = st.slider("Max Tokens", 0, 8192, 4096, 1, key="max_tokens")
-    opt_system_msg  = st.text_area("System Message",
-                                   OPT_SYSTEM_MSG_DEFAULT,
-                                   key="system_msg")
-    opt_show_metrics = st.checkbox("Show Invocation Metrics", value=False,
-                                   key="show_metrics")
-
+    opt_system_msg  = st.text_area("System Message", OPT_SYSTEM_MSG_DEFAULT, key="system_msg")
+    opt_show_metrics = st.checkbox("Show Invocation Metrics", value=False, key="show_metrics")
 
 ################################################################################
 # SECTION: Streamlit Page Setup + Session State
@@ -775,250 +769,250 @@ if prompt:
                 )
 
         ##
-        def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
+        # def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
 
-            data  = tool_args.get("data") or tool_result.get("data", [])
-            x     = tool_args["x_label"]
-            y     = tool_args["y_label"]
-            title = tool_args["title"]
-            ctype = tool_args["chart_type"]
+        #     data  = tool_args.get("data") or tool_result.get("data", [])
+        #     x     = tool_args["x_label"]
+        #     y     = tool_args["y_label"]
+        #     title = tool_args["title"]
+        #     ctype = tool_args["chart_type"]
 
-            if not data:
-                with result_container:
-                    st.warning("Chart error: no data provided.")
-                return
+        #     if not data:
+        #         with result_container:
+        #             st.warning("Chart error: no data provided.")
+        #         return
 
-            df = pd.DataFrame(data)
+        #     df = pd.DataFrame(data)
 
-            if x not in df.columns:
-                with result_container:
-                    st.warning(f"Chart error: x='{x}' not found. Got: {list(df.columns)}")
-                return
+        #     if x not in df.columns:
+        #         with result_container:
+        #             st.warning(f"Chart error: x='{x}' not found. Got: {list(df.columns)}")
+        #         return
 
-            # ── Detect long format — has a series/type/category column ───────────
-            color_col = next(
-                (c for c in ["series", "type", "category"] if c in df.columns),
-                None
-            )
+        #     # ── Detect long format — has a series/type/category column ───────────
+        #     color_col = next(
+        #         (c for c in ["series", "type", "category"] if c in df.columns),
+        #         None
+        #     )
 
-            x_order = df[x].unique().tolist()   # preserve original order
+        #     x_order = df[x].unique().tolist()   # preserve original order
 
-            with result_container:
-                st.markdown(f"**{title}**")
+        #     with result_container:
+        #         st.markdown(f"**{title}**")
 
-                if color_col:
-                    # ── Long format — color by series column ─────────────────────
-                    if ctype == "bar":
-                        fig = px.bar(df, x=x, y=y, color=color_col, barmode="group")
-                    elif ctype == "line":
-                        fig = px.line(df, x=x, y=y, color=color_col, markers=True)
-                    else:
-                        fig = px.area(df, x=x, y=y, color=color_col)
+        #         if color_col:
+        #             # ── Long format — color by series column ─────────────────────
+        #             if ctype == "bar":
+        #                 fig = px.bar(df, x=x, y=y, color=color_col, barmode="group")
+        #             elif ctype == "line":
+        #                 fig = px.line(df, x=x, y=y, color=color_col, markers=True)
+        #             else:
+        #                 fig = px.area(df, x=x, y=y, color=color_col)
 
-                else:
-                    # ── Wide format — one column per series ───────────────────────
-                    chart_df  = df.set_index(x)
-                    y_columns = (
-                        [y] if y in chart_df.columns
-                        else chart_df.select_dtypes(include="number").columns.tolist()
-                    )
-                    plot_df = chart_df[y_columns].reset_index()
+        #         else:
+        #             # ── Wide format — one column per series ───────────────────────
+        #             chart_df  = df.set_index(x)
+        #             y_columns = (
+        #                 [y] if y in chart_df.columns
+        #                 else chart_df.select_dtypes(include="number").columns.tolist()
+        #             )
+        #             plot_df = chart_df[y_columns].reset_index()
 
-                    if ctype == "bar":
-                        fig = px.bar(plot_df, x=x, y=y_columns, barmode="group")
-                    elif ctype == "line":
-                        fig = px.line(plot_df, x=x, y=y_columns, markers=True)
-                    else:
-                        fig = px.area(plot_df, x=x, y=y_columns)
+        #             if ctype == "bar":
+        #                 fig = px.bar(plot_df, x=x, y=y_columns, barmode="group")
+        #             elif ctype == "line":
+        #                 fig = px.line(plot_df, x=x, y=y_columns, markers=True)
+        #             else:
+        #                 fig = px.area(plot_df, x=x, y=y_columns)
 
-                fig.update_xaxes(categoryorder="array", categoryarray=x_order)
-                st.plotly_chart(fig, width="content")
+        #         fig.update_xaxes(categoryorder="array", categoryarray=x_order)
+        #         st.plotly_chart(fig, width="content")
         
-        def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
-            """Renders KPI cards from tool_result."""
+        # def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
+        #     """Renders KPI cards from tool_result."""
 
-            if tool_result.get("status") != "kpi_ready":
-                return
+        #     if tool_result.get("status") != "kpi_ready":
+        #         return
 
-            title   = tool_result.get("title", "")
-            metrics = tool_result.get("metrics", [])
+        #     title   = tool_result.get("title", "")
+        #     metrics = tool_result.get("metrics", [])
 
-            if not metrics:
-                return
+        #     if not metrics:
+        #         return
 
-            with result_container:
-                if title:
-                    st.markdown(f"**{title}**")
+        #     with result_container:
+        #         if title:
+        #             st.markdown(f"**{title}**")
 
-                # ── Render in rows of 4 ───────────────────────────────────────────
-                chunk_size = 4
-                for i in range(0, len(metrics), chunk_size):
-                    row     = metrics[i : i + chunk_size]
-                    columns = st.columns(len(row))
+        #         # ── Render in rows of 4 ───────────────────────────────────────────
+        #         chunk_size = 4
+        #         for i in range(0, len(metrics), chunk_size):
+        #             row     = metrics[i : i + chunk_size]
+        #             columns = st.columns(len(row))
 
-                    for col, metric in zip(columns, row):
-                        with col:
-                            st.metric(
-                                label       = metric.get("label", ""),
-                                value       = metric.get("value", ""),
-                                delta       = metric.get("delta"),           # None if not provided
-                                delta_color = metric.get("delta_color", "normal"),
-                            )
+        #             for col, metric in zip(columns, row):
+        #                 with col:
+        #                     st.metric(
+        #                         label       = metric.get("label", ""),
+        #                         value       = metric.get("value", ""),
+        #                         delta       = metric.get("delta"),           # None if not provided
+        #                         delta_color = metric.get("delta_color", "normal"),
+        #                     )
 
-        def on_tool_invoked_render_anomaly(tool_args: dict, tool_result: Any):
-            """Renders anomaly detection results."""
+        # def on_tool_invoked_render_anomaly(tool_args: dict, tool_result: Any):
+        #     """Renders anomaly detection results."""
 
-            anomalies = tool_result.get("anomalies", [])
-            normal    = tool_result.get("normal",    [])
-            metric    = tool_result.get("metric",    "revenue")
-            year      = tool_result.get("year",      "")
-            mean      = tool_result.get("mean",      0)
+        #     anomalies = tool_result.get("anomalies", [])
+        #     normal    = tool_result.get("normal",    [])
+        #     metric    = tool_result.get("metric",    "revenue")
+        #     year      = tool_result.get("year",      "")
+        #     mean      = tool_result.get("mean",      0)
 
-            if "error" in tool_result:
-                with result_container:
-                    st.warning(f"Anomaly detection: {tool_result['error']}")
-                return
+        #     if "error" in tool_result:
+        #         with result_container:
+        #             st.warning(f"Anomaly detection: {tool_result['error']}")
+        #         return
 
-            with result_container:
-                st.markdown(f"**🔍 Anomaly Detection — {metric.title()} {year}**")
-                st.caption(f"Yearly mean: {mean:,.0f} | Threshold: ±{tool_result.get('threshold', 1.5)} std dev")
+        #     with result_container:
+        #         st.markdown(f"**🔍 Anomaly Detection — {metric.title()} {year}**")
+        #         st.caption(f"Yearly mean: {mean:,.0f} | Threshold: ±{tool_result.get('threshold', 1.5)} std dev")
 
-                if not anomalies:
-                    st.success("✅ No anomalies detected — all months within normal range.")
-                    return
+        #         if not anomalies:
+        #             st.success("✅ No anomalies detected — all months within normal range.")
+        #             return
 
-                # ── Anomaly cards ─────────────────────────────────────────────────
-                cols = st.columns(len(anomalies)) if len(anomalies) <= 4 else st.columns(4)
+        #         # ── Anomaly cards ─────────────────────────────────────────────────
+        #         cols = st.columns(len(anomalies)) if len(anomalies) <= 4 else st.columns(4)
 
-                for i, entry in enumerate(anomalies):
-                    col = cols[i % 4] if len(anomalies) > 4 else cols[i]
-                    with col:
-                        flag     = entry["flag"]
-                        severity = entry.get("severity", "")
-                        pct      = entry["pct_vs_mean"]
-                        icon     = "🔴" if flag == "below_normal" else "🟢"
+        #         for i, entry in enumerate(anomalies):
+        #             col = cols[i % 4] if len(anomalies) > 4 else cols[i]
+        #             with col:
+        #                 flag     = entry["flag"]
+        #                 severity = entry.get("severity", "")
+        #                 pct      = entry["pct_vs_mean"]
+        #                 icon     = "🔴" if flag == "below_normal" else "🟢"
 
-                        st.metric(
-                            label       = f"{icon} {entry['month_name']}",
-                            value       = f"{entry['value']:,.0f}",
-                            delta       = f"{pct:+.1f}% vs mean",
-                            delta_color = "normal" if flag == "above_normal" else "inverse",
-                        )
-                        st.caption(f"Z-score: {entry['zscore']} | {severity}")
+        #                 st.metric(
+        #                     label       = f"{icon} {entry['month_name']}",
+        #                     value       = f"{entry['value']:,.0f}",
+        #                     delta       = f"{pct:+.1f}% vs mean",
+        #                     delta_color = "normal" if flag == "above_normal" else "inverse",
+        #                 )
+        #                 st.caption(f"Z-score: {entry['zscore']} | {severity}")
 
-                # ── Normal months summary ─────────────────────────────────────────
-                if normal:
-                    normal_names = ", ".join(n["month_name"] for n in normal)
-                    st.caption(f"✅ Normal months: {normal_names}")
+        #         # ── Normal months summary ─────────────────────────────────────────
+        #         if normal:
+        #             normal_names = ", ".join(n["month_name"] for n in normal)
+        #             st.caption(f"✅ Normal months: {normal_names}")
 
-        def on_tool_invoked_render_forecast(tool_args: dict, tool_result: Any):
+        # def on_tool_invoked_render_forecast(tool_args: dict, tool_result: Any):
 
-            if "error" in tool_result:
-                with result_container:
-                    st.warning(f"Forecast error: {tool_result['error']}")
-                return
+        #     if "error" in tool_result:
+        #         with result_container:
+        #             st.warning(f"Forecast error: {tool_result['error']}")
+        #         return
 
-            actuals       = tool_result.get("actuals",  [])
-            forecast      = tool_result.get("forecast", [])
-            metric        = tool_result.get("metric",   "revenue")
-            train_year    = tool_result.get("train_year")
-            forecast_year = tool_result.get("forecast_year")
-            model_info    = tool_result.get("model",    {})
-            summary       = tool_result.get("summary",  {})
+        #     actuals       = tool_result.get("actuals",  [])
+        #     forecast      = tool_result.get("forecast", [])
+        #     metric        = tool_result.get("metric",   "revenue")
+        #     train_year    = tool_result.get("train_year")
+        #     forecast_year = tool_result.get("forecast_year")
+        #     model_info    = tool_result.get("model",    {})
+        #     summary       = tool_result.get("summary",  {})
 
-            with result_container:
-                st.markdown(f"**📈 Sales Forecast — {metric.title()}**")
+        #     with result_container:
+        #         st.markdown(f"**📈 Sales Forecast — {metric.title()}**")
 
-                # ── Model metrics ─────────────────────────────────────────────────
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Trend",      summary.get("trend", "").title())
-                col2.metric("Monthly Δ",  f"{model_info.get('slope', 0):+,.0f}")
-                col3.metric("Confidence", summary.get("confidence", "").title(),
-                            delta=f"R²={model_info.get('r2_score', 0)}")
+        #         # ── Model metrics ─────────────────────────────────────────────────
+        #         col1, col2, col3 = st.columns(3)
+        #         col1.metric("Trend",      summary.get("trend", "").title())
+        #         col2.metric("Monthly Δ",  f"{model_info.get('slope', 0):+,.0f}")
+        #         col3.metric("Confidence", summary.get("confidence", "").title(),
+        #                     delta=f"R²={model_info.get('r2_score', 0)}")
 
-                # ── Build rows — use sequential order, unique labels ──────────────
-                rows = []
+        #         # ── Build rows — use sequential order, unique labels ──────────────
+        #         rows = []
 
-                for row in actuals:
-                    rows.append({
-                        "order":  row["month"],                          # 1-12
-                        "label":  f"{row['month_name']} {train_year}",  # "Jan 2023"
-                        "value":  row["actual"],
-                        "series": f"{train_year} Actual",
-                    })
+        #         for row in actuals:
+        #             rows.append({
+        #                 "order":  row["month"],                          # 1-12
+        #                 "label":  f"{row['month_name']} {train_year}",  # "Jan 2023"
+        #                 "value":  row["actual"],
+        #                 "series": f"{train_year} Actual",
+        #             })
 
-                for i, row in enumerate(forecast):
-                    rows.append({
-                        "order":  12 + (i + 1),                                      # 13, 14, 15
-                        "label":  f"{row['month_name']} {forecast_year}",            # "Jan 2024"
-                        "value":  row["forecasted_value"],
-                        "series": f"{forecast_year} Forecast",
-                    })
+        #         for i, row in enumerate(forecast):
+        #             rows.append({
+        #                 "order":  12 + (i + 1),                                      # 13, 14, 15
+        #                 "label":  f"{row['month_name']} {forecast_year}",            # "Jan 2024"
+        #                 "value":  row["forecasted_value"],
+        #                 "series": f"{forecast_year} Forecast",
+        #             })
 
-                plot_df = pd.DataFrame(rows).sort_values("order")
+        #         plot_df = pd.DataFrame(rows).sort_values("order")
 
-                # ── Plotly — order locked via categoryarray ───────────────────────
-                st.markdown(f"**{train_year} Actuals vs {forecast_year} Forecast**")
+        #         # ── Plotly — order locked via categoryarray ───────────────────────
+        #         st.markdown(f"**{train_year} Actuals vs {forecast_year} Forecast**")
 
-                fig = px.line(
-                    plot_df,
-                    x="label",
-                    y="value",
-                    color="series",
-                    markers=True,
-                    labels={
-                        "label":  "Month",
-                        "value":  metric.title(),
-                        "series": "",
-                    },
-                    color_discrete_map={
-                        f"{train_year} Actual":      "#4A90D9",
-                        f"{forecast_year} Forecast": "#FF6B6B",
-                    },
-                )
+        #         fig = px.line(
+        #             plot_df,
+        #             x="label",
+        #             y="value",
+        #             color="series",
+        #             markers=True,
+        #             labels={
+        #                 "label":  "Month",
+        #                 "value":  metric.title(),
+        #                 "series": "",
+        #             },
+        #             color_discrete_map={
+        #                 f"{train_year} Actual":      "#4A90D9",
+        #                 f"{forecast_year} Forecast": "#FF6B6B",
+        #             },
+        #         )
 
-                fig.update_xaxes(
-                    categoryorder="array",
-                    categoryarray=plot_df["label"].tolist(),  # ← 15 unique labels in order
-                )
+        #         fig.update_xaxes(
+        #             categoryorder="array",
+        #             categoryarray=plot_df["label"].tolist(),  # ← 15 unique labels in order
+        #         )
 
-                st.plotly_chart(fig, width="content")
+        #         st.plotly_chart(fig, width="content")
 
-                # ── Forecast table ────────────────────────────────────────────────
-                st.markdown(f"**{forecast_year} Monthly Forecast**")
-                st.dataframe(
-                    pd.DataFrame([
-                        {
-                            "Month":                f"{f['month_name']} {forecast_year}",
-                            f"Forecast ({metric})": f"{f['forecasted_value']:,.0f}",
-                        }
-                        for f in forecast
-                    ]),
-                    width="content",
-                    hide_index=True,
-                )
+        #         # ── Forecast table ────────────────────────────────────────────────
+        #         st.markdown(f"**{forecast_year} Monthly Forecast**")
+        #         st.dataframe(
+        #             pd.DataFrame([
+        #                 {
+        #                     "Month":                f"{f['month_name']} {forecast_year}",
+        #                     f"Forecast ({metric})": f"{f['forecasted_value']:,.0f}",
+        #                 }
+        #                 for f in forecast
+        #             ]),
+        #             width="content",
+        #             hide_index=True,
+        #         )
                 
-        def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
-            """Tool-name based renderer."""
+        # def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
+        #     """Tool-name based renderer."""
 
-            if tool_name == "product_query":
-                with result_container:
-                    st.markdown(":blue[🗄️ **Generated SQL:**]")
-                    st.code(
-                        tool_args["sql"],
-                        language="sql",
-                        wrap_lines=True,
-                    )
+        #     if tool_name == "product_query":
+        #         with result_container:
+        #             st.markdown(":blue[🗄️ **Generated SQL:**]")
+        #             st.code(
+        #                 tool_args["sql"],
+        #                 language="sql",
+        #                 wrap_lines=True,
+        #             )
 
-            elif tool_name == "render_chart":
-                on_tool_invoked_render_chart(tool_args, tool_result)
+        #     elif tool_name == "render_chart":
+        #         on_tool_invoked_render_chart(tool_args, tool_result)
 
-            elif tool_name == "render_sales_kpi":
-                on_tool_invoked_render_kpi(tool_args, tool_result)
-            elif tool_name == "sales_anomaly_detector":
-                on_tool_invoked_render_anomaly(tool_args, tool_result)
-            elif tool_name == "sales_forecast":                         # ← add
-                on_tool_invoked_render_forecast(tool_args, tool_result)
+        #     elif tool_name == "render_sales_kpi":
+        #         on_tool_invoked_render_kpi(tool_args, tool_result)
+        #     elif tool_name == "sales_anomaly_detector":
+        #         on_tool_invoked_render_anomaly(tool_args, tool_result)
+        #     elif tool_name == "sales_forecast":                         # ← add
+        #         on_tool_invoked_render_forecast(tool_args, tool_result)
 
         ##
         # def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
