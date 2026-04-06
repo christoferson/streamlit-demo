@@ -13,12 +13,9 @@ import plotly.express as px
 from botocore.exceptions import BotoCoreError, ClientError
 
 from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
+from cmn.view import CONVERSE_TOOL_GUIDE
 
-from cmn.bedrock.converse import (
-    ToolInvocation,
-    StreamMetrics,
-    StreamResult,
-)
+from cmn.bedrock.converse import ConversationManager, StreamResult
 
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
@@ -174,89 +171,89 @@ _EXCEPTION_EVENTS = [
 #             logger.debug("Reasoning delta: %s", rc['text'])
 
 
-def _handle_metadata(metadata: dict, result: StreamResult):
-    if 'usage' in metadata:
-        u = metadata['usage']
-        result.metrics.input_tokens  = u.get('inputTokens', 0)
-        result.metrics.output_tokens = u.get('outputTokens', 0)
-        result.metrics.total_tokens  = u.get('totalTokens', 0)
-    if 'metrics' in metadata:
-        result.metrics.latency_ms = metadata['metrics'].get('latencyMs', 0)
+# def _handle_metadata(metadata: dict, result: StreamResult):
+#     if 'usage' in metadata:
+#         u = metadata['usage']
+#         result.metrics.input_tokens  = u.get('inputTokens', 0)
+#         result.metrics.output_tokens = u.get('outputTokens', 0)
+#         result.metrics.total_tokens  = u.get('totalTokens', 0)
+#     if 'metrics' in metadata:
+#         result.metrics.latency_ms = metadata['metrics'].get('latencyMs', 0)
 
 
-def process_stream(
-    stream,
-    on_text_delta: Optional[Callable[[str], None]] = None,
-) -> StreamResult:
+# def process_stream(
+#     stream,
+#     on_text_delta: Optional[Callable[[str], None]] = None,
+# ) -> StreamResult:
 
-    result           = StreamResult()
-    tool_invocations = []       # ← collect all tool calls
-    current_tool     = None     # ← track active streaming tool
+#     result           = StreamResult()
+#     tool_invocations = []       # ← collect all tool calls
+#     current_tool     = None     # ← track active streaming tool
 
-    for event in stream:
+#     for event in stream:
 
-        if 'messageStart' in event:
-            logger.debug("messageStart: role=%s", event['messageStart'].get('role'))
+#         if 'messageStart' in event:
+#             logger.debug("messageStart: role=%s", event['messageStart'].get('role'))
 
-        elif 'contentBlockStart' in event:
-            start = event['contentBlockStart'].get('start', {})
-            if 'toolUse' in start:
-                # ── New tool call — create fresh ToolInvocation ───────────
-                tu           = start['toolUse']
-                current_tool = ToolInvocation(
-                    tool_use_id = tu['toolUseId'],
-                    tool_name   = tu['name'],
-                )
-                tool_invocations.append(current_tool)
-                logger.info("Tool call started: id=%s name=%s", tu['toolUseId'], tu['name'])
-            else:
-                current_tool = None     # text block, not a tool
+#         elif 'contentBlockStart' in event:
+#             start = event['contentBlockStart'].get('start', {})
+#             if 'toolUse' in start:
+#                 # ── New tool call — create fresh ToolInvocation ───────────
+#                 tu           = start['toolUse']
+#                 current_tool = ToolInvocation(
+#                     tool_use_id = tu['toolUseId'],
+#                     tool_name   = tu['name'],
+#                 )
+#                 tool_invocations.append(current_tool)
+#                 logger.info("Tool call started: id=%s name=%s", tu['toolUseId'], tu['name'])
+#             else:
+#                 current_tool = None     # text block, not a tool
 
-        elif 'contentBlockDelta' in event:
-            delta = event['contentBlockDelta']['delta']
+#         elif 'contentBlockDelta' in event:
+#             delta = event['contentBlockDelta']['delta']
 
-            if 'text' in delta:
-                chunk = delta['text']
-                result.text += chunk
-                if on_text_delta:
-                    on_text_delta(chunk)
+#             if 'text' in delta:
+#                 chunk = delta['text']
+#                 result.text += chunk
+#                 if on_text_delta:
+#                     on_text_delta(chunk)
 
-            elif 'toolUse' in delta:
-                # ── Accumulate into CURRENT tool only ─────────────────────
-                if current_tool is not None:
-                    current_tool.tool_input_raw += delta['toolUse'].get('input', '')
+#             elif 'toolUse' in delta:
+#                 # ── Accumulate into CURRENT tool only ─────────────────────
+#                 if current_tool is not None:
+#                     current_tool.tool_input_raw += delta['toolUse'].get('input', '')
 
-            elif 'reasoningContent' in delta:
-                rc = delta['reasoningContent']
-                if 'text' in rc:
-                    logger.debug("Reasoning delta: %s", rc['text'])
+#             elif 'reasoningContent' in delta:
+#                 rc = delta['reasoningContent']
+#                 if 'text' in rc:
+#                     logger.debug("Reasoning delta: %s", rc['text'])
 
-        elif 'contentBlockStop' in event:
-            # ── Block done — finalize current tool ────────────────────────
-            if current_tool is not None:
-                current_tool.finalize()
-                logger.info("Tool call finalized: name=%s args=%s",
-                            current_tool.tool_name,
-                            current_tool.tool_arguments)
-                current_tool = None     # reset for next block
+#         elif 'contentBlockStop' in event:
+#             # ── Block done — finalize current tool ────────────────────────
+#             if current_tool is not None:
+#                 current_tool.finalize()
+#                 logger.info("Tool call finalized: name=%s args=%s",
+#                             current_tool.tool_name,
+#                             current_tool.tool_arguments)
+#                 current_tool = None     # reset for next block
 
-        elif 'messageStop' in event:
-            result.stop_reason = event['messageStop'].get('stopReason', '')
-            if result.stop_reason == 'tool_use' and tool_invocations:
-                result.tool_invocations = tool_invocations
-                result.tool_invocation  = tool_invocations[0]  # backward compat
+#         elif 'messageStop' in event:
+#             result.stop_reason = event['messageStop'].get('stopReason', '')
+#             if result.stop_reason == 'tool_use' and tool_invocations:
+#                 result.tool_invocations = tool_invocations
+#                 result.tool_invocation  = tool_invocations[0]  # backward compat
 
-        elif 'metadata' in event:
-            _handle_metadata(event['metadata'], result)
+#         elif 'metadata' in event:
+#             _handle_metadata(event['metadata'], result)
 
-        else:
-            for exc_key in _EXCEPTION_EVENTS:
-                if exc_key in event:
-                    msg = event[exc_key].get('message', exc_key)
-                    logger.error("Stream exception [%s]: %s", exc_key, msg)
-                    result.errors.append(f"[{exc_key}] {msg}")
+#         else:
+#             for exc_key in _EXCEPTION_EVENTS:
+#                 if exc_key in event:
+#                     msg = event[exc_key].get('message', exc_key)
+#                     logger.error("Stream exception [%s]: %s", exc_key, msg)
+#                     result.errors.append(f"[{exc_key}] {msg}")
 
-    return result
+#     return result
 
 
 @st.cache_resource
@@ -279,119 +276,119 @@ renderer_registry = get_renderer_registry()
 # SECTION: ConversationManager  (single place where converse_stream is called)
 ################################################################################
 
-class ConversationManager:
-    """
-    Orchestrates multi-turn conversations including tool-use loops.
-    converse_stream is called ONLY inside _call_llm().
+# class ConversationManager:
+#     """
+#     Orchestrates multi-turn conversations including tool-use loops.
+#     converse_stream is called ONLY inside _call_llm().
 
-    The UI layer supplies callbacks so this class stays UI-agnostic:
-        on_text_delta(chunk)              → each streamed text chunk
-        on_stream_result(StreamResult)    → after each complete LLM response
-        on_tool_invoked(name, args, res)  → after each tool execution
-    """
+#     The UI layer supplies callbacks so this class stays UI-agnostic:
+#         on_text_delta(chunk)              → each streamed text chunk
+#         on_stream_result(StreamResult)    → after each complete LLM response
+#         on_tool_invoked(name, args, res)  → after each tool execution
+#     """
 
-    def __init__(
-        self,
-        bedrock_client,
-        tool_registry:           ToolRegistry,
-        model_id:                str,
-        inference_config:        dict,
-        system_prompts:          list,
-        additional_model_fields: Optional[dict] = None,
-    ):
-        self.client                  = bedrock_client
-        self.registry                = tool_registry
-        self.model_id                = model_id
-        self.inference_config        = inference_config
-        self.system_prompts          = system_prompts
-        self.additional_model_fields = additional_model_fields
+#     def __init__(
+#         self,
+#         bedrock_client,
+#         tool_registry:           ToolRegistry,
+#         model_id:                str,
+#         inference_config:        dict,
+#         system_prompts:          list,
+#         additional_model_fields: Optional[dict] = None,
+#     ):
+#         self.client                  = bedrock_client
+#         self.registry                = tool_registry
+#         self.model_id                = model_id
+#         self.inference_config        = inference_config
+#         self.system_prompts          = system_prompts
+#         self.additional_model_fields = additional_model_fields
 
-    # ── Public API ────────────────────────────────────────────────────────────
+#     # ── Public API ────────────────────────────────────────────────────────────
 
-    def run(
-        self,
-        message_history:  list,
-        on_text_delta:    Optional[Callable[[str], None]] = None,
-        on_stream_result: Optional[Callable] = None,
-        on_tool_invoked:  Optional[Callable] = None,
-    ) -> StreamResult:
+#     def run(
+#         self,
+#         message_history:  list,
+#         on_text_delta:    Optional[Callable[[str], None]] = None,
+#         on_stream_result: Optional[Callable] = None,
+#         on_tool_invoked:  Optional[Callable] = None,
+#     ) -> StreamResult:
 
-        messages = message_history.copy()
+#         messages = message_history.copy()
 
-        while True:
-            result = self._call_llm(messages, on_text_delta)
+#         while True:
+#             result = self._call_llm(messages, on_text_delta)
 
-            if on_stream_result:
-                on_stream_result(result)
+#             if on_stream_result:
+#                 on_stream_result(result)
 
-            if not result.has_tool_call:
-                return result
+#             if not result.has_tool_call:
+#                 return result
 
-            # ── Build single assistant message for ALL tool calls ─────────────
-            assistant_content = [
-                {
-                    "toolUse": {
-                        "toolUseId": tool_inv.tool_use_id,
-                        "name":      tool_inv.tool_name,
-                        "input":     tool_inv.tool_arguments,
-                    }
-                }
-                for tool_inv in result.tool_invocations
-            ]
-            messages.append({"role": "assistant", "content": assistant_content})
+#             # ── Build single assistant message for ALL tool calls ─────────────
+#             assistant_content = [
+#                 {
+#                     "toolUse": {
+#                         "toolUseId": tool_inv.tool_use_id,
+#                         "name":      tool_inv.tool_name,
+#                         "input":     tool_inv.tool_arguments,
+#                     }
+#                 }
+#                 for tool_inv in result.tool_invocations
+#             ]
+#             messages.append({"role": "assistant", "content": assistant_content})
 
-            # ── Execute each tool + build ONE user message with all results ────
-            tool_results_content = []
+#             # ── Execute each tool + build ONE user message with all results ────
+#             tool_results_content = []
 
-            for tool_inv in result.tool_invocations:
-                tool_result = self.registry.invoke(
-                    tool_inv.tool_name,
-                    tool_inv.tool_arguments,
-                )
+#             for tool_inv in result.tool_invocations:
+#                 tool_result = self.registry.invoke(
+#                     tool_inv.tool_name,
+#                     tool_inv.tool_arguments,
+#                 )
 
-                if on_tool_invoked:
-                    on_tool_invoked(tool_inv.tool_name,
-                                    tool_inv.tool_arguments,
-                                    tool_result)
+#                 if on_tool_invoked:
+#                     on_tool_invoked(tool_inv.tool_name,
+#                                     tool_inv.tool_arguments,
+#                                     tool_result)
 
-                tool_results_content.append({
-                    "toolResult": {
-                        "toolUseId": tool_inv.tool_use_id,
-                        "content":   [{"json": {"result": tool_result}}],
-                    }
-                })
+#                 tool_results_content.append({
+#                     "toolResult": {
+#                         "toolUseId": tool_inv.tool_use_id,
+#                         "content":   [{"json": {"result": tool_result}}],
+#                     }
+#                 })
 
-            messages.append({"role": "user", "content": tool_results_content})
-            # loop → model sees all tool results and continues
+#             messages.append({"role": "user", "content": tool_results_content})
+#             # loop → model sees all tool results and continues
 
-    # ── Private ───────────────────────────────────────────────────────────────
+#     # ── Private ───────────────────────────────────────────────────────────────
 
-    def _call_llm(
-        self,
-        messages:      list,
-        on_text_delta: Optional[Callable[[str], None]],
-    ) -> StreamResult:
-        """Single converse_stream call. Every LLM call goes through here."""
-        try:
-            kwargs = dict(
-                modelId=self.model_id,
-                messages=messages,
-                system=self.system_prompts,
-                toolConfig=self.registry.tool_config,
-                inferenceConfig=self.inference_config,
-            )
-            if self.additional_model_fields:
-                kwargs['additionalModelRequestFields'] = self.additional_model_fields
+#     def _call_llm(
+#         self,
+#         messages:      list,
+#         on_text_delta: Optional[Callable[[str], None]],
+#     ) -> StreamResult:
+#         """Single converse_stream call. Every LLM call goes through here."""
+#         try:
+#             kwargs = dict(
+#                 modelId=self.model_id,
+#                 messages=messages,
+#                 system=self.system_prompts,
+#                 toolConfig=self.registry.tool_config,
+#                 inferenceConfig=self.inference_config,
+#             )
+#             if self.additional_model_fields:
+#                 kwargs['additionalModelRequestFields'] = self.additional_model_fields
 
-            response = self.client.converse_stream(**kwargs)
-            return process_stream(response['stream'], on_text_delta)
+#             response = self.client.converse_stream(**kwargs)
+#             return process_stream(response['stream'], on_text_delta)
 
-        except ClientError as err:
-            msg = err.response["Error"]["Message"]
-            logger.error("ClientError in _call_llm: %s", msg)
-            r = StreamResult()
-            r.errors.append(msg)
-            return r
+#         except ClientError as err:
+#             msg = err.response["Error"]["Message"]
+#             logger.error("ClientError in _call_llm: %s", msg)
+#             r = StreamResult()
+#             r.errors.append(msg)
+#             return r
 
 
 ################################################################################
@@ -596,6 +593,9 @@ with st.sidebar:
     opt_system_msg  = st.text_area("System Message", OPT_SYSTEM_MSG_DEFAULT, key="system_msg")
     opt_show_metrics = st.checkbox("Show Invocation Metrics", value=False, key="show_metrics")
 
+    with st.expander("Tools"):
+        st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
+
 ################################################################################
 # SECTION: Streamlit Page Setup + Session State
 ################################################################################
@@ -603,82 +603,10 @@ with st.sidebar:
 with st.container(horizontal=True, vertical_alignment="center"):
     st.markdown("💬 Converse Tool")
     show_examples = st.toggle("Examples", value=False)
-st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
+#st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
 
 if show_examples:
-    st.info("""
-**💡 Example Questions to Try**
-
-**Year-over-Year Analysis**
-- Compare 2024 vs 2023 sales performance. What caused any underperformance?
-- Which months in 2024 were worse than 2023 and by how much?
-- Was the 2024 dip a volume problem or a margin problem?
-
-**Monthly Drill-Down**
-- Show me June 2024 sales breakdown by region and category
-- What was the best performing month in 2023?
-- How did Q4 2024 compare to Q4 2023?
-
-**Regional Analysis**
-- Which region performed better in 2024?
-- Which region recovered faster in Q3 2024?
-- Compare North vs South region for the full year 2024
-
-**General**
-- What is the total revenue for 2024?
-- Which category has better profit margins?
-
-**Product Catalog (NL-to-SQL)**
-- Show me all products under $100
-- Which products come in red?
-- What is the most expensive product in each category?
-- List all color options for the Laptop Pro
-- Which product has the highest rating?
-- How many color variants does each product have?
-- Show products launched in 2023 with rating above 4.5
-- Which color has the most stock across all products?
-
-**KPI Dashboard**
-- Give me a KPI summary comparing 2024 vs 2023
-- Show me the key metrics for 2024 sales performance
-- Display a KPI dashboard for Q4 2024 vs Q4 2023
-
-**Anomaly Detection**
-- Find anomalies in 2024 revenue
-- Which months had unusual sales in 2024?
-- Detect anomalies in 2024 returns — are returns spiking anywhere?
-- Find revenue anomalies in 2023 vs the yearly average
-
-**Forecast**
-- Forecast next 2 months revenue based on 2024 data
-- Show 2024 monthly sales with 3 month forecast as a line chart
-- Predict units sold for next 6 months using 2024 data
-- What is the revenue trend forecast for early 2025?
-
-** AWS Doc **
-"What is the maximum size of an S3 object?"
-"How does DynamoDB pricing work?"
-"What are the Lambda concurrency limits?"
-"How do I configure S3 lifecycle policies?"
-"What is Amazon Bedrock and what models does it support?"
-
-**EDA Profile**
-- Profile 2024 sales data
-- What does the 2024 sales dataset look like?
-- Give me a summary of 2023 sales
-            
-**EDA**
-- Profile 2024 sales data
-- What correlates with revenue in 2024 sales?
-- What drives gross profit in 2024?
-- Show correlation between units sold and returns
-            
-**EDA**
-- Compare 2024 revenue by region
-- Which region has the highest average revenue in 2024?
-- Compare units sold by category in 2023
-- Is there a significant difference in revenue between regions?
-            """)
+    st.info(CONVERSE_TOOL_GUIDE)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
