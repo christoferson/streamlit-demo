@@ -10,11 +10,12 @@ import pandas as pd
 
 from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
 from cmn.view import CONVERSE_TOOL_GUIDE
+from cmn.view.processor.file_uploader_chat import render_file_uploader
 
 from cmn.bedrock.converse import ConversationManager, StreamResult
 
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
-from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
+#from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 #from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 #from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 #from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
@@ -46,7 +47,8 @@ from cmn.tools.tool import PptxBedrockConverseTool
 from cmn.tools.tool import PdfBedrockConverseTool
 from cmn.tools.tool import (
     WikipediaBedrockConverseTool,
-    UrlContentBedrockConverseTool
+    UrlContentBedrockConverseTool,
+    AcronymBedrockConverseTool,
 )
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -61,6 +63,37 @@ logging.basicConfig(level=logging.INFO)
 
 from dataclasses import dataclass, field
 from typing import Any, Optional, Callable
+
+
+@dataclass
+class InvocationStat:
+    input_tokens:  int = 0
+    output_tokens: int = 0
+    total_tokens:  int = 0
+    latency_ms:    int = 0
+    llm_calls:     int = 0
+    tools_called:  list = field(default_factory=list)
+
+    def accumulate(self, result: StreamResult) -> None:
+        m = result.metrics
+        self.input_tokens  += m.input_tokens
+        self.output_tokens += m.output_tokens
+        self.total_tokens  += m.total_tokens
+        self.latency_ms    += m.latency_ms
+        self.llm_calls     += 1
+
+    def record_tool(self, tool_name: str) -> None:
+        self.tools_called.append(tool_name)
+
+    def as_markdown(self) -> str:
+        lines = [
+            f"🔢 in={self.input_tokens} out={self.output_tokens} "
+            f"total={self.total_tokens} latency={self.latency_ms}ms "
+            f"calls={self.llm_calls}"
+        ]
+        if self.tools_called:
+            lines.append(f"🔧 tools: {', '.join(f'`{n}`' for n in self.tools_called)}")
+        return "  \n".join(lines)
 
 # STOP_REASON_MESSAGES = {
 #     "max_tokens":           "Insufficient Tokens. Increase MaxToken Settings.",
@@ -600,6 +633,12 @@ if show_examples:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "invocation_stats" not in st.session_state:
+    st.session_state.invocation_stats = []
+
+if len(st.session_state.invocation_stats) != len(st.session_state.messages):
+    st.session_state.invocation_stats = [None] * len(st.session_state.messages)
+
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
@@ -610,7 +649,8 @@ st.markdown(f"{len(st.session_state.messages)}/{MAX_MESSAGES}")
 # SECTION: Render Message History
 ################################################################################
 
-for msg in st.session_state.messages:
+#for msg in st.session_state.messages:
+for idx, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         contents = msg["content"]
         text     = contents[0].get("text", "")
@@ -627,22 +667,34 @@ for msg in st.session_state.messages:
         else:
             st.markdown(text)
 
+        if opt_show_metrics and msg["role"] == "assistant":
+            stat = st.session_state.invocation_stats[idx]
+            if stat is not None:
+                st.caption(stat.as_markdown())
+
+        #else:
+        #    st.markdown(text)
+
 
 ################################################################################
 # SECTION: File Uploader Widget
 ################################################################################
 
-uploaded_file = st.file_uploader(
-    "Attach file",
-    type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
-    accept_multiple_files=False,
-    label_visibility="collapsed",
-    key=f"uploader_{st.session_state.uploader_key}",
-)
+# uploaded_file = st.file_uploader(
+#     "Attach file",
+#     type=["PNG", "JPEG", "TXT", "CSV", "PDF", "MD"],
+#     accept_multiple_files=False,
+#     label_visibility="collapsed",
+#     key=f"uploader_{st.session_state.uploader_key}",
+# )
 
-file_bytes, file_key, file_type, file_preview = process_uploaded_file(uploaded_file)
-if file_preview:
-    file_preview()
+# file_bytes, file_key, file_type, file_preview = process_uploaded_file(uploaded_file)
+# if file_preview:
+#     file_preview()
+
+uploaded_file, file_bytes, file_key, file_type, file_preview = render_file_uploader(
+    st.session_state.uploader_key
+)
 
 
 ################################################################################
@@ -666,12 +718,23 @@ if prompt:
 
     st.chat_message("user").write(prompt)
 
-    # ── UI state for streaming callbacks ──────────────────────────────────────
+    # ── Per-turn accumulators ─────────────────────────────────────────────────
+    # accumulated["text"] grows with every streamed chunk and tool annotation.
+    # turn_stat collects token/latency metrics across all LLM calls in this turn
+    # (there may be multiple calls when tools are used in a loop).
     accumulated = {"text": ""}
+    turn_stat   = InvocationStat()
 
     with st.chat_message("assistant"):
+        # result_area  — st.empty() single-slot placeholder.
+        #                Overwritten on every streamed text chunk so the user
+        #                sees the response grow in place.
         result_area      = st.empty()
-        result_container = st.container(border=True)
+        # result_container — st.container() that accumulates widgets.
+        #                    renderer_registry appends charts, tables and other
+        #                    rich tool visualisations here without overwriting
+        #                    previous content.
+        result_container = st.container(border=False)
 
         # ── Callbacks ─────────────────────────────────────────────────────────
 
@@ -680,8 +743,27 @@ if prompt:
             accumulated["text"] += chunk
             result_area.markdown(accumulated["text"])
 
+        # def on_stream_result(result: StreamResult):
+        #     """Fired after each complete LLM response."""
+        #     if result.stop_reason_display:
+        #         result_area.markdown(
+        #             f"{accumulated['text']}\n\n"
+        #             f":red[Generation Stopped: {result.stop_reason_display}]"
+        #         )
+        #     for err in result.errors:
+        #         st.error(err)
+        #     if opt_show_metrics:
+        #         m = result.metrics
+        #         result_container.write(
+        #             f"tokens in={m.input_tokens} out={m.output_tokens} "
+        #             f"total={m.total_tokens} latency={m.latency_ms}ms"
+        #         )
+
+        # ── Callback: fired once after each complete LLM response ─────────────
+        # Called multiple times when tool loops cause additional LLM calls.
+        # Accumulates metrics into turn_stat for later storage in session state.
         def on_stream_result(result: StreamResult):
-            """Fired after each complete LLM response."""
+            turn_stat.accumulate(result)
             if result.stop_reason_display:
                 result_area.markdown(
                     f"{accumulated['text']}\n\n"
@@ -689,14 +771,12 @@ if prompt:
                 )
             for err in result.errors:
                 st.error(err)
-            if opt_show_metrics:
-                m = result.metrics
-                result_container.write(
-                    f"tokens in={m.input_tokens} out={m.output_tokens} "
-                    f"total={m.total_tokens} latency={m.latency_ms}ms"
-                )
 
+        # ── Callback: fired after each tool is executed ───────────────────────
+        # Appends a tool annotation to the streamed text and delegates rich
+        # rendering (charts, tables etc.) to the renderer registry.
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
+            turn_stat.record_tool(tool_name)
             accumulated["text"] += (
                 f"\n\n:blue[🔧 **Tool:** `{tool_name}`]\n"
                 f"```json\n{json.dumps(tool_args, indent=2)}\n```\n"
@@ -724,18 +804,28 @@ if prompt:
                 on_tool_invoked=on_tool_invoked,
             )
 
+        # ── Show live metrics for this turn directly below the response ───────
+        # These are also stored in session state so they reappear on rerun.
+        if opt_show_metrics:
+            st.caption(turn_stat.as_markdown())
+
     # ── Persist to session state ──────────────────────────────────────────────
     assistant_message = {
         "role":    "assistant",
         "content": [{"text": accumulated["text"]}],
     }
     st.session_state.messages.append(user_message)
+    st.session_state.invocation_stats.append(None)
     st.session_state.messages.append(assistant_message)
+    st.session_state.invocation_stats.append(turn_stat)
 
     # Trim history to MAX_MESSAGES
     msgs = st.session_state.messages
+    stats = st.session_state.invocation_stats
     if len(msgs) > MAX_MESSAGES:
-        del msgs[0 : len(msgs) - MAX_MESSAGES]
+        excess = len(msgs) - MAX_MESSAGES
+        del msgs[0:excess]
+        del stats[0:excess]
 
     # Reset uploader after successful submission
     if uploaded_file:
