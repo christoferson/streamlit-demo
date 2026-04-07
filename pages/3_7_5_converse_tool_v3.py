@@ -19,7 +19,7 @@ from cmn.bedrock.converse import ConversationManager, StreamResult
 
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
-from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
+#from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 #from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 #from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
 from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
@@ -49,7 +49,8 @@ from cmn.tools.tool import CalculatorBedrockConverseTool
 from cmn.tools.tool import PptxBedrockConverseTool
 from cmn.tools.tool import PdfBedrockConverseTool
 from cmn.tools.tool import (
-    WikipediaBedrockConverseTool
+    WikipediaBedrockConverseTool,
+    UrlContentBedrockConverseTool
 )
 
 AWS_REGION = cmn_settings.AWS_REGION
