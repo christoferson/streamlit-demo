@@ -19,12 +19,22 @@ from cmn.bedrock.converse import ConversationManager, StreamResult
 #from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 #from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 #from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
-from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
-from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
-from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
-from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
-from cmn.bedrock_converse_tools_sales_anomaly import SalesAnomalyBedrockConverseTool
-from cmn.bedrock_converse_tools_sales_forecast import SalesForecastBedrockConverseTool
+#from cmn.bedrock_converse_tools_sales import SalesBedrockConverseTool
+#from cmn.bedrock_converse_tools_product import ProductBedrockConverseTool
+#from cmn.bedrock_converse_tools_chart import ChartBedrockConverseTool
+#from cmn.bedrock_converse_tools_sales_kpi import SalesKpiBedrockConverseTool
+#from cmn.bedrock_converse_tools_sales_anomaly import SalesAnomalyBedrockConverseTool
+#from cmn.bedrock_converse_tools_sales_forecast import SalesForecastBedrockConverseTool
+
+from cmn.tools.tool import (
+    WikipediaBedrockConverseTool,
+    UrlContentBedrockConverseTool,
+    AcronymBedrockConverseTool,
+    SalesBedrockConverseTool,
+    DateTimeBedrockConverseTool,
+    CalculatorBedrockConverseTool,
+    ChartBedrockConverseTool,
+)
 
 from cmn.tools.renderer import (
     RendererRegistry,
@@ -45,11 +55,7 @@ from cmn.tools.tool import EDAGroupBedrockConverseTool
 from cmn.tools.tool import CalculatorBedrockConverseTool
 from cmn.tools.tool import PptxBedrockConverseTool
 from cmn.tools.tool import PdfBedrockConverseTool
-from cmn.tools.tool import (
-    WikipediaBedrockConverseTool,
-    UrlContentBedrockConverseTool,
-    AcronymBedrockConverseTool,
-)
+
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
@@ -471,55 +477,55 @@ def build_user_message(
     return {"role": "user", "content": content}
 
 
-def process_uploaded_file(uploaded_file):
-    """
-    Read an uploaded Streamlit file and return
-    (bytes, file_key, file_type, preview_widget_fn).
+# def process_uploaded_file(uploaded_file):
+#     """
+#     Read an uploaded Streamlit file and return
+#     (bytes, file_key, file_type, preview_widget_fn).
 
-    preview_widget_fn is a zero-arg callable that renders a Streamlit preview,
-    or None if no preview is needed.
-    """
-    if uploaded_file is None:
-        return None, None, None, None
+#     preview_widget_fn is a zero-arg callable that renders a Streamlit preview,
+#     or None if no preview is needed.
+#     """
+#     if uploaded_file is None:
+#         return None, None, None, None
 
-    file_type = uploaded_file.type
-    file_key  = (uploaded_file.name
-                 .replace(".", "_")
-                 .replace(" ", "_"))
+#     file_type = uploaded_file.type
+#     file_key  = (uploaded_file.name
+#                  .replace(".", "_")
+#                  .replace(" ", "_"))
 
-    if file_type in mime_mapping_image:
-        raw   = uploaded_file.read()
-        image = Image.open(io.BytesIO(raw))
-        b64   = image_to_base64(image, mime_mapping_image[file_type].upper())
-        preview = lambda: st.image(image, caption="Uploaded image",
-                                   use_column_width=True)
-        return raw, file_key, file_type, preview
+#     if file_type in mime_mapping_image:
+#         raw   = uploaded_file.read()
+#         image = Image.open(io.BytesIO(raw))
+#         b64   = image_to_base64(image, mime_mapping_image[file_type].upper())
+#         preview = lambda: st.image(image, caption="Uploaded image",
+#                                    use_column_width=True)
+#         return raw, file_key, file_type, preview
 
-    if file_type in mime_mapping_document:
-        fmt = mime_mapping_document[file_type]
+#     if file_type in mime_mapping_document:
+#         fmt = mime_mapping_document[file_type]
 
-        if fmt == "csv":
-            raw = base64.b64encode(uploaded_file.read())
-            uploaded_file.seek(0)
-            try:
-                df = pd.read_csv(uploaded_file, encoding="utf-8")
-                preview = lambda: st.dataframe(df)
-            except Exception as e:
-                preview = lambda: st.warning(f"CSV preview failed: {e}")
-            return raw, file_key, file_type, preview
+#         if fmt == "csv":
+#             raw = base64.b64encode(uploaded_file.read())
+#             uploaded_file.seek(0)
+#             try:
+#                 df = pd.read_csv(uploaded_file, encoding="utf-8")
+#                 preview = lambda: st.dataframe(df)
+#             except Exception as e:
+#                 preview = lambda: st.warning(f"CSV preview failed: {e}")
+#             return raw, file_key, file_type, preview
 
-        if fmt == "pdf":
-            raw = uploaded_file.read()
-            preview = lambda: st.markdown(f"📄 **{uploaded_file.name}**")
-            return raw, file_key, file_type, preview
+#         if fmt == "pdf":
+#             raw = uploaded_file.read()
+#             preview = lambda: st.markdown(f"📄 **{uploaded_file.name}**")
+#             return raw, file_key, file_type, preview
 
-        if fmt in ("txt", "md"):
-            raw = base64.b64encode(uploaded_file.read())
-            preview = lambda: st.markdown(f"📝 **{uploaded_file.name}**")
-            return raw, file_key, file_type, preview
+#         if fmt in ("txt", "md"):
+#             raw = base64.b64encode(uploaded_file.read())
+#             preview = lambda: st.markdown(f"📝 **{uploaded_file.name}**")
+#             return raw, file_key, file_type, preview
 
-    st.warning(f"Unsupported file type: {file_type}")
-    return None, None, None, None
+#     st.warning(f"Unsupported file type: {file_type}")
+#     return None, None, None, None
 
 
 ################################################################################
@@ -540,18 +546,18 @@ def get_tool_registry():
         WikipediaBedrockConverseTool(),
         DateTimeBedrockConverseTool(),
         SalesBedrockConverseTool(),
-        ProductBedrockConverseTool(),
+        #ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
-        SalesKpiBedrockConverseTool(),
-        SalesAnomalyBedrockConverseTool(),
-        SalesForecastBedrockConverseTool(),
-        HolidayBedrockConverseTool(),
-        AwsDocsBedrockConverseTool(),
-        EDAProfileBedrockConverseTool(),
-        EDACorrelationBedrockConverseTool(),
-        EDAGroupBedrockConverseTool(),
-        PptxBedrockConverseTool(),
-        PdfBedrockConverseTool(),
+        # SalesKpiBedrockConverseTool(),
+        # SalesAnomalyBedrockConverseTool(),
+        # SalesForecastBedrockConverseTool(),
+        # HolidayBedrockConverseTool(),
+        # AwsDocsBedrockConverseTool(),
+        # EDAProfileBedrockConverseTool(),
+        # EDACorrelationBedrockConverseTool(),
+        # EDAGroupBedrockConverseTool(),
+        # PptxBedrockConverseTool(),
+        # PdfBedrockConverseTool(),
     ])
 
 
