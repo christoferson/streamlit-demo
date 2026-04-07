@@ -2,7 +2,7 @@ from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 import requests
 from bs4 import BeautifulSoup
 
-
+@DeprecationWarning
 class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
 
     def __init__(self):

@@ -3,14 +3,10 @@ import boto3
 import json
 import logging
 import cmn_settings
-import cmn_auth
-import os
 from PIL import Image
 import io
 import base64
 import pandas as pd
-import plotly.express as px
-from botocore.exceptions import BotoCoreError, ClientError
 
 from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
 from cmn.view import CONVERSE_TOOL_GUIDE
@@ -66,19 +62,11 @@ logging.basicConfig(level=logging.INFO)
 from dataclasses import dataclass, field
 from typing import Any, Optional, Callable
 
-STOP_REASON_MESSAGES = {
-    "max_tokens":           "Insufficient Tokens. Increase MaxToken Settings.",
-    "guardrail_intervened": "Response blocked by guardrail.",
-    "content_filtered":     "Content was filtered.",
-}
-
-_EXCEPTION_EVENTS = [
-    "internalServerException",
-    "modelStreamErrorException",
-    "throttlingException",
-    "validationException",
-    "serviceUnavailableException",
-]
+# STOP_REASON_MESSAGES = {
+#     "max_tokens":           "Insufficient Tokens. Increase MaxToken Settings.",
+#     "guardrail_intervened": "Response blocked by guardrail.",
+#     "content_filtered":     "Content was filtered.",
+# }
 
 # @dataclass
 # class ToolInvocation:
@@ -708,266 +696,6 @@ if prompt:
                     f"total={m.total_tokens} latency={m.latency_ms}ms"
                 )
 
-        ##
-        # def on_tool_invoked_render_chart(tool_args: dict, tool_result: Any):
-
-        #     data  = tool_args.get("data") or tool_result.get("data", [])
-        #     x     = tool_args["x_label"]
-        #     y     = tool_args["y_label"]
-        #     title = tool_args["title"]
-        #     ctype = tool_args["chart_type"]
-
-        #     if not data:
-        #         with result_container:
-        #             st.warning("Chart error: no data provided.")
-        #         return
-
-        #     df = pd.DataFrame(data)
-
-        #     if x not in df.columns:
-        #         with result_container:
-        #             st.warning(f"Chart error: x='{x}' not found. Got: {list(df.columns)}")
-        #         return
-
-        #     # ── Detect long format — has a series/type/category column ───────────
-        #     color_col = next(
-        #         (c for c in ["series", "type", "category"] if c in df.columns),
-        #         None
-        #     )
-
-        #     x_order = df[x].unique().tolist()   # preserve original order
-
-        #     with result_container:
-        #         st.markdown(f"**{title}**")
-
-        #         if color_col:
-        #             # ── Long format — color by series column ─────────────────────
-        #             if ctype == "bar":
-        #                 fig = px.bar(df, x=x, y=y, color=color_col, barmode="group")
-        #             elif ctype == "line":
-        #                 fig = px.line(df, x=x, y=y, color=color_col, markers=True)
-        #             else:
-        #                 fig = px.area(df, x=x, y=y, color=color_col)
-
-        #         else:
-        #             # ── Wide format — one column per series ───────────────────────
-        #             chart_df  = df.set_index(x)
-        #             y_columns = (
-        #                 [y] if y in chart_df.columns
-        #                 else chart_df.select_dtypes(include="number").columns.tolist()
-        #             )
-        #             plot_df = chart_df[y_columns].reset_index()
-
-        #             if ctype == "bar":
-        #                 fig = px.bar(plot_df, x=x, y=y_columns, barmode="group")
-        #             elif ctype == "line":
-        #                 fig = px.line(plot_df, x=x, y=y_columns, markers=True)
-        #             else:
-        #                 fig = px.area(plot_df, x=x, y=y_columns)
-
-        #         fig.update_xaxes(categoryorder="array", categoryarray=x_order)
-        #         st.plotly_chart(fig, width="content")
-        
-        # def on_tool_invoked_render_kpi(tool_args: dict, tool_result: Any):
-        #     """Renders KPI cards from tool_result."""
-
-        #     if tool_result.get("status") != "kpi_ready":
-        #         return
-
-        #     title   = tool_result.get("title", "")
-        #     metrics = tool_result.get("metrics", [])
-
-        #     if not metrics:
-        #         return
-
-        #     with result_container:
-        #         if title:
-        #             st.markdown(f"**{title}**")
-
-        #         # ── Render in rows of 4 ───────────────────────────────────────────
-        #         chunk_size = 4
-        #         for i in range(0, len(metrics), chunk_size):
-        #             row     = metrics[i : i + chunk_size]
-        #             columns = st.columns(len(row))
-
-        #             for col, metric in zip(columns, row):
-        #                 with col:
-        #                     st.metric(
-        #                         label       = metric.get("label", ""),
-        #                         value       = metric.get("value", ""),
-        #                         delta       = metric.get("delta"),           # None if not provided
-        #                         delta_color = metric.get("delta_color", "normal"),
-        #                     )
-
-        # def on_tool_invoked_render_anomaly(tool_args: dict, tool_result: Any):
-        #     """Renders anomaly detection results."""
-
-        #     anomalies = tool_result.get("anomalies", [])
-        #     normal    = tool_result.get("normal",    [])
-        #     metric    = tool_result.get("metric",    "revenue")
-        #     year      = tool_result.get("year",      "")
-        #     mean      = tool_result.get("mean",      0)
-
-        #     if "error" in tool_result:
-        #         with result_container:
-        #             st.warning(f"Anomaly detection: {tool_result['error']}")
-        #         return
-
-        #     with result_container:
-        #         st.markdown(f"**🔍 Anomaly Detection — {metric.title()} {year}**")
-        #         st.caption(f"Yearly mean: {mean:,.0f} | Threshold: ±{tool_result.get('threshold', 1.5)} std dev")
-
-        #         if not anomalies:
-        #             st.success("✅ No anomalies detected — all months within normal range.")
-        #             return
-
-        #         # ── Anomaly cards ─────────────────────────────────────────────────
-        #         cols = st.columns(len(anomalies)) if len(anomalies) <= 4 else st.columns(4)
-
-        #         for i, entry in enumerate(anomalies):
-        #             col = cols[i % 4] if len(anomalies) > 4 else cols[i]
-        #             with col:
-        #                 flag     = entry["flag"]
-        #                 severity = entry.get("severity", "")
-        #                 pct      = entry["pct_vs_mean"]
-        #                 icon     = "🔴" if flag == "below_normal" else "🟢"
-
-        #                 st.metric(
-        #                     label       = f"{icon} {entry['month_name']}",
-        #                     value       = f"{entry['value']:,.0f}",
-        #                     delta       = f"{pct:+.1f}% vs mean",
-        #                     delta_color = "normal" if flag == "above_normal" else "inverse",
-        #                 )
-        #                 st.caption(f"Z-score: {entry['zscore']} | {severity}")
-
-        #         # ── Normal months summary ─────────────────────────────────────────
-        #         if normal:
-        #             normal_names = ", ".join(n["month_name"] for n in normal)
-        #             st.caption(f"✅ Normal months: {normal_names}")
-
-        # def on_tool_invoked_render_forecast(tool_args: dict, tool_result: Any):
-
-        #     if "error" in tool_result:
-        #         with result_container:
-        #             st.warning(f"Forecast error: {tool_result['error']}")
-        #         return
-
-        #     actuals       = tool_result.get("actuals",  [])
-        #     forecast      = tool_result.get("forecast", [])
-        #     metric        = tool_result.get("metric",   "revenue")
-        #     train_year    = tool_result.get("train_year")
-        #     forecast_year = tool_result.get("forecast_year")
-        #     model_info    = tool_result.get("model",    {})
-        #     summary       = tool_result.get("summary",  {})
-
-        #     with result_container:
-        #         st.markdown(f"**📈 Sales Forecast — {metric.title()}**")
-
-        #         # ── Model metrics ─────────────────────────────────────────────────
-        #         col1, col2, col3 = st.columns(3)
-        #         col1.metric("Trend",      summary.get("trend", "").title())
-        #         col2.metric("Monthly Δ",  f"{model_info.get('slope', 0):+,.0f}")
-        #         col3.metric("Confidence", summary.get("confidence", "").title(),
-        #                     delta=f"R²={model_info.get('r2_score', 0)}")
-
-        #         # ── Build rows — use sequential order, unique labels ──────────────
-        #         rows = []
-
-        #         for row in actuals:
-        #             rows.append({
-        #                 "order":  row["month"],                          # 1-12
-        #                 "label":  f"{row['month_name']} {train_year}",  # "Jan 2023"
-        #                 "value":  row["actual"],
-        #                 "series": f"{train_year} Actual",
-        #             })
-
-        #         for i, row in enumerate(forecast):
-        #             rows.append({
-        #                 "order":  12 + (i + 1),                                      # 13, 14, 15
-        #                 "label":  f"{row['month_name']} {forecast_year}",            # "Jan 2024"
-        #                 "value":  row["forecasted_value"],
-        #                 "series": f"{forecast_year} Forecast",
-        #             })
-
-        #         plot_df = pd.DataFrame(rows).sort_values("order")
-
-        #         # ── Plotly — order locked via categoryarray ───────────────────────
-        #         st.markdown(f"**{train_year} Actuals vs {forecast_year} Forecast**")
-
-        #         fig = px.line(
-        #             plot_df,
-        #             x="label",
-        #             y="value",
-        #             color="series",
-        #             markers=True,
-        #             labels={
-        #                 "label":  "Month",
-        #                 "value":  metric.title(),
-        #                 "series": "",
-        #             },
-        #             color_discrete_map={
-        #                 f"{train_year} Actual":      "#4A90D9",
-        #                 f"{forecast_year} Forecast": "#FF6B6B",
-        #             },
-        #         )
-
-        #         fig.update_xaxes(
-        #             categoryorder="array",
-        #             categoryarray=plot_df["label"].tolist(),  # ← 15 unique labels in order
-        #         )
-
-        #         st.plotly_chart(fig, width="content")
-
-        #         # ── Forecast table ────────────────────────────────────────────────
-        #         st.markdown(f"**{forecast_year} Monthly Forecast**")
-        #         st.dataframe(
-        #             pd.DataFrame([
-        #                 {
-        #                     "Month":                f"{f['month_name']} {forecast_year}",
-        #                     f"Forecast ({metric})": f"{f['forecasted_value']:,.0f}",
-        #                 }
-        #                 for f in forecast
-        #             ]),
-        #             width="content",
-        #             hide_index=True,
-        #         )
-                
-        # def on_tool_invoked_render_part(tool_name: str, tool_args: dict, tool_result: Any):
-        #     """Tool-name based renderer."""
-
-        #     if tool_name == "product_query":
-        #         with result_container:
-        #             st.markdown(":blue[🗄️ **Generated SQL:**]")
-        #             st.code(
-        #                 tool_args["sql"],
-        #                 language="sql",
-        #                 wrap_lines=True,
-        #             )
-
-        #     elif tool_name == "render_chart":
-        #         on_tool_invoked_render_chart(tool_args, tool_result)
-
-        #     elif tool_name == "render_sales_kpi":
-        #         on_tool_invoked_render_kpi(tool_args, tool_result)
-        #     elif tool_name == "sales_anomaly_detector":
-        #         on_tool_invoked_render_anomaly(tool_args, tool_result)
-        #     elif tool_name == "sales_forecast":                         # ← add
-        #         on_tool_invoked_render_forecast(tool_args, tool_result)
-
-        ##
-        # def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
-        #     """Fired after each tool execution."""
-        #     accumulated["text"] += (
-        #         f"\n\n:blue[🔧 **Tool:** `{tool_name}`]\n"
-        #         f"```json\n{json.dumps(tool_args, indent=2)}\n```\n"
-        #         f"**Result:** `{tool_result}`\n\n"
-        #     )
-
-        #     result_area.markdown(accumulated["text"])
-
-        #     on_tool_invoked_render_part(tool_name, tool_args, tool_result)
-
-        # ── on_tool_invoked — now 3 lines ─────────────────────────────────────────────
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             accumulated["text"] += (
                 f"\n\n:blue[🔧 **Tool:** `{tool_name}`]\n"
@@ -977,7 +705,6 @@ if prompt:
             result_area.markdown(accumulated["text"])
             renderer_registry.render(tool_name, tool_args, tool_result, result_container)
 
-        # ── Run ───────────────────────────────────────────────────────────────
         manager = ConversationManager(
             bedrock_client=bedrock_client,
             tool_registry=tool_registry,
