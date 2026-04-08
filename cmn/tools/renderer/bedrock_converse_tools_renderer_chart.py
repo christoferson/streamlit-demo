@@ -31,9 +31,17 @@ class ChartToolRenderer(AbstractToolRenderer):
                 st.warning(f"Chart error: x='{x}' not found. Got: {list(df.columns)}")
             return
 
-        color_col = next(
-            (c for c in ["series", "type", "category"] if c in df.columns),
-            None
+        # ── Resolve color column ──────────────────────────────────────────────
+        # 1. explicit color_series from tool_args (model declared it)
+        # 2. explicit color_series from tool_result (echoed back by invoke)
+        # 3. fallback — detect known series column names in the data
+        color_col = (
+            tool_args.get("color_series")
+            or tool_result.get("color_series")
+            or next(
+                (c for c in ["series", "type", "category", "year"] if c in df.columns),
+                None,
+            )
         )
 
         x_order = df[x].unique().tolist()
@@ -41,14 +49,17 @@ class ChartToolRenderer(AbstractToolRenderer):
         with result_container:
             st.markdown(f"**{title}**")
 
-            if color_col:
+            if color_col and color_col in df.columns:
+                # ── Long format — one row per x+series combination ────────────
                 if ctype == "bar":
                     fig = px.bar(df, x=x, y=y, color=color_col, barmode="group")
                 elif ctype == "line":
                     fig = px.line(df, x=x, y=y, color=color_col, markers=True)
                 else:
                     fig = px.area(df, x=x, y=y, color=color_col)
+
             else:
+                # ── Wide format — one column per series ───────────────────────
                 chart_df  = df.set_index(x)
                 y_columns = (
                     [y] if y in chart_df.columns
