@@ -34,6 +34,9 @@ from cmn.tools.tool import (
     DateTimeBedrockConverseTool,
     CalculatorBedrockConverseTool,
     ChartBedrockConverseTool,
+    ProductBedrockConverseTool,
+    PdfBedrockConverseTool,
+    PptxBedrockConverseTool,
 )
 
 from cmn.tools.renderer import (
@@ -546,7 +549,7 @@ def get_tool_registry():
         WikipediaBedrockConverseTool(),
         DateTimeBedrockConverseTool(),
         SalesBedrockConverseTool(),
-        #ProductBedrockConverseTool(),
+        ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
         # SalesKpiBedrockConverseTool(),
         # SalesAnomalyBedrockConverseTool(),
@@ -556,8 +559,8 @@ def get_tool_registry():
         # EDAProfileBedrockConverseTool(),
         # EDACorrelationBedrockConverseTool(),
         # EDAGroupBedrockConverseTool(),
-        # PptxBedrockConverseTool(),
-        # PdfBedrockConverseTool(),
+        PptxBedrockConverseTool(),
+        PdfBedrockConverseTool(),
     ])
 
 
