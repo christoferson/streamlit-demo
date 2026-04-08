@@ -27,11 +27,14 @@ from cmn.bedrock.converse import ConversationManager, StreamResult
 #from cmn.bedrock_converse_tools_sales_forecast import SalesForecastBedrockConverseTool
 
 from cmn.tools.tool import (
+    AwsDocsBedrockConverseTool,
     WikipediaBedrockConverseTool,
     UrlContentBedrockConverseTool,
     AcronymBedrockConverseTool,
     SalesBedrockConverseTool,
     SalesKpiBedrockConverseTool,
+    SalesForecastBedrockConverseTool,
+    SalesAnomalyBedrockConverseTool,
     DateTimeBedrockConverseTool,
     CalculatorBedrockConverseTool,
     ChartBedrockConverseTool,
@@ -51,14 +54,14 @@ from cmn.tools.renderer import (
     PdfToolRenderer,
 )
 from cmn.tools.tool import ToolRegistry
-from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
-from cmn.tools.tool import AwsDocsBedrockConverseTool
+#from cmn.tools.tool import DateTimeBedrockConverseTool, HolidayBedrockConverseTool
+#from cmn.tools.tool import AwsDocsBedrockConverseTool
 from cmn.tools.tool import EDAProfileBedrockConverseTool
 from cmn.tools.tool import EDACorrelationBedrockConverseTool
 from cmn.tools.tool import EDAGroupBedrockConverseTool
-from cmn.tools.tool import CalculatorBedrockConverseTool
-from cmn.tools.tool import PptxBedrockConverseTool
-from cmn.tools.tool import PdfBedrockConverseTool
+#from cmn.tools.tool import CalculatorBedrockConverseTool
+#from cmn.tools.tool import PptxBedrockConverseTool
+#from cmn.tools.tool import PdfBedrockConverseTool
 
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -548,15 +551,15 @@ def get_tool_registry():
         AcronymBedrockConverseTool(),
         UrlContentBedrockConverseTool(),
         WikipediaBedrockConverseTool(),
+        AwsDocsBedrockConverseTool(),
         DateTimeBedrockConverseTool(),
         SalesBedrockConverseTool(),
         ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
         SalesKpiBedrockConverseTool(),
-        # SalesAnomalyBedrockConverseTool(),
-        # SalesForecastBedrockConverseTool(),
+        SalesForecastBedrockConverseTool(),
+        SalesAnomalyBedrockConverseTool(),
         # HolidayBedrockConverseTool(),
-        # AwsDocsBedrockConverseTool(),
         # EDAProfileBedrockConverseTool(),
         # EDACorrelationBedrockConverseTool(),
         # EDAGroupBedrockConverseTool(),

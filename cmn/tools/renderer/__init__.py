@@ -4,8 +4,9 @@ from cmn.tools.renderer.bedrock_converse_tools_renderer_product        import Pr
 from cmn.tools.renderer.bedrock_converse_tools_renderer_sales_kpi      import SalesKpiToolRenderer
 from cmn.tools.renderer.bedrock_converse_tools_renderer_sales_anomaly  import SalesAnomalyToolRenderer
 from cmn.tools.renderer.bedrock_converse_tools_renderer_sales_forecast import SalesForecastToolRenderer
-from cmn.tools.renderer.bedrock_converse_tools_renderer_pptx    import PptxToolRenderer
-from cmn.tools.renderer.bedrock_converse_tools_renderer_pdf     import PdfToolRenderer  # ← NEW
+from cmn.tools.renderer.bedrock_converse_tools_renderer_pptx            import PptxToolRenderer
+from cmn.tools.renderer.bedrock_converse_tools_renderer_pdf             import PdfToolRenderer
+from cmn.tools.renderer.bedrock_converse_tools_renderer_sales_kpi       import SalesKpiToolRenderer
 
 __all__ = [
     "AbstractToolRenderer",
@@ -15,6 +16,7 @@ __all__ = [
     "SalesKpiToolRenderer",
     "SalesAnomalyToolRenderer",
     "SalesForecastToolRenderer",
-    "PptxToolRenderer",                                                        # ← NEW
+    "PptxToolRenderer", 
     "PdfToolRenderer", 
+    "SalesKpiToolRenderer",
 ]
