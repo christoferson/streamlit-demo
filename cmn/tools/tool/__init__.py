@@ -23,7 +23,7 @@ from cmn.tools.tool.bedrock_converse_tools_tool_sales_kpi      import SalesKpiBe
 from cmn.tools.tool.bedrock_converse_tools_tool_sales_forecast       import SalesForecastBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_sales_anomaly        import SalesAnomalyBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_url            import UrlContentBedrockConverseTool
-from cmn.tools.tool.bedrock_converse_tools_tool_wikipedia      import WikipediaBedrockConverseTool
+from cmn.tools.tool.bedrock_converse_tools_tool_wikipedia   import WikipediaBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_chart           import ChartBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_product         import ProductBedrockConverseTool
 
