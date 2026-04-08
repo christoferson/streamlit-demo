@@ -31,6 +31,7 @@ from cmn.tools.tool import (
     UrlContentBedrockConverseTool,
     AcronymBedrockConverseTool,
     SalesBedrockConverseTool,
+    SalesKpiBedrockConverseTool,
     DateTimeBedrockConverseTool,
     CalculatorBedrockConverseTool,
     ChartBedrockConverseTool,
@@ -442,10 +443,10 @@ renderer_registry = get_renderer_registry()
 # }
 
 
-def image_to_base64(image: Image.Image, fmt: str) -> str:
-    buf = io.BytesIO()
-    image.save(buf, format=fmt)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+# def image_to_base64(image: Image.Image, fmt: str) -> str:
+#     buf = io.BytesIO()
+#     image.save(buf, format=fmt)
+#     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
 def build_user_message(
@@ -551,7 +552,7 @@ def get_tool_registry():
         SalesBedrockConverseTool(),
         ProductBedrockConverseTool(),
         ChartBedrockConverseTool(),
-        # SalesKpiBedrockConverseTool(),
+        SalesKpiBedrockConverseTool(),
         # SalesAnomalyBedrockConverseTool(),
         # SalesForecastBedrockConverseTool(),
         # HolidayBedrockConverseTool(),
