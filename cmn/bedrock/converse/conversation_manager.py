@@ -173,7 +173,16 @@ class ConversationManager:
                 kwargs['additionalModelRequestFields'] = self.additional_model_fields
 
             response = self.client.converse_stream(**kwargs)
-            return process_stream(response['stream'], on_text_delta)
+            stream = response['stream']
+            try:
+                return process_stream(stream, on_text_delta)
+            finally:
+                # Ensure stream is fully consumed and closed
+                if hasattr(stream, 'close'):
+                    try:
+                        stream.close()
+                    except Exception as close_err:
+                        logger.warning("Error closing stream: %s", close_err)
 
         except ClientError as err:
             msg = err.response["Error"]["Message"]

@@ -13,6 +13,7 @@ from cmn.view import CONVERSE_TOOL_GUIDE
 from cmn.view.processor.file_uploader_chat import render_file_uploader
 
 from cmn.bedrock.converse import ConversationManager, StreamResult
+from cmn.bedrock.client_manager import BedrockClientFactory
 
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 #from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
@@ -541,7 +542,7 @@ def build_user_message(
 
 @st.cache_resource
 def get_bedrock_client():
-    return boto3.client('bedrock-runtime', region_name=AWS_REGION)
+    return BedrockClientFactory.bedrock_runtime(region=AWS_REGION)
 
 
 @st.cache_resource
@@ -586,6 +587,7 @@ opt_model_id_list = [
     "meta.llama3-8b-instruct-v1:0",
     "meta.llama3-70b-instruct-v1:0",
     "mistral.mistral-large-2402-v1:0",
+    "moonshotai.kimi-k2.5",
 ]
 
 # OPT_SYSTEM_MSG_DEFAULT = """You are a BI analyst assistant with access to sales data tools.
