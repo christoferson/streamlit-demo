@@ -1,5 +1,6 @@
 from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 
+@DeprecationWarning
 class AcronymBedrockConverseTool(AbstractBedrockConverseTool):
 
  
@@ -28,6 +29,9 @@ class AcronymBedrockConverseTool(AbstractBedrockConverseTool):
                 }
             }
         super().__init__(name, definition)
+
+    def summary(self) -> str:
+        return "acronym : use to look up acronym definitions"
 
     def invoke(self, params, tool_args=None):
         if params == "AUP":

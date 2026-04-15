@@ -49,9 +49,16 @@ class ChartBedrockConverseTool(AbstractBedrockConverseTool):
                                 ),
                                 "items": {"type": "object"},
                             },
-                            "color": {
+                            "color_series": {                          # ← replaces "color"
                                 "type": "string",
-                                "description": "Optional hex color. Example: #4A90D9",
+                                "description": (
+                                    "Column name to use for color grouping and legend. "
+                                    "Required when data contains multiple series. "
+                                    "The column must exist in the data array. "
+                                    "Example: if data has a 'year' column with values "
+                                    "'2023' and '2024', set color_series='year' to get "
+                                    "one colored line/bar per year with a legend."
+                                ),
                             },
                         },
                         "required": ["chart_type", "title", "x_label", "y_label", "data"],
@@ -66,14 +73,16 @@ class ChartBedrockConverseTool(AbstractBedrockConverseTool):
             "render_chart : renders a visual chart or graph. "
             "Use when user asks for a chart, plot, bar chart, line chart or visualization. "
             "x_label and y_label must exactly match column names from the data. "
+            "Set color_series to the column name that identifies different series "
+            "(e.g. 'year', 'region', 'category') to get separate colored lines and a legend. "
             "When charting forecast results, always include historical actuals AND "
             "forecast values together in the data array — never forecast only."
         )
-    
+
     def invoke(self, params, tool_args: dict = None) -> dict:
         """
         Just validates and returns the payload.
-        Actual rendering happens in on_tool_invoked in the UI layer.
+        Actual rendering happens in the UI layer.
         """
         args = tool_args or {}
 
@@ -81,19 +90,19 @@ class ChartBedrockConverseTool(AbstractBedrockConverseTool):
             return {"error": "No data provided to chart"}
 
         logger.info(
-            "ChartTool — type=%s title=%s rows=%d",
+            "ChartTool — type=%s title=%s rows=%d color_series=%s",
             args.get("chart_type"),
             args.get("title"),
             len(args.get("data", [])),
+            args.get("color_series"),
         )
 
-        # Return as-is — UI layer will render it
         return {
-            "status":     "chart_ready",
-            "chart_type": args.get("chart_type"),
-            "title":      args.get("title"),
-            "x_label":    args.get("x_label"),
-            "y_label":    args.get("y_label"),
-            "data":       args.get("data"),
-            "color":      args.get("color"),
+            "status":       "chart_ready",
+            "chart_type":   args.get("chart_type"),
+            "title":        args.get("title"),
+            "x_label":      args.get("x_label"),
+            "y_label":      args.get("y_label"),
+            "data":         args.get("data"),
+            "color_series": args.get("color_series"),   # ← replaces "color"
         }
