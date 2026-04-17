@@ -19,7 +19,7 @@ import base64
 import uuid
 import pandas as pd
 from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
-from cmn.bedrock_converse_tools_2 import AcronymBedrockConverseTool
+from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 
 from botocore.exceptions import BotoCoreError, ClientError
 
