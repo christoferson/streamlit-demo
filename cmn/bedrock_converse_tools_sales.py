@@ -125,7 +125,7 @@ def _df_to_tool_result(df: pd.DataFrame) -> dict:
 
 
 # ── 3. Tool Class ─────────────────────────────────────────────────────────────
-
+@DeprecationWarning
 class SalesBedrockConverseTool(AbstractBedrockConverseTool):
     """
     Provides two query modes:
