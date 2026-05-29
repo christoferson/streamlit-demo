@@ -237,6 +237,8 @@ opt_model_id_list = [
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     "global.anthropic.claude-opus-4-6-v1",
+    "global.anthropic.claude-opus-4-7",
+    "global.anthropic.claude-opus-4-8",
 
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -314,11 +316,15 @@ with st.sidebar:
 opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
 
 opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
+opt_fm_temperature = opt_fm.InferenceParameter.get("Temperature")
 opt_fm_top_p = opt_fm.InferenceParameter.get("TopP")
 opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
 
 with st.sidebar:
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+    if opt_fm_temperature.isSupported():
+        opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+    else:
+        opt_temperature = 0.0
     if opt_fm_top_p.isSupported():
         opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     else:
@@ -582,11 +588,14 @@ if prompt:
     system_prompts = [{"text" : opt_system_msg}]
     
     inference_config = {
-        "temperature": opt_temperature,
+        #"temperature": opt_temperature,
         "maxTokens": opt_max_tokens,
         #"topP": opt_top_p,
         #stopSequences 
     }
+
+    if opt_fm_temperature.isSupported():
+        inference_config["temperature"] = opt_temperature
 
     if opt_fm_top_p.isSupported():
         inference_config["topP"] = opt_top_p
