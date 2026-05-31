@@ -1,3 +1,129 @@
+"""
+Converse Tool - Version 3.7.5 (Production)
+=========================================
+
+OVERVIEW
+--------
+Production-ready implementation of AWS Bedrock Converse API with comprehensive multi-tool
+support, rich rendering, and clean architectural separation. This version addresses all
+limitations of the v3.7.4 prototype through modular design and proper separation of concerns.
+
+STATUS: PRODUCTION READY
+This is the recommended version for all new development and production deployments.
+
+ARCHITECTURE
+-----------
+Layered architecture with clear separation between presentation, business logic, and rendering
+layers. The core conversation orchestration logic lives in reusable, UI-agnostic modules that
+can be independently tested and used in different contexts (CLI, API, web UI). The Streamlit
+application acts purely as a presentation layer, delegating all business logic to specialized
+components through well-defined callback interfaces.
+
+Core Components:
+- ConversationManager: Orchestrates multi-turn conversations and automatic tool loops without
+  any Streamlit dependencies, communicating with the UI layer through callbacks
+- StreamProcessor: Parses AWS Bedrock event streams into structured data models, handling all
+  message types including text deltas, tool calls, metrics, and errors
+- ToolRegistry: Centralized registry pattern for tool management with automatic tool config
+  generation and dynamic system prompt building
+- RendererRegistry: Extensible system for rich visualization of tool results including charts,
+  tables, documents, and custom renderers
+- InvocationStat: Accumulates metrics across all LLM calls and tool executions within a single
+  conversation turn for complete cost visibility
+
+KEY FEATURES
+-----------
+Multi-tool loop support with automatic handling of iterative tool chains where the model can
+call multiple tools in sequence, receive all results, and continue reasoning until the task
+is complete. For example, fetching sales data, calculating KPIs, detecting anomalies, and
+generating a chart all happens automatically in one conversation turn without manual intervention.
+
+Cumulative metrics tracking provides complete visibility into the cost and performance of each
+conversation turn by accumulating token counts, latency measurements, and tool usage across all
+LLM calls in the turn, not just the final call. This includes tracking which tools were invoked
+in what order for audit and debugging purposes.
+
+Rich rendering system allows each tool to define custom visualization logic separate from its
+business logic. Chart tools render interactive Plotly visualizations, sales tools display
+formatted KPI cards, document generation tools provide download links, all through an extensible
+renderer pattern that keeps tool code focused on data generation.
+
+Dynamic system prompt generation automatically builds comprehensive tool documentation from the
+ToolRegistry, ensuring the model always has accurate, up-to-date information about available
+tools without manual maintenance. Adding a new tool automatically updates the system prompt.
+
+Structured error handling separates error detection from error display through the StreamResult
+data structure, allowing errors to be collected during stream processing and displayed
+appropriately in the UI layer without mixing concerns.
+
+TOOL ECOSYSTEM
+-------------
+Comprehensive tool library covering data analysis, information retrieval, and document generation.
+Data tools include sales_data for database queries, sales_kpi for metrics calculation,
+sales_forecast for predictive analytics, sales_anomaly for outlier detection, product for
+catalog searches, and chart for visualization generation. Information retrieval tools provide
+calculator for math, datetime for temporal operations, acronym for abbreviation expansion,
+wikipedia for encyclopedia searches, aws_docs for AWS documentation, and url_content for web
+scraping. Document generation tools support pdf and pptx formats with customizable templates.
+
+All tools follow a consistent interface pattern and are managed through the ToolRegistry which
+handles invocation, configuration, and documentation generation. Tools are designed to return
+structured data that can be rendered by matching renderers in the RendererRegistry.
+
+CALLBACK PATTERN
+---------------
+The ConversationManager communicates with the UI through three callback functions. The
+on_text_delta callback fires for every streamed text chunk, allowing real-time display of the
+model's response as it generates. The on_stream_result callback fires after each complete LLM
+response, providing access to the full StreamResult with metrics and errors. The on_tool_invoked
+callback fires after each tool execution, passing the tool name, arguments, and result for
+display and rendering. This callback pattern keeps the core business logic completely UI-agnostic
+while still enabling responsive, interactive user experiences.
+
+SESSION STATE
+------------
+Maintains two parallel arrays in Streamlit session state: messages stores the conversation
+history in Bedrock message format, while invocation_stats stores corresponding InvocationStat
+objects for metrics display. User messages have None in the stats array, assistant messages
+have InvocationStat objects containing accumulated metrics from that turn. The arrays are
+kept synchronized and trimmed together when history exceeds MAX_MESSAGES.
+
+FILE ORGANIZATION
+----------------
+This file contains only the Streamlit UI layer and callback definitions at approximately 870
+lines. Core business logic lives in separate modules: ConversationManager and StreamProcessor
+in cmn/bedrock/converse/, ToolRegistry and tool implementations in cmn/tools/tool/,
+RendererRegistry and renderers in cmn/tools/renderer/. This organization enables unit testing
+of business logic without Streamlit runtime and reuse of core components in different contexts.
+
+ADDING NEW TOOLS
+---------------
+Create a new tool class inheriting from BedrockConverseTool in cmn/tools/tool/, export it from
+the __init__.py file, and add one line to get_tool_registry() in this file. The tool is
+automatically registered, included in the Bedrock tool configuration, and documented in the
+system prompt. No other changes needed. Optionally create a matching renderer class in
+cmn/tools/renderer/ for custom visualization.
+
+PERFORMANCE
+----------
+Uses Streamlit resource caching for expensive objects including the Bedrock client, ToolRegistry,
+and RendererRegistry to ensure single-instance reuse across reruns. Message history is
+automatically trimmed to MAX_MESSAGES to prevent unbounded memory growth. File uploader key
+increments after successful submission to clear the uploader and prevent accidental re-uploads.
+
+DOCUMENTATION
+------------
+See design/converse-design.md for comprehensive architectural documentation including detailed
+comparison with v3.7.4, component descriptions with code examples, data structure definitions,
+message format specifications, tool loop flow diagrams, testing strategies, migration guides,
+best practices, and troubleshooting information.
+
+See CLAUDE.md in project root for project structure, development guidelines, and quick reference.
+
+Version: 3.7.5
+Last Updated: 2026-05-31
+"""
+
 import streamlit as st
 import boto3
 import json
@@ -668,7 +794,11 @@ st.markdown(f"{len(st.session_state.messages)}/{MAX_MESSAGES}")
 for idx, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         contents = msg["content"]
-        text     = contents[0].get("text", "")
+        # Handle both dict and string formats
+        if isinstance(contents[0], dict):
+            text = contents[0].get("text", "")
+        else:
+            text = str(contents[0]) if contents else ""
 
         if msg["role"] == "user" and len(contents) > 1:
             extra = contents[1]
@@ -713,10 +843,25 @@ uploaded_file, file_bytes, file_key, file_type, file_preview = render_file_uploa
 
 
 ################################################################################
-# SECTION: Chat Input + Conversation Execution
+# SECTION: Bottom Actions (Clear Button) + Chat Input
 ################################################################################
 
-prompt = st.chat_input()
+def on_button_clear_clicked():
+    st.session_state.messages = []
+    st.session_state.invocation_stats = []
+    st.rerun()
+
+with st.bottom:
+    with st.container(horizontal=True, width="stretch", horizontal_alignment="right", vertical_alignment="center", border=False, height="content", gap="xxsmall", autoscroll=False):
+        if st.button(":material/delete_history:", type="tertiary", help="Clear Conversation"):
+            on_button_clear_clicked()
+        st.space(size="small")
+    prompt = st.chat_input()
+
+
+################################################################################
+# SECTION: Conversation Execution
+################################################################################
 
 if prompt:
     # ── Build user message ────────────────────────────────────────────────────
@@ -731,7 +876,7 @@ if prompt:
     message_history = st.session_state.messages.copy()
     message_history.append(user_message)
 
-    st.chat_message("user").write(prompt)
+    st.chat_message("user").markdown(prompt)
 
     # ── Per-turn accumulators ─────────────────────────────────────────────────
     # accumulated["text"] grows with every streamed chunk and tool annotation.

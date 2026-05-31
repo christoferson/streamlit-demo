@@ -1,3 +1,67 @@
+"""
+Converse Tool Demo - Version 3.7.4 (Prototype)
+==============================================
+
+OVERVIEW
+--------
+This is a prototype implementation of AWS Bedrock Converse API with tool use capabilities.
+It demonstrates the basic conversational AI flow with single tool execution support.
+
+STATUS: PROTOTYPE / REFERENCE ONLY
+For production use, see version 3.7.5 (3_7_5_converse_tool_v3.py).
+
+ARCHITECTURE
+-----------
+Monolithic design with all logic inline in a single file. Stream parsing, tool invocation,
+and UI rendering are tightly coupled within the same code blocks. This approach works for
+simple prototypes and learning but becomes difficult to maintain and test as complexity grows.
+
+KEY CHARACTERISTICS
+------------------
+- Single tool call per turn: Handles only one tool invocation followed by one LLM follow-up call
+- Inline stream parsing: AWS Bedrock event stream parsing logic embedded directly in UI code
+- Manual tool matching: Iterates through tool list to find matching tool by name
+- Simple metrics: Displays token counts per LLM call without accumulation across turns
+- Static system prompt: Tool descriptions must be manually maintained
+- No rich rendering: Tool results displayed as JSON dumps only
+- Tightly coupled: Business logic mixed with Streamlit UI code, cannot be tested independently
+
+LIMITATIONS
+-----------
+Cannot handle multi-step tool chains where the model needs to call multiple tools in sequence
+or loop back for additional tool calls based on previous results. For example, if the model
+needs to fetch data, perform a calculation, and then create a chart, it can only execute the
+first tool and must stop. Complex workflows requiring iterative tool use are not supported.
+
+TOOL SUPPORT
+-----------
+Includes five basic tools: calculator for mathematical operations, acronym for expanding
+abbreviations, url_content for fetching web page content, wikipedia for searching Wikipedia,
+and datetime for current date/time information. Tools are instantiated as global objects
+and collected in a hardcoded list.
+
+FILE STRUCTURE
+-------------
+All functionality exists in this single file with approximately 481 lines. Stream parsing
+happens inline within the prompt handling block. Tool invocation logic is embedded directly
+after stream processing. Error handling is scattered throughout with display logic mixed in.
+
+WHEN TO USE
+-----------
+Use this version for learning how Bedrock Converse API works, creating quick prototypes,
+or demonstrating basic tool use concepts. For any production deployment or complex multi-tool
+scenarios, migrate to version 3.7.5 which provides proper separation of concerns, full
+multi-tool loop support, and extensive rich rendering capabilities.
+
+DOCUMENTATION
+------------
+See design/converse-design.md for detailed architectural comparison with v3.7.5, including
+code examples, flow diagrams, and migration guidance.
+
+Version: 3.7.4
+Last Updated: 2026-05-31
+"""
+
 import streamlit as st
 import boto3
 import cmn_settings
