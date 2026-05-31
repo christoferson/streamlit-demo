@@ -61,6 +61,9 @@ st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 
+# Create main layout with right sidebar
+main_col, right_sidebar_col = st.columns([3, 1])
+
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
     image.save(buffer, format=mime_type)
@@ -206,6 +209,21 @@ def delete_message_pair(index):
         del st.session_state.menu_converse_messages[index:index+2]
     if f"feedback_{index+1}" in st.session_state.menu_converse_messages_feedback:
         del st.session_state.menu_converse_messages_feedback[f"feedback_{index+1}"]
+
+def get_download_data():
+    """Get conversation download data, returns None if no data"""
+    if not st.session_state.menu_converse_messages:
+        return None
+    try:
+        return get_conversation_download()
+    except Exception as e:
+        st.error(f"Error preparing conversation: {str(e)}")
+        return None
+
+def on_button_clear_clicked():
+    """Handle clear conversation button click"""
+    clear_conversation()
+    st.rerun()
 
 mime_mapping = {
     "image/png": "png",
@@ -353,441 +371,482 @@ with st.sidebar:
 
 #st.markdown("#### 💬 :blue[Converse 3-5-12]")
 
-header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
-header_flex.markdown("#### 💬 :blue[Converse 3-5-12]")
-header_flex.space("stretch")
-show_guide = header_flex.toggle(":violet[**Guide**]", value=False, key="show_guide_toggle")
+with main_col:
+    header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
+    header_flex.markdown("#### 💬 :blue[Converse 3-5-12]")
+    header_flex.space("stretch")
+    show_guide = header_flex.toggle(":violet[**Guide**]", value=False, key="show_guide_toggle")
 
-if show_guide:
-    with st.container(border=True):
+    if show_guide:
+        with st.container(border=True):
 
-        # Guide header with language toggle
-        guide_header = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="center", border=False)
-        guide_header.markdown("##### 📖 :blue[User Guide]")
-        guide_header.space("stretch")
-        lang_english = guide_header.toggle(":gray[**EN | 日本語**]", value=True, key="guide_lang_toggle")
+            # Guide header with language toggle
+            guide_header = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="center", border=False)
+            guide_header.markdown("##### 📖 :blue[User Guide]")
+            guide_header.space("stretch")
+            lang_english = guide_header.toggle(":gray[**EN | 日本語**]", value=True, key="guide_lang_toggle")
 
-        if lang_english:
-            st.markdown("""
-            **Getting Started**
+            if lang_english:
+                st.markdown("""
+                **Getting Started**
 
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
-            **Uploading Files**
+                **Uploading Files**
 
-            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
-            Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+                Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-            **Managing Conversations**
+                **Managing Conversations**
 
-            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, 
-            totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium,
+                totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
 
-            **Model Settings**
+                **Model Settings**
 
-            Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos 
-            qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
+                Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos
+                qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.
 
-            **Tips & Tricks**
+                **Tips & Tricks**
 
-            - 💡 Lorem ipsum dolor sit amet, consectetur adipiscing elit
-            - 💡 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua
-            - 💡 Ut enim ad minim veniam, quis nostrud exercitation ullamco
-            - 💡 Duis aute irure dolor in reprehenderit in voluptate velit
-            - 💡 Excepteur sint occaecat cupidatat non proident deserunt
-            """)
-        else:
-            st.markdown("""
-            **はじめに**
-
-            AIアシスタントとの会話を開始できます。適切なモデルを選択し、
-            パラメータを調整することで最適な結果を得ることができます。
-            様々な主要な大規模言語モデルに対応しており、幅広いシナリオに対応しています。
-
-            **ファイルのアップロード**
-
-            画像（PNG、JPG、JPEG）およびドキュメント（TXT、CSV、PDF、MD）のアップロードに対応しています。
-            ファイルサイズは5MB以内、画像サイズは8000×8000ピクセル以内に制限されています。
-
-            **会話の管理**
-
-            会話履歴はJSONファイルとしてダウンロード保存でき、後から再アップロードして復元できます。
-            システムは最大160件の直近メッセージを保持します。
-
-            **モデル設定**
-
-            サイドバーで温度、Top P、Top K、最大トークン数などのパラメータを調整できます。
-            モデルによってサポートされるパラメータの範囲が異なりますので、用途に応じて調整してください。
-
-            **使い方のヒント**
-
-            - 💡 タスクに適したモデルをサイドバーから選択してください
-            - 💡 温度を下げることでより安定した出力結果が得られます
-            - 💡 ドキュメントをアップロードしてその内容について直接質問できます
-            - 💡 後で参照できるよう定期的に会話履歴をダウンロードしてください
-            - 💡 クリアボタンを使用して新しい会話を開始できます
-            """)
-
-#:markdown/forum:
-st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-
-idx = 1
-for msg in st.session_state.menu_converse_messages:
-    idx = idx + 1
-    contents = msg["content"]
-    with st.chat_message(msg["role"]):
-        content = contents[0]
-        content_text = content["text"]
-        document_name = None
-        if "user" == msg["role"]:
-            if len(contents) > 1:
-                content_1 = contents[1]
-                if "document" in content_1:
-                    content_1_document = content_1["document"]
-                    document_name = content_1_document["name"]
-            if document_name:
-                st.write(f"{content_text} \n\n:green[Document: {document_name}]")
+                - 💡 Lorem ipsum dolor sit amet, consectetur adipiscing elit
+                - 💡 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua
+                - 💡 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+                - 💡 Duis aute irure dolor in reprehenderit in voluptate velit
+                - 💡 Excepteur sint occaecat cupidatat non proident deserunt
+                """)
             else:
-                st.write(f"{content_text}")
-            
-            del_idx = idx - 2
-            if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
-                delete_message_pair(del_idx)
-                st.rerun()
+                st.markdown("""
+                **はじめに**
 
-        if "assistant" == msg["role"]:
-            #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
-            #with assistant_cmd_panel_col2:
-            #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
-            st.markdown(f"{content_text}")
+                AIアシスタントとの会話を開始できます。適切なモデルを選択し、
+                パラメータを調整することで最適な結果を得ることができます。
+                様々な主要な大規模言語モデルに対応しており、幅広いシナリオに対応しています。
 
-            # Add feedback mechanism using st.feedback
-            feedback_key = f"feedback_{idx}"
-            feedback = st.feedback(
-                options="stars",
-                key=feedback_key,
-                on_change=lambda: st.session_state.menu_converse_messages_feedback.update({idx: st.session_state[feedback_key]})
+                **ファイルのアップロード**
+
+                画像（PNG、JPG、JPEG）およびドキュメント（TXT、CSV、PDF、MD）のアップロードに対応しています。
+                ファイルサイズは5MB以内、画像サイズは8000×8000ピクセル以内に制限されています。
+
+                **会話の管理**
+
+                会話履歴はJSONファイルとしてダウンロード保存でき、後から再アップロードして復元できます。
+                システムは最大160件の直近メッセージを保持します。
+
+                **モデル設定**
+
+                サイドバーで温度、Top P、Top K、最大トークン数などのパラメータを調整できます。
+                モデルによってサポートされるパラメータの範囲が異なりますので、用途に応じて調整してください。
+
+                **使い方のヒント**
+
+                - 💡 タスクに適したモデルをサイドバーから選択してください
+                - 💡 温度を下げることでより安定した出力結果が得られます
+                - 💡 ドキュメントをアップロードしてその内容について直接質問できます
+                - 💡 後で参照できるよう定期的に会話履歴をダウンロードしてください
+                - 💡 クリアボタンを使用して新しい会話を開始できます
+                """)
+
+    #:markdown/forum:
+    st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+
+    idx = 1
+    for msg in st.session_state.menu_converse_messages:
+        idx = idx + 1
+        contents = msg["content"]
+        with st.chat_message(msg["role"]):
+            content = contents[0]
+            content_text = content["text"]
+            document_name = None
+            if "user" == msg["role"]:
+                if len(contents) > 1:
+                    content_1 = contents[1]
+                    if "document" in content_1:
+                        content_1_document = content_1["document"]
+                        document_name = content_1_document["name"]
+                if document_name:
+                    st.write(f"{content_text} \n\n:green[Document: {document_name}]")
+                else:
+                    st.write(f"{content_text}")
+
+                del_idx = idx - 2
+                if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
+                    delete_message_pair(del_idx)
+                    st.rerun()
+
+            if "assistant" == msg["role"]:
+                #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
+                #with assistant_cmd_panel_col2:
+                #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
+                st.markdown(f"{content_text}")
+
+                # Add feedback mechanism using st.feedback
+                feedback_key = f"feedback_{idx}"
+                feedback = st.feedback(
+                    options="stars",
+                    key=feedback_key,
+                    on_change=lambda: st.session_state.menu_converse_messages_feedback.update({idx: st.session_state[feedback_key]})
+                )
+
+                # Display existing feedback if available
+                if idx in st.session_state["menu_converse_messages_feedback"]:
+                    previous_feedback = st.session_state["menu_converse_messages_feedback"][idx]
+                    st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
+
+
+    if "menu_converse_uploader_key" not in st.session_state:
+        st.session_state.menu_converse_uploader_key = 0
+
+    #st.write(f"""{opt_fm.isFeatureSupported("document_chat")}   {opt_fm.isFeatureSupported("vision")}""")
+
+    uploaded_file_type_list = []
+    if opt_fm.isFeatureSupported("document_chat"):
+        uploaded_file_type_list.extend(["txt", "csv", "pdf", "md"])
+    if opt_fm.isFeatureSupported("vision"):
+        uploaded_file_type_list.extend(["png", "jpg", "jpeg"])
+
+    if uploaded_file_type_list:
+        # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
+        uploaded_file = st.file_uploader(
+                "Attach Image",
+                type=uploaded_file_type_list,
+                accept_multiple_files=False,
+                label_visibility="collapsed",
+                key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
             )
-
-            # Display existing feedback if available
-            if idx in st.session_state["menu_converse_messages_feedback"]:
-                previous_feedback = st.session_state["menu_converse_messages_feedback"][idx]
-                st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
-
-    
-if "menu_converse_uploader_key" not in st.session_state:
-    st.session_state.menu_converse_uploader_key = 0
-
-#st.write(f"""{opt_fm.isFeatureSupported("document_chat")}   {opt_fm.isFeatureSupported("vision")}""")
-
-uploaded_file_type_list = []
-if opt_fm.isFeatureSupported("document_chat"):
-    uploaded_file_type_list.extend(["txt", "csv", "pdf", "md"])
-if opt_fm.isFeatureSupported("vision"):
-    uploaded_file_type_list.extend(["png", "jpg", "jpeg"])
-
-if uploaded_file_type_list:
-    # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
-    uploaded_file = st.file_uploader(
-            "Attach Image",
-            type=uploaded_file_type_list,
-            accept_multiple_files=False,
-            label_visibility="collapsed",
-            key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
-        )
-else:
-    uploaded_file = None
-
-
-prompt = st.chat_input()
-
-uploaded_file_key = None
-uploaded_file_name = None
-uploaded_file_bytes = None
-uploaded_file_type = None
-uploaded_file_base64 = None
-if uploaded_file:
-    if uploaded_file.type in mime_mapping_image: #This field is only supported by Anthropic Claude 3 models.
-        uploaded_file_bytes = uploaded_file.read()
-
-        image:Image = Image.open(uploaded_file)
-        uploaded_file_name = uploaded_file.name
-        uploaded_file_type = uploaded_file.type
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-        st.image(image, caption='upload images', use_container_width=True)
-    elif uploaded_file.type in mime_mapping_document:
-        uploaded_file_key = uploaded_file.name.replace(".", "_").replace(" ", "_")
-        uploaded_file_name = uploaded_file.name
-        uploaded_file_type = uploaded_file.type
-        bedrock_file_type = mime_mapping_document[uploaded_file_type]
-        print(f"-------{bedrock_file_type}")
-        if "csv" == bedrock_file_type:
-            uploaded_file_bytes = base64.b64encode(uploaded_file.read())
-            uploaded_file.seek(0)
-            try:
-                uploaded_file_df = pd.read_csv(uploaded_file, encoding = "utf-8")
-                st.write(uploaded_file_df)
-            except Exception as err:
-                st.chat_message("system").write(type(err).__name__)
-        elif "pdf" == bedrock_file_type:
-            uploaded_file_bytes = uploaded_file.read()
-            uploaded_file.seek(0)
-            st.markdown(uploaded_file_name.replace(".", "_"))
-        elif "txt" == bedrock_file_type:
-            uploaded_file_bytes = base64.b64encode(uploaded_file.read())
-        else:
-            st.markdown(uploaded_file_key)
     else:
-        print(f"******{uploaded_file.type}") #text/plain
+        uploaded_file = None
 
-if prompt:
-    
-    # menu_converse_messages = st.session_state.menu_converse_messages
-    # menu_converse_messages_len = len(menu_converse_messages)
-    # if menu_converse_messages_len > MAX_MESSAGES:
-    #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
-    #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
-    #st.session_state["audio_stream"] = ""
+    uploaded_file_key = None
+    uploaded_file_name = None
+    uploaded_file_bytes = None
+    uploaded_file_type = None
+    uploaded_file_base64 = None
+    if uploaded_file:
+        if uploaded_file.type in mime_mapping_image: #This field is only supported by Anthropic Claude 3 models.
+            uploaded_file_bytes = uploaded_file.read()
 
-    message_history = st.session_state.menu_converse_messages.copy()
-    message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
-    if uploaded_file_name:
-        content = message_user_latest['content']
-        if uploaded_file_type in mime_mapping_image:
-            content.append(
-                {
-                    "image": {
-                        "format": mime_mapping_image[uploaded_file_type],
-                        "source": {
-                            "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
-                        }
-                    },
-                }
-            )
+            image:Image = Image.open(uploaded_file)
+            uploaded_file_name = uploaded_file.name
+            uploaded_file_type = uploaded_file.type
+            uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+            st.image(image, caption='upload images', use_container_width=True)
         elif uploaded_file.type in mime_mapping_document:
-            #uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
-            uploaded_file_name_clean = uploaded_file_key
-            content.append(
-                {
-                    "document": {
-                        "format": mime_mapping_document[uploaded_file_type],
-                        "name": uploaded_file_name_clean, #uploaded_file_key
-                        "source": {
-                            "bytes": uploaded_file_bytes,
-                        }
-                    },
-                }
+            uploaded_file_key = uploaded_file.name.replace(".", "_").replace(" ", "_")
+            uploaded_file_name = uploaded_file.name
+            uploaded_file_type = uploaded_file.type
+            bedrock_file_type = mime_mapping_document[uploaded_file_type]
+            print(f"-------{bedrock_file_type}")
+            if "csv" == bedrock_file_type:
+                uploaded_file_bytes = base64.b64encode(uploaded_file.read())
+                uploaded_file.seek(0)
+                try:
+                    uploaded_file_df = pd.read_csv(uploaded_file, encoding = "utf-8")
+                    st.write(uploaded_file_df)
+                except Exception as err:
+                    st.chat_message("system").write(type(err).__name__)
+            elif "pdf" == bedrock_file_type:
+                uploaded_file_bytes = uploaded_file.read()
+                uploaded_file.seek(0)
+                st.markdown(uploaded_file_name.replace(".", "_"))
+            elif "txt" == bedrock_file_type:
+                uploaded_file_bytes = base64.b64encode(uploaded_file.read())
+            else:
+                st.markdown(uploaded_file_key)
+        else:
+            print(f"******{uploaded_file.type}") #text/plain
+
+# Chat input at the bottom of viewport
+with st.bottom:
+    with st.container(horizontal=True, width="stretch", horizontal_alignment="right", vertical_alignment="center", border=False, height="content", gap="xxsmall", autoscroll=False):
+        if st.button(":material/delete_history:", type="tertiary", help="Clear Conversation"):
+            on_button_clear_clicked()
+
+        download_data = get_download_data()
+        if download_data:
+            st.download_button(
+                label=":material/archive:",
+                data=download_data,
+                file_name=f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                type="tertiary",
+                help="Download Conversation",
+                key="download_conversation_button"
             )
         else:
-            st.write(f"Not supported file type: {uploaded_file.type}")
-    message_history.append(message_user_latest)
-    #print(f"******{message_user_latest}")
-    st.chat_message("user").write(prompt)
+            st.button(":material/archive:", type="tertiary", help="Download Conversation (no data)", disabled=True)
 
-    system_prompts = [{"text" : opt_system_msg}]
-    
-    inference_config = {
-        #"temperature": opt_temperature,
-        "maxTokens": opt_max_tokens,
-        #"topP": opt_top_p,
-        #stopSequences 
-    }
+        action = st.menu_button("Export", options=["CSV", "JSON", "PDF"], type="tertiary", help="Export Conversation in different formats")
+        # options = ["North", "East", "South", "West"]
+        # selection = st.segmented_control(
+        #     "", options, selection_mode="single",
+        # )
+        st.space(size="small")
 
-    if opt_fm_temperature.isSupported():
-        inference_config["temperature"] = opt_temperature
+    chat_input_prompt = st.chat_input(accept_audio=True, accept_file=True, file_type=["csv", "txt", "pdf"], max_upload_size=2 * 1024, placeholder="Type your message here...")
 
-    if opt_fm_top_p.isSupported():
-        inference_config["topP"] = opt_top_p
+with main_col:
+    if chat_input_prompt and chat_input_prompt.text:
+        prompt = chat_input_prompt.text
 
-    additional_model_fields = {}
+        # menu_converse_messages = st.session_state.menu_converse_messages
+        # menu_converse_messages_len = len(menu_converse_messages)
+        # if menu_converse_messages_len > MAX_MESSAGES:
+        #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
+        #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
+        #st.session_state["audio_stream"] = ""
 
-    if opt_fm_top_k.isSupported():
-        additional_model_fields[opt_fm_top_k.Name] = opt_top_k
-    
-    # If additional_model_fields is an empty dictionary, set it to None
-    if additional_model_fields == {}:
-        additional_model_fields = None
-
-    # additional_model_fields = {"top_k": opt_top_k}
-    # if opt_model_id.startswith("cohere"):
-    #     additional_model_fields = None
-    # if opt_model_id.startswith("meta") or opt_model_id.startswith("us.meta"):
-    #     additional_model_fields = None
-    # if opt_model_id.startswith("mistral"):
-    #     additional_model_fields = None
-
-
-
-    #print(json.dumps(inference_config, indent=3))
-    #print(json.dumps(system_prompts, indent=3))
-
-    with st.spinner('Processing...'):
-
-        try:
-            use_us_west_2 = "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "writer.palmyra" in opt_model_id
-            if use_us_west_2:
-                    response = bedrock_runtime_us_west_2.converse_stream(
-                    modelId=opt_model_id,
-                    messages=message_history,
-                    system=system_prompts,
-                    inferenceConfig=inference_config,
-                    additionalModelRequestFields=additional_model_fields
+        message_history = st.session_state.menu_converse_messages.copy()
+        message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
+        if uploaded_file_name:
+            content = message_user_latest['content']
+            if uploaded_file_type in mime_mapping_image:
+                content.append(
+                    {
+                        "image": {
+                            "format": mime_mapping_image[uploaded_file_type],
+                            "source": {
+                                "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
+                            }
+                        },
+                    }
+                )
+            elif uploaded_file.type in mime_mapping_document:
+                #uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
+                uploaded_file_name_clean = uploaded_file_key
+                content.append(
+                    {
+                        "document": {
+                            "format": mime_mapping_document[uploaded_file_type],
+                            "name": uploaded_file_name_clean, #uploaded_file_key
+                            "source": {
+                                "bytes": uploaded_file_bytes,
+                            }
+                        },
+                    }
                 )
             else:
-                response = bedrock_runtime.converse_stream(
-                    modelId=opt_model_id,
-                    messages=message_history,
-                    system=system_prompts,
-                    inferenceConfig=inference_config,
-                    additionalModelRequestFields=additional_model_fields
-                )
-            
+                st.write(f"Not supported file type: {uploaded_file.type}")
+        message_history.append(message_user_latest)
+        #print(f"******{message_user_latest}")
+        st.chat_message("user").write(prompt)
 
-            #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-            result_text = ""
-            with st.chat_message("assistant"):
-                result_container = st.container(border=True)
-                result_area = st.empty()
-                stream = response.get('stream')
-                for event in stream:
-                    
-                    if 'messageStart' in event:
-                        #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                        #result_container.write(opts)                    
-                        pass
+        system_prompts = [{"text" : opt_system_msg}]
 
-                    if 'contentBlockDelta' in event:
-                        text = event['contentBlockDelta']['delta']['text']
-                        result_text += f"{text}"
-                        result_area.write(result_text)
+        inference_config = {
+            #"temperature": opt_temperature,
+            "maxTokens": opt_max_tokens,
+            #"topP": opt_top_p,
+            #stopSequences
+        }
 
-                    if 'messageStop' in event:
-                        #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                        stop_reason = event['messageStop']['stopReason']
-                        if stop_reason == 'end_turn':
+        if opt_fm_temperature.isSupported():
+            inference_config["temperature"] = opt_temperature
+
+        if opt_fm_top_p.isSupported():
+            inference_config["topP"] = opt_top_p
+
+        additional_model_fields = {}
+
+        if opt_fm_top_k.isSupported():
+            additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+
+        # If additional_model_fields is an empty dictionary, set it to None
+        if additional_model_fields == {}:
+            additional_model_fields = None
+
+        # additional_model_fields = {"top_k": opt_top_k}
+        # if opt_model_id.startswith("cohere"):
+        #     additional_model_fields = None
+        # if opt_model_id.startswith("meta") or opt_model_id.startswith("us.meta"):
+        #     additional_model_fields = None
+        # if opt_model_id.startswith("mistral"):
+        #     additional_model_fields = None
+
+
+
+        #print(json.dumps(inference_config, indent=3))
+        #print(json.dumps(system_prompts, indent=3))
+
+        with st.spinner('Processing...'):
+
+            try:
+                use_us_west_2 = "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "writer.palmyra" in opt_model_id
+                if use_us_west_2:
+                        response = bedrock_runtime_us_west_2.converse_stream(
+                        modelId=opt_model_id,
+                        messages=message_history,
+                        system=system_prompts,
+                        inferenceConfig=inference_config,
+                        additionalModelRequestFields=additional_model_fields
+                    )
+                else:
+                    response = bedrock_runtime.converse_stream(
+                        modelId=opt_model_id,
+                        messages=message_history,
+                        system=system_prompts,
+                        inferenceConfig=inference_config,
+                        additionalModelRequestFields=additional_model_fields
+                    )
+
+
+                #with st.chat_message("assistant", avatar=setAvatar("assistant")):
+                result_text = ""
+                with st.chat_message("assistant"):
+                    result_container = st.container(border=True)
+                    result_area = st.empty()
+                    stream = response.get('stream')
+                    for event in stream:
+
+                        if 'messageStart' in event:
+                            #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
+                            #result_container.write(opts)
                             pass
-                        else:
-                            stop_reason_display = stop_reason
-                            if stop_reason == 'max_tokens':
-                                stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                            result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                            result_area.write(result_text_error)
 
-                    if 'metadata' in event:
-                        metadata = event['metadata']
-                        if 'usage' in metadata:
-                            input_token_count = metadata['usage']['inputTokens']
-                            output_token_count = metadata['usage']['outputTokens']
-                            total_token_count = metadata['usage']['totalTokens']
-                        if 'metrics' in event['metadata']:
-                            latency = metadata['metrics']['latencyMs']
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
-                        result_container.write(stats)
-                        user_name = "default_user"  # Replace with actual user name if available
-                        try:
-                            push_to_cloudwatch(user_name, input_token_count, output_token_count, total_token_count)
-                        except Exception as e:
-                            logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
+                        if 'contentBlockDelta' in event:
+                            text = event['contentBlockDelta']['delta']['text']
+                            result_text += f"{text}"
+                            result_area.write(result_text)
 
-                    if "internalServerException" in event:
-                        exception = event["internalServerException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    if "modelStreamErrorException" in event:
-                        exception = event["modelStreamErrorException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    if "throttlingException" in event:
-                        exception = event["throttlingException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
-                    if "validationException" in event:
-                        exception = event["validationException"]
-                        result_text += f"\n\{exception}"
-                        result_area.write(result_text)
+                        if 'messageStop' in event:
+                            #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                            stop_reason = event['messageStop']['stopReason']
+                            if stop_reason == 'end_turn':
+                                pass
+                            else:
+                                stop_reason_display = stop_reason
+                                if stop_reason == 'max_tokens':
+                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                                result_area.write(result_text_error)
 
-                #col1, col2, col3 = st.columns([1,1,5])
+                        if 'metadata' in event:
+                            metadata = event['metadata']
+                            if 'usage' in metadata:
+                                input_token_count = metadata['usage']['inputTokens']
+                                output_token_count = metadata['usage']['outputTokens']
+                                total_token_count = metadata['usage']['totalTokens']
+                            if 'metrics' in event['metadata']:
+                                latency = metadata['metrics']['latencyMs']
+                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
+                            result_container.write(stats)
+                            user_name = "default_user"  # Replace with actual user name if available
+                            try:
+                                push_to_cloudwatch(user_name, input_token_count, output_token_count, total_token_count)
+                            except Exception as e:
+                                logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
-                #with col1:
-                    #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
-                #    pass
-                #with col2:
-                #    if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
-                #        st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-                #with col3:
-                #    #st.markdown('3')
-                #    pass
-            
-            message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+                        if "internalServerException" in event:
+                            exception = event["internalServerException"]
+                            result_text += f"\n{exception}"
+                            result_area.write(result_text)
+                        if "modelStreamErrorException" in event:
+                            exception = event["modelStreamErrorException"]
+                            result_text += f"\n{exception}"
+                            result_area.write(result_text)
+                        if "throttlingException" in event:
+                            exception = event["throttlingException"]
+                            result_text += f"\n{exception}"
+                            result_area.write(result_text)
+                        if "validationException" in event:
+                            exception = event["validationException"]
+                            result_text += f"\n{exception}"
+                            result_area.write(result_text)
 
-            st.session_state.menu_converse_messages.append(message_user_latest)
-            st.session_state.menu_converse_messages.append(message_assistant_latest)
+                    #col1, col2, col3 = st.columns([1,1,5])
 
-            
-            # Trim message History
-            menu_converse_messages = st.session_state.menu_converse_messages
-            menu_converse_messages_len = len(menu_converse_messages)
-            if menu_converse_messages_len > MAX_MESSAGES:
-                del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-            #print(f"menu_converse_messages_len={menu_converse_messages_len}")
+                    #with col1:
+                        #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
+                    #    pass
+                    #with col2:
+                    #    if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
+                    #        st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
+                    #with col3:
+                    #    #st.markdown('3')
+                    #    pass
 
-            if uploaded_file_name:
-                st.session_state.menu_converse_uploader_key += 1
+                message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
-            #print(json.dumps(message_user_latest, indent=2))
-            #print(message_user_latest)
-            #st.rerun()
+                st.session_state.menu_converse_messages.append(message_user_latest)
+                st.session_state.menu_converse_messages.append(message_assistant_latest)
 
-        except ClientError as err:
-            message = err.response["Error"]["Message"]
-            logger.error("A client error occurred: %s", message)
-            print("A client error occured: " + format(message))
-            st.chat_message("system").write(message)
-        except ReadTimeoutError as err:
-            logger.error("A client error occurred: %s", err)  # Log the error directly
-            print("A client error occurred: " + str(err))     # Print the error as a string
-            st.chat_message("system").write(str(err))         # Use str() to display in chat message
 
+                # Trim message History
+                menu_converse_messages = st.session_state.menu_converse_messages
+                menu_converse_messages_len = len(menu_converse_messages)
+                if menu_converse_messages_len > MAX_MESSAGES:
+                    del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
+                #print(f"menu_converse_messages_len={menu_converse_messages_len}")
+
+                if uploaded_file_name:
+                    st.session_state.menu_converse_uploader_key += 1
+
+                #print(json.dumps(message_user_latest, indent=2))
+                #print(message_user_latest)
+                #st.rerun()
+
+            except ClientError as err:
+                message = err.response["Error"]["Message"]
+                logger.error("A client error occurred: %s", message)
+                print("A client error occured: " + format(message))
+                st.chat_message("system").write(message)
+            except ReadTimeoutError as err:
+                logger.error("A client error occurred: %s", err)  # Log the error directly
+                print("A client error occurred: " + str(err))     # Print the error as a string
+                st.chat_message("system").write(str(err))         # Use str() to display in chat message
 
 #if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
-#st.markdown(f"Entry: 💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-st.markdown(f":violet[**Entry: {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]")
-col1, col2, col3 = st.columns(3)
+with main_col:
+    st.markdown(f":violet[**Entry: {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]")
 
-with col1:
-    #st.markdown("Conversation: ")
-    if st.button("Download Conversation", type="secondary", icon=":material/download:", use_container_width=False):
-        if not st.session_state.menu_converse_messages:
-            st.error("No data to download!")
+# Right sidebar content
+with right_sidebar_col:
+    st.markdown("### Info Panel")
+
+    with st.container(border=True):
+        st.markdown("**Statistics**")
+        st.metric("Messages", len(st.session_state.menu_converse_messages))
+        st.metric("Limit", MAX_MESSAGES)
+
+        if st.session_state.menu_converse_messages:
+            usage_pct = (len(st.session_state.menu_converse_messages) / MAX_MESSAGES) * 100
+            st.progress(usage_pct / 100)
+            st.caption(f"{usage_pct:.1f}% used")
+
+    with st.container(border=True):
+        st.markdown("**Current Model**")
+        st.caption(opt_model_id)
+        st.markdown("**Temperature**")
+        st.caption(f"{opt_temperature:.1f}")
+        st.markdown("**Max Tokens**")
+        st.caption(f"{opt_max_tokens}")
+
+    with st.container(border=True):
+        st.markdown("**Feedback Summary**")
+        if st.session_state.menu_converse_messages_feedback:
+            feedback_count = len(st.session_state.menu_converse_messages_feedback)
+            avg_rating = sum(st.session_state.menu_converse_messages_feedback.values()) / feedback_count + 1
+            st.metric("Responses Rated", feedback_count)
+            st.metric("Avg Rating", f"{avg_rating:.1f}")
         else:
-            try:
-                conversation_file = get_conversation_download()
-                st.download_button(
-                    label="Download JSON",
-                    data=conversation_file,
-                    file_name=f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                    mime="application/json",
-                    key="download_button"
-                )
-            except Exception as e:
-                st.error(f"Error downloading conversation: {str(e)}")
+            st.caption("No feedback yet")
 
-with col2:
-    # if st.button("Upload JSON File"):
-    #     uploaded_file = st.file_uploader("Choose a JSON file", type=["json"], key="json_uploader")
-    #     if uploaded_file is not None:
-    #         upload_conversation(uploaded_file)
-    #         st.rerun()
-    
-    #st.markdown(f"💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-    #st.info(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}", icon=":material/forum:")
-    pass
-with col3:
-    if st.button("Clear Conversation", type="secondary", icon=":material/clear_all:", use_container_width=False):
-        clear_conversation()
-        #st.success("Conversation cleared successfully!")
-        st.rerun()
+    with st.container(border=True):
+        st.markdown("**Quick Info**")
+        st.caption("Model provider:")
+        st.caption(f"**{opt_fm.provider}**")
+
+        features = []
+        if opt_fm.isFeatureSupported("vision"):
+            features.append("Vision")
+        if opt_fm.isFeatureSupported("document_chat"):
+            features.append("Documents")
+
+        if features:
+            st.caption("Features:")
+            for feature in features:
+                st.caption(f"✓ {feature}")
