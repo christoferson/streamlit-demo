@@ -250,6 +250,7 @@ mime_mapping_document = {
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
+    "global.anthropic.claude-fable-5",
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "global.anthropic.claude-sonnet-4-20250514-v1:0",
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
