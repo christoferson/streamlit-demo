@@ -55,12 +55,14 @@ opt_mode_id_list = [
 
 opt_model_id_list = [
     "anthropic.claude-3-sonnet-20240229-v1:0",
+    
     #"anthropic.claude-3-5-sonnet-20241022-v2:0", #The provided model is not supported for EXTERNAL_SOURCES RetrieveAndGenerateType. Update the model arn then retry your request.
     #"anthropic.claude-3-5-sonnet-20240620-v1:0", #The provided model is not supported for EXTERNAL_SOURCES RetrieveAndGenerateType. Update the model arn then retry your request.
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
 opt_converse_model_id_list = [
+    "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
 ]
@@ -253,6 +255,11 @@ if prompt := st.chat_input(
                                 },
                             }
                         )
+                        content.append({
+                            'cachePoint': {
+                                'type': 'default'
+                            }
+                        })
                     else:
                         st.write(f"Not supported file type: {uploaded_file.type}")
 
@@ -312,6 +319,10 @@ if prompt := st.chat_input(
                             input_token_count = metadata['usage']['inputTokens']
                             output_token_count = metadata['usage']['outputTokens']
                             total_token_count = metadata['usage']['totalTokens']
+                            cache_read = metadata['usage']['cacheReadInputTokens']
+                            cache_write = metadata['usage']['cacheWriteInputTokens']
+                            print(f"Cache read tokens: {cache_read}")
+                            print(f"Cache write tokens: {cache_write}")
                         if 'metrics' in event['metadata']:
                             latency = metadata['metrics']['latencyMs']
                         stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency}"
