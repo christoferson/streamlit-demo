@@ -4,10 +4,11 @@ import cmn_settings
 import json
 import logging
 import cmn_auth
-import pyperclip
+#import pyperclip
 import io
 import base64
 from PIL import Image
+from cmn.bedrock_models import FoundationModel
 
 from botocore.exceptions import ClientError
 
@@ -63,8 +64,9 @@ st.markdown(
 )
 
 def copy_button_clicked(text):
-    pyperclip.copy(text)
+    #pyperclip.copy(text)
     #st.session_state.button = not st.session_state.button
+    pass
 
 def image_to_base64(image,mime_type:str):
     buffer = io.BytesIO()
@@ -77,13 +79,14 @@ mime_mapping = {
     }
 
 opt_model_id_list = [
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0",
-    "meta.llama3-2-11b-instruct-v1:0", #OK
-    "meta.llama3-2-90b-instruct-v1:0", #A client error occurred: Invocation of model ID meta.llama3-2-90b-instruct-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.
-    "us.amazon.nova-pro-v1:0",
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    # "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    # "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    # "anthropic.claude-3-sonnet-20240229-v1:0",
+    # "anthropic.claude-3-haiku-20240307-v1:0",
+    # "meta.llama3-2-11b-instruct-v1:0", #OK
+    # "meta.llama3-2-90b-instruct-v1:0", #A client error occurred: Invocation of model ID meta.llama3-2-90b-instruct-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.
+    # "us.amazon.nova-pro-v1:0",
 ]
 
 mime_mapping_image = {
@@ -135,10 +138,28 @@ Always base your responses solely on the content of the provided image(s) and th
 
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
+
+opt_fm: FoundationModel = FoundationModel.find(opt_model_id)
+
+opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
+opt_fm_temperature = opt_fm.InferenceParameter.get("Temperature")
+opt_fm_top_p = opt_fm.InferenceParameter.get("TopP")
+opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+
+with st.sidebar:
+    if opt_fm_temperature.isSupported():
+        opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+    else:
+        opt_temperature = 0.0
+    if opt_fm_top_p.isSupported():
+        opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    else:
+        opt_top_p = 0.0
+    if opt_fm_top_k.isSupported():
+        opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    else:
+        opt_top_k = 0
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=SYSTEM_PROMPT, key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
@@ -160,17 +181,19 @@ with col2:
     )
 
     uploaded_file_name = None
+    actual_image_format = None
     if uploaded_file:
         uploaded_file_bytes = uploaded_file.getvalue()
         image = Image.open(uploaded_file)
         uploaded_file_name = uploaded_file.name
         uploaded_file_type = uploaded_file.type
-        #uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        # Detect actual image format from PIL
+        actual_image_format = image.format.lower() if image.format else None
         st.image(
             image, caption='upload images',
-            use_column_width=True
+            width="stretch",
         )
-        print(uploaded_file_type)
+        print(f"Uploaded MIME type: {uploaded_file_type}, Actual format: {actual_image_format}")
 
 
         # response = rekognition.detect_labels(
@@ -213,7 +236,9 @@ with col2:
             fg_dominant_colors = img_properties['Foreground']['DominantColors']
             st.write(fg_dominant_colors)
 
-        uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
+        # Base64 conversion (currently unused but kept for potential future use)
+        if uploaded_file_type in mime_mapping:
+            uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
 
 ######
 
@@ -241,35 +266,49 @@ with col1:
         message_history = st.session_state.menu_image_query_messages.copy()
 
         message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
-        if uploaded_file_name:
+        if uploaded_file_name and actual_image_format:
             content = message_user_latest['content']
-            if uploaded_file_type in mime_mapping_image:
+            # Use actual detected format instead of MIME type
+            if actual_image_format in ["png", "jpeg", "jpg", "gif", "webp"]:
+                # Normalize jpg to jpeg for Bedrock
+                bedrock_format = "jpeg" if actual_image_format == "jpg" else actual_image_format
                 content.append(
                     {
                         "image": {
-                            "format": mime_mapping_image[uploaded_file_type],
+                            "format": bedrock_format,
                             "source": {
-                                "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
+                                "bytes": uploaded_file_bytes,
                             }
                         },
                     }
                 )
             else:
-                st.write(f"Not supported file type: {uploaded_file.type}")
+                st.write(f"Not supported image format: {actual_image_format}")
         message_history.append(message_user_latest)
 
         st.chat_message("user").write(prompt)
 
         system_prompts = [{"text" : opt_system_msg}]
-    
+
         inference_config = {
-            "temperature": opt_temperature,
             "maxTokens": opt_max_tokens,
-            "topP": opt_top_p,
-            #stopSequences 
+            #stopSequences
         }
 
+        if opt_fm_temperature.isSupported():
+            inference_config["temperature"] = opt_temperature
+
+        if opt_fm_top_p.isSupported():
+            inference_config["topP"] = opt_top_p
+
         additional_model_fields = {}
+
+        if opt_fm_top_k.isSupported():
+            additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+
+        # If additional_model_fields is an empty dictionary, set it to None
+        if additional_model_fields == {}:
+            additional_model_fields = None
         
 
         with st.spinner('Processing...'):
