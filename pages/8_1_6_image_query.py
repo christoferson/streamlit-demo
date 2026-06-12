@@ -197,7 +197,7 @@ with right_sidebar_col:
         actual_image_format = image.format.lower() if image.format else None
         st.image(
             image, caption='Uploaded Image',
-            use_container_width=True,
+            width='stretch',
         )
         print(f"Uploaded MIME type: {uploaded_file_type}, Actual format: {actual_image_format}")
 
@@ -209,7 +209,7 @@ with right_sidebar_col:
     if uploaded_file:
     
         st.markdown("**Image Analysis**")
-        if st.button("Analyze with Rekognition", use_container_width=True):
+        if st.button("Analyze with Rekognition", width='stretch'):
             with st.spinner("Analyzing..."):
                 response = rekognition.detect_labels(
                     Image={'Bytes': uploaded_file_bytes},
@@ -239,7 +239,7 @@ with right_sidebar_col:
     st.caption(f"{message_count} messages")
 
     if st.button(":material/delete_history: Clear History",
-                    use_container_width=True,
+                    width='stretch',
                     type="secondary",
                     disabled=(message_count == 0)):
         st.session_state.menu_image_query_messages = []
@@ -385,19 +385,19 @@ if prompt:
 
                             if "internalServerException" in event:
                                 exception = event["internalServerException"]
-                                result_text += f"\n\{exception}"
+                                result_text += f"\n{exception}"
                                 result_area.write(result_text)
                             if "modelStreamErrorException" in event:
                                 exception = event["modelStreamErrorException"]
-                                result_text += f"\n\{exception}"
+                                result_text += f"\n{exception}"
                                 result_area.write(result_text)
                             if "throttlingException" in event:
                                 exception = event["throttlingException"]
-                                result_text += f"\n\{exception}"
+                                result_text += f"\n{exception}"
                                 result_area.write(result_text)
                             if "validationException" in event:
                                 exception = event["validationException"]
-                                result_text += f"\n\{exception}"
+                                result_text += f"\n{exception}"
                                 result_area.write(result_text)
 
             # When storing messages in session state, modify the format:
