@@ -166,15 +166,17 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
 rekognition = boto3.client('rekognition', region_name=AWS_REGION)
 
-st.title("💬 Image Query 8.1.6")
+st.markdown("💬 :blue[Image Query 8.1.6]")
 
+# Create main layout with right sidebar
+main_col, right_sidebar_col = st.columns([3, 1])
 
-col1, col2 = st.columns([2, 1])
-
-with col2:
+# Right sidebar for image upload
+with right_sidebar_col:
+    st.markdown("##### Image")
 
     uploaded_file = st.file_uploader(
-        "Image Upload",
+        "Upload Image",
         type=["PNG", "JPEG"],
         accept_multiple_files=False,
         label_visibility="collapsed",
@@ -182,6 +184,10 @@ with col2:
 
     uploaded_file_name = None
     actual_image_format = None
+    uploaded_file_bytes = None
+    uploaded_file_type = None
+    uploaded_file_base64 = None
+
     if uploaded_file:
         uploaded_file_bytes = uploaded_file.getvalue()
         image = Image.open(uploaded_file)
@@ -190,221 +196,221 @@ with col2:
         # Detect actual image format from PIL
         actual_image_format = image.format.lower() if image.format else None
         st.image(
-            image, caption='upload images',
-            width="stretch",
+            image, caption='Uploaded Image',
+            use_container_width=True,
         )
         print(f"Uploaded MIME type: {uploaded_file_type}, Actual format: {actual_image_format}")
-
-
-        # response = rekognition.detect_labels(
-        #     Image={'Bytes': uploaded_file_bytes},
-        #     #MaxLabels=123,
-        #     #MinConfidence=...,
-        #     Features=[
-        #         'IMAGE_PROPERTIES',
-        #     ],
-        #     Settings={
-        #         'ImageProperties': {
-        #             'MaxDominantColors': 5
-        #         }
-        #     }
-        # )
-
-        # print(response)
-        # st.write(response)
-
-        # img_properties = response['ImageProperties']
-        # fg_dominant_colors = img_properties['Foreground']['DominantColors']
-        # st.write(fg_dominant_colors)
-
-# Add a button to trigger Rekognition analysis
-        if st.button("Analyze Image"):
-            response = rekognition.detect_labels(
-                Image={'Bytes': uploaded_file_bytes},
-                Features=['IMAGE_PROPERTIES'],
-                Settings={
-                    'ImageProperties': {
-                        'MaxDominantColors': 5
-                    }
-                }
-            )
-
-            print(response)
-            st.write(response)
-
-            img_properties = response['ImageProperties']
-            fg_dominant_colors = img_properties['Foreground']['DominantColors']
-            st.write(fg_dominant_colors)
 
         # Base64 conversion (currently unused but kept for potential future use)
         if uploaded_file_type in mime_mapping:
             uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
 
-######
-
-
-with col1:
-
-    if "menu_image_query_messages" not in st.session_state:
-        st.session_state["menu_image_query_messages"] = []
-
-    idx = 1
-    for msg in st.session_state.menu_image_query_messages:
-        idx = idx + 1
-        with st.chat_message(msg["role"]):
-            if isinstance(msg["content"], list):
-                # For messages with list content (like those with images)
-                for content_item in msg["content"]:
-                    if isinstance(content_item, dict) and "text" in content_item:
-                        st.write(content_item["text"])
-            else:
-                # For simple text messages
-                st.write(msg["content"])
-
-    if prompt := st.chat_input():
-
-        message_history = st.session_state.menu_image_query_messages.copy()
-
-        message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
-        if uploaded_file_name and actual_image_format:
-            content = message_user_latest['content']
-            # Use actual detected format instead of MIME type
-            if actual_image_format in ["png", "jpeg", "jpg", "gif", "webp"]:
-                # Normalize jpg to jpeg for Bedrock
-                bedrock_format = "jpeg" if actual_image_format == "jpg" else actual_image_format
-                content.append(
-                    {
-                        "image": {
-                            "format": bedrock_format,
-                            "source": {
-                                "bytes": uploaded_file_bytes,
-                            }
-                        },
+    # Rekognition analysis section
+    if uploaded_file:
+    
+        st.markdown("**Image Analysis**")
+        if st.button("Analyze with Rekognition", use_container_width=True):
+            with st.spinner("Analyzing..."):
+                response = rekognition.detect_labels(
+                    Image={'Bytes': uploaded_file_bytes},
+                    Features=['IMAGE_PROPERTIES'],
+                    Settings={
+                        'ImageProperties': {
+                            'MaxDominantColors': 5
+                        }
                     }
                 )
-            else:
-                st.write(f"Not supported image format: {actual_image_format}")
-        message_history.append(message_user_latest)
 
-        st.chat_message("user").write(prompt)
+                st.success("Analysis complete!")
+                with st.expander("View Details", expanded=False):
+                    st.write(response)
 
-        system_prompts = [{"text" : opt_system_msg}]
+                    if 'ImageProperties' in response:
+                        img_properties = response['ImageProperties']
+                        if 'Foreground' in img_properties:
+                            fg_dominant_colors = img_properties['Foreground']['DominantColors']
+                            st.markdown("**Dominant Colors:**")
+                            st.write(fg_dominant_colors)
 
-        inference_config = {
-            "maxTokens": opt_max_tokens,
-            #stopSequences
-        }
+    # Clear conversation history button
+    st.divider()
+    st.markdown("##### Conversation")
+    message_count = len(st.session_state.get("menu_image_query_messages", []))
+    st.caption(f"{message_count} messages")
 
-        if opt_fm_temperature.isSupported():
-            inference_config["temperature"] = opt_temperature
+    if st.button(":material/delete_history: Clear History",
+                    use_container_width=True,
+                    type="secondary",
+                    disabled=(message_count == 0)):
+        st.session_state.menu_image_query_messages = []
+        st.rerun()
 
-        if opt_fm_top_p.isSupported():
-            inference_config["topP"] = opt_top_p
+# Initialize session state
+if "menu_image_query_messages" not in st.session_state:
+    st.session_state["menu_image_query_messages"] = []
 
-        additional_model_fields = {}
+# Main chat area - display messages in a container
+with main_col:
+    # Container for chat history
+    chat_container = st.container(height=400)
 
-        if opt_fm_top_k.isSupported():
-            additional_model_fields[opt_fm_top_k.Name] = opt_top_k
-
-        # If additional_model_fields is an empty dictionary, set it to None
-        if additional_model_fields == {}:
-            additional_model_fields = None
-        
-
-        with st.spinner('Processing...'):
-
-            try:
-                
-                if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
-                    response = bedrock_runtime_us_west_2.converse_stream(
-                        modelId=opt_model_id,
-                        messages=message_history,
-                        system=system_prompts,
-                        inferenceConfig=inference_config,
-                        additionalModelRequestFields=additional_model_fields
-                    )
+    with chat_container:
+        idx = 1
+        for msg in st.session_state.menu_image_query_messages:
+            idx = idx + 1
+            with st.chat_message(msg["role"]):
+                if isinstance(msg["content"], list):
+                    # For messages with list content (like those with images)
+                    for content_item in msg["content"]:
+                        if isinstance(content_item, dict) and "text" in content_item:
+                            st.write(content_item["text"])
                 else:
-                    response = bedrock_runtime.converse_stream(
-                        modelId=opt_model_id,
-                        messages=message_history,
-                        system=system_prompts,
-                        inferenceConfig=inference_config,
-                        additionalModelRequestFields=additional_model_fields
-                    )
-                
+                    # For simple text messages
+                    st.write(msg["content"])
 
-                #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-                result_text = ""
-                with st.chat_message("assistant"):
-                    result_container = st.container(border=True)
-                    result_area = st.empty()
-                    stream = response.get('stream')
-                    for event in stream:
-                        
-                        if 'messageStart' in event:
-                            #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                            #result_container.write(opts)                    
-                            pass
+    # Chat input at the bottom of the main column
+    prompt = st.chat_input()
 
-                        if 'contentBlockDelta' in event:
-                            text = event['contentBlockDelta']['delta']['text']
-                            result_text += f"{text}"
-                            result_area.write(result_text)
+# Process the prompt if provided
+if prompt:
+    message_history = st.session_state.menu_image_query_messages.copy()
 
-                        if 'messageStop' in event:
-                            #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                            stop_reason = event['messageStop']['stopReason']
-                            if stop_reason == 'end_turn':
+    message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
+    if uploaded_file_name and actual_image_format:
+        content = message_user_latest['content']
+        # Use actual detected format instead of MIME type
+        if actual_image_format in ["png", "jpeg", "jpg", "gif", "webp"]:
+            # Normalize jpg to jpeg for Bedrock
+            bedrock_format = "jpeg" if actual_image_format == "jpg" else actual_image_format
+            content.append(
+                {
+                    "image": {
+                        "format": bedrock_format,
+                        "source": {
+                            "bytes": uploaded_file_bytes,
+                        }
+                    },
+                }
+            )
+        else:
+            st.write(f"Not supported image format: {actual_image_format}")
+    message_history.append(message_user_latest)
+
+    # Display user message in the chat container
+    with main_col:
+        with chat_container:
+            st.chat_message("user").write(prompt)
+
+    system_prompts = [{"text" : opt_system_msg}]
+
+    inference_config = {
+        "maxTokens": opt_max_tokens,
+        #stopSequences
+    }
+
+    if opt_fm_temperature.isSupported():
+        inference_config["temperature"] = opt_temperature
+
+    if opt_fm_top_p.isSupported():
+        inference_config["topP"] = opt_top_p
+
+    additional_model_fields = {}
+
+    if opt_fm_top_k.isSupported():
+        additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+
+    # If additional_model_fields is an empty dictionary, set it to None
+    if additional_model_fields == {}:
+        additional_model_fields = None
+
+    with st.spinner('Processing...'):
+        try:
+            if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+                response = bedrock_runtime_us_west_2.converse_stream(
+                    modelId=opt_model_id,
+                    messages=message_history,
+                    system=system_prompts,
+                    inferenceConfig=inference_config,
+                    additionalModelRequestFields=additional_model_fields
+                )
+            else:
+                response = bedrock_runtime.converse_stream(
+                    modelId=opt_model_id,
+                    messages=message_history,
+                    system=system_prompts,
+                    inferenceConfig=inference_config,
+                    additionalModelRequestFields=additional_model_fields
+                )
+
+            # Display streaming response in the chat container
+            result_text = ""
+            with main_col:
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        result_container = st.container(border=True)
+                        result_area = st.empty()
+                        stream = response.get('stream')
+                        for event in stream:
+
+                            if 'messageStart' in event:
                                 pass
-                            else:
-                                stop_reason_display = stop_reason
-                                if stop_reason == 'max_tokens':
-                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                                result_area.write(result_text_error)
 
-                        if 'metadata' in event:
-                            metadata = event['metadata']
-                            if 'usage' in metadata:
-                                input_token_count = metadata['usage']['inputTokens']
-                                output_token_count = metadata['usage']['outputTokens']
-                                total_token_count = metadata['usage']['totalTokens']
-                            if 'metrics' in event['metadata']:
-                                latency = metadata['metrics']['latencyMs']
-                            #stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
-                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} "
-                            result_container.write(stats)
+                            if 'contentBlockDelta' in event:
+                                text = event['contentBlockDelta']['delta']['text']
+                                result_text += f"{text}"
+                                result_area.write(result_text)
 
-                        if "internalServerException" in event:
-                            exception = event["internalServerException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "modelStreamErrorException" in event:
-                            exception = event["modelStreamErrorException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "throttlingException" in event:
-                            exception = event["throttlingException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
-                        if "validationException" in event:
-                            exception = event["validationException"]
-                            result_text += f"\n\{exception}"
-                            result_area.write(result_text)
+                            if 'messageStop' in event:
+                                #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
+                                stop_reason = event['messageStop']['stopReason']
+                                if stop_reason == 'end_turn':
+                                    pass
+                                else:
+                                    stop_reason_display = stop_reason
+                                    if stop_reason == 'max_tokens':
+                                        stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
+                                    result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
+                                    result_area.write(result_text_error)
 
-                #st.session_state.menu_image_query_messages.append({"role": "user", "content": prompt})
-                #st.session_state.menu_image_query_messages.append({"role": "assistant", "content": result_text})
+                            if 'metadata' in event:
+                                metadata = event['metadata']
+                                if 'usage' in metadata:
+                                    input_token_count = metadata['usage']['inputTokens']
+                                    output_token_count = metadata['usage']['outputTokens']
+                                    total_token_count = metadata['usage']['totalTokens']
+                                if 'metrics' in event['metadata']:
+                                    latency = metadata['metrics']['latencyMs']
+                                stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} "
+                                result_container.write(stats)
 
-                # When storing messages in session state, modify the format:
-                st.session_state.menu_image_query_messages.append({"role": "user", "content": [{"text": prompt}]})
-                st.session_state.menu_image_query_messages.append({"role": "assistant", "content": [{"text": result_text}]})
-            
-            except ClientError as err:
-                message = err.response["Error"]["Message"]
-                logger.error("A client error occurred: %s", message)
-                st.error(f"A client error occurred: {message}")
+                            if "internalServerException" in event:
+                                exception = event["internalServerException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "modelStreamErrorException" in event:
+                                exception = event["modelStreamErrorException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "throttlingException" in event:
+                                exception = event["throttlingException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
+                            if "validationException" in event:
+                                exception = event["validationException"]
+                                result_text += f"\n\{exception}"
+                                result_area.write(result_text)
 
-            except Exception as e:
-                error_message = f"An unexpected error occurred: {str(e)}"
-                logger.error(error_message)
-                st.error(error_message)
+            # When storing messages in session state, modify the format:
+            st.session_state.menu_image_query_messages.append({"role": "user", "content": [{"text": prompt}]})
+            st.session_state.menu_image_query_messages.append({"role": "assistant", "content": [{"text": result_text}]})
+            st.rerun()
+
+        except ClientError as err:
+            message = err.response["Error"]["Message"]
+            logger.error("A client error occurred: %s", message)
+            st.error(f"A client error occurred: {message}")
+
+        except Exception as e:
+            error_message = f"An unexpected error occurred: {str(e)}"
+            logger.error(error_message)
+            st.error(error_message)
