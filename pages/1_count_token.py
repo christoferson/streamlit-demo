@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # Title and description
-st.title("🔢 Amazon Bedrock Token Counter")
+st.title("Bedrock Token Counter")
 st.markdown("""
 This tool helps you estimate token usage before sending requests to Amazon Bedrock foundation models.
 Using the CountTokens API doesn't incur charges.
@@ -39,20 +39,65 @@ with st.sidebar:
     selected_region = st.selectbox("AWS Region", regions, index=0)
 
     # Model selection
-    st.subheader("Supported Models")
-    models = {
-        "Claude 3.5 Haiku": "anthropic.claude-3-5-haiku-20241022-v1:0",
-        "Claude 3.5 Sonnet v2": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        "Claude 3.7 Sonnet": "anthropic.claude-3-7-sonnet-20250219-v1:0",
-        "Claude Opus 4": "anthropic.claude-opus-4-20250514-v1:0",
-        "Claude Sonnet 4": "anthropic.claude-sonnet-4-20250514-v1:0"
-    }
+    st.subheader("Model Selection")
 
-    selected_model_name = st.selectbox("Model", list(models.keys()))
-    selected_model_id = models[selected_model_name]
+    # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
+    models = [
+        "global.anthropic.claude-fable-5",
+        "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "global.anthropic.claude-sonnet-4-20250514-v1:0",
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "global.anthropic.claude-opus-4-6-v1",
+        "global.anthropic.claude-opus-4-7",
+        "global.anthropic.claude-opus-4-8",
 
-    st.info(f"**Model ID:** `{selected_model_id}`")
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-3-sonnet-20240229-v1:0",
+        "anthropic.claude-3-haiku-20240307-v1:0",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "us.anthropic.claude-3-haiku-20240307-v1:0",
+        "us.anthropic.claude-3-sonnet-20240229-v1:0",
+        "us.anthropic.claude-3-opus-20240229-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "us.anthropic.claude-opus-4-20250514-v1:0",
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "amazon.nova-pro-v1:0",
+        "global.amazon.nova-2-lite-v1:0",
+
+        "cohere.command-r-v1:0",
+        "cohere.command-r-plus-v1:0",
+        "meta.llama2-13b-chat-v1",
+        "meta.llama2-70b-chat-v1",
+        "meta.llama3-8b-instruct-v1:0",
+        "meta.llama3-70b-instruct-v1:0",
+        "us.meta.llama3-2-11b-instruct-v1:0",
+        "us.meta.llama3-2-90b-instruct-v1:0",
+        "mistral.mistral-small-2402-v1:0",
+        "mistral.mistral-large-2402-v1:0",
+        "us.mistral.pixtral-large-2502-v1:0",
+        "us.amazon.nova-premier-v1:0",
+        "us.meta.llama4-scout-17b-instruct-v1:0",
+        "us.meta.llama4-maverick-17b-instruct-v1:0",
+        "us.writer.palmyra-x4-v1:0",
+        "us.writer.palmyra-x5-v1:0",
+        "qwen.qwen3-next-80b-a3b",
+        "qwen.qwen3-vl-235b-a22b",
+        "openai.gpt-oss-safeguard-20b",
+        "openai.gpt-oss-safeguard-120b",
+        "google.gemma-3-4b-it",
+        "google.gemma-3-12b-it",
+        "google.gemma-3-27b-it",
+        "nvidia.nemotron-nano-9b-v2",
+        "nvidia.nemotron-nano-12b-v2",
+        "us.amazon.nova-2-lite-v1:0",
+    ]
+
+    default_model = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    default_idx = models.index(default_model) if default_model in models else 0
+
+    selected_model_id = st.selectbox("Model ID", models, index=default_idx)
 
 # Initialize Bedrock client
 @st.cache_resource
@@ -69,11 +114,11 @@ def get_bedrock_client(region):
 bedrock_runtime = get_bedrock_client(selected_region)
 
 # Main content - tabs for different request types
-tab1, tab2, tab3 = st.tabs(["📝 InvokeModel Request", "💬 Converse Request", "📚 Documentation"])
+tab1, tab2 = st.tabs(["InvokeModel", "Converse"])
 
 # Tab 1: InvokeModel Request
 with tab1:
-    st.header("Count Tokens for InvokeModel Request")
+    st.markdown("Count Tokens for InvokeModel")
     st.markdown("Enter your prompt and model parameters to count tokens.")
 
     col1, col2 = st.columns([2, 1])
@@ -104,7 +149,7 @@ with tab1:
             help="Controls randomness in the output"
         )
 
-    if st.button("🔢 Count Tokens (InvokeModel)", type="primary"):
+    if st.button("Count Tokens", type="primary"):
         if bedrock_runtime:
             try:
                 with st.spinner("Counting tokens..."):
@@ -147,19 +192,19 @@ with tab1:
 
 # Tab 2: Converse Request
 with tab2:
-    st.header("Count Tokens for Converse Request")
+    st.markdown("Count Tokens for Converse")
     st.markdown("Build a conversation with multiple messages and system prompts.")
 
     # System prompt
     system_prompt = st.text_area(
         "System Prompt",
         value="You're an expert in geography.",
-        height=100,
+        height=80,
         help="Set the context and behavior for the assistant"
     )
 
     # Conversation messages
-    st.subheader("Conversation Messages")
+    st.markdown("Conversation Messages")
 
     # Initialize session state for messages
     if 'messages' not in st.session_state:
@@ -184,8 +229,7 @@ with tab2:
         with col2:
             content = st.text_area(
                 f"Message {idx+1}",
-                value=msg["content"],
-                height=80,
+                value=msg["content"], height=20,
                 key=f"msg_{idx}"
             )
             st.session_state.messages[idx]["content"] = content
@@ -193,19 +237,19 @@ with tab2:
         with col3:
             st.write("")
             st.write("")
-            if st.button("🗑️", key=f"del_{idx}"):
+            if st.button(":material/delete_forever:", type="tertiary", key=f"del_{idx}"):
                 st.session_state.messages.pop(idx)
                 st.rerun()
 
     # Add new message button
     col1, col2 = st.columns([1, 4])
     with col1:
-        if st.button("➕ Add Message"):
+        if st.button("Add Message"):
             st.session_state.messages.append({"role": "user", "content": ""})
             st.rerun()
 
     # Count tokens button
-    if st.button("🔢 Count Tokens (Converse)", type="primary"):
+    if st.button("Count Tokens", type="primary", key="count_converse"):
         if bedrock_runtime:
             try:
                 with st.spinner("Counting tokens..."):
@@ -244,78 +288,11 @@ with tab2:
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
-# Tab 3: Documentation
-with tab3:
-    st.header("📚 Documentation")
-
-    st.markdown("""
-    ### About Token Counting
-
-    The CountTokens API helps you estimate token usage before sending requests to foundation models. 
-    This allows you to:
-
-    - ✅ Estimate costs before sending inference requests
-    - ✅ Optimize prompts to fit within token limits
-    - ✅ Plan for token usage in your applications
-
-    **Note:** Using the CountTokens API doesn't incur charges.
-
-    ### Supported Regions
-
-    - US East (N. Virginia) - `us-east-1`
-    - US East (Ohio) - `us-east-2`
-    - US West (Oregon) - `us-west-2`
-    - Asia Pacific (Tokyo) - `ap-northeast-1`
-    - Asia Pacific (Mumbai) - `ap-south-1`
-    - Asia Pacific (Singapore) - `ap-southeast-1`
-    - Asia Pacific (Sydney) - `ap-southeast-2`
-    - Europe (Frankfurt) - `eu-central-1`
-    - Europe (Zurich) - `eu-central-2`
-    - Europe (Ireland) - `eu-west-1`
-    - Europe (London) - `eu-west-2`
-    - South America (São Paulo) - `sa-east-1`
-
-    ### Prerequisites
-
-    1. **AWS Credentials**: Configure your AWS credentials using one of these methods:
-       - AWS CLI: `aws configure`
-       - Environment variables: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
-       - IAM role (if running on AWS)
-
-    2. **IAM Permissions**: Your IAM identity needs:
-       - `bedrock:CountTokens` - Allows usage of CountTokens
-       - `bedrock:InvokeModel` - Allows usage of InvokeModel and Converse
-
-    ### Example IAM Policy
-
-    ```json
-    {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "bedrock:CountTokens",
-                    "bedrock:InvokeModel"
-                ],
-                "Resource": "arn:aws:bedrock:*::foundation-model/*"
-            }
-        ]
-    }
-    ```
-
-    ### Resources
-
-    - [Amazon Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
-    - [Amazon Bedrock API Reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/)
-    - [Boto3 Bedrock Runtime Documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime.html)
-    """)
-
 # Footer
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: gray;'>
-    <p>Amazon Bedrock Token Counter | Built with Streamlit</p>
-    <p>⚠️ Make sure your AWS credentials are properly configured</p>
-</div>
-""", unsafe_allow_html=True)
+# st.markdown("---")
+# st.markdown("""
+# <div style='text-align: center; color: gray;'>
+#     <p>Amazon Bedrock Token Counter | Built with Streamlit</p>
+#     <p>⚠️ Make sure your AWS credentials are properly configured</p>
+# </div>
+# """, unsafe_allow_html=True)
