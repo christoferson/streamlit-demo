@@ -62,9 +62,82 @@ def list_harnesses():
         logger.error(f"Unexpected error listing harnesses: {e}")
         return []
 
-# Initialize session state for harness ARN
+def get_harness_details(harness_id):
+    """Get detailed information about a harness including memory ID"""
+    try:
+        response = bedrock_agentcore_control.get_harness(harnessId=harness_id)
+        harness_details = response.get('harness', {})
+
+        # Extract memory ID from nested structure
+        memory_id = 'Not configured'
+        memory_arn = None
+
+        memory_config = harness_details.get('memory', {})
+        if memory_config:
+            managed_memory = memory_config.get('managedMemoryConfiguration', {})
+            if managed_memory:
+                memory_arn = managed_memory.get('arn', '')
+                # Extract memory ID from ARN: arn:aws:bedrock-agentcore:region:account:memory/MEMORY_ID
+                if memory_arn and 'memory/' in memory_arn:
+                    memory_id = memory_arn.split('memory/')[-1]
+
+        # Save memory ID to session state
+        if memory_id != 'Not configured':
+            st.session_state.harness_memory_id = memory_id
+
+        return {
+            'harnessId': harness_details.get('harnessId', 'N/A'),
+            'harnessName': harness_details.get('harnessName', 'N/A'),
+            'status': harness_details.get('status', 'N/A'),
+            'memoryId': memory_id,
+            'memoryArn': memory_arn or 'N/A',
+            'maxIterations': harness_details.get('maxIterations', 'N/A'),
+            'timeoutSeconds': harness_details.get('timeoutSeconds', 'N/A'),
+            'createdAt': harness_details.get('createdAt', 'N/A'),
+            'updatedAt': harness_details.get('updatedAt', 'N/A'),
+            'description': harness_details.get('description', 'No description'),
+            'full_response': harness_details
+        }
+    except ClientError as e:
+        logger.error(f"Error getting harness details: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error getting harness details: {e}")
+        return None
+
+def list_memory_events(memory_id, session_id, actor_id, include_payloads=True, max_results=50):
+    """List memory events for the given memory ID (sessionId and actorId are required)"""
+    try:
+        params = {
+            'memoryId': memory_id,
+            'sessionId': session_id,
+            'actorId': actor_id,
+            'includePayloads': include_payloads,
+            'maxResults': max_results
+        }
+
+        response = bedrock_agentcore.list_events(**params)
+
+        events = response.get('events', [])
+        next_token = response.get('nextToken')
+
+        return {
+            'events': events,
+            'nextToken': next_token,
+            'count': len(events)
+        }
+    except ClientError as e:
+        logger.error(f"Error listing memory events: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error listing memory events: {e}")
+        return None
+
+# Initialize session state for harness ARN and memory ID
 if "selected_harness_arn" not in st.session_state:
     st.session_state.selected_harness_arn = None
+if "harness_memory_id" not in st.session_state:
+    st.session_state.harness_memory_id = None
 
 # Sidebar configuration
 with st.sidebar:
@@ -120,6 +193,30 @@ with st.sidebar:
                     st.session_state.selected_harness_arn = current_harness_arn
                     logger.info(f"Harness selected: {current_harness_arn}")
                     st.rerun()
+
+            # Button to show detailed information
+            if st.button("📋 Show Details", width='stretch', type="secondary", key=f"details_{selected_harness['id']}"):
+                with st.spinner("Loading harness details..."):
+                    details = get_harness_details(selected_harness['id'])
+
+                    if details:
+                        st.markdown("---")
+                        st.markdown("**Detailed Information:**")
+                        st.caption(f"**Memory ID:** `{details['memoryId']}`")
+                        st.caption(f"**Memory ARN:** `{details['memoryArn']}`")
+                        st.caption(f"**Status:** {details['status']}")
+                        st.caption(f"**Max Iterations:** {details['maxIterations']}")
+                        st.caption(f"**Timeout:** {details['timeoutSeconds']}s")
+                        st.caption(f"**Created:** {details['createdAt']}")
+                        st.caption(f"**Updated:** {details['updatedAt']}")
+                        if details['description'] != 'No description':
+                            st.caption(f"**Description:** {details['description']}")
+
+                        # Show full response in expander
+                        with st.expander("🔍 View Full Response"):
+                            st.json(details['full_response'])
+                    else:
+                        st.error("Failed to load harness details")
 
         # Refresh button for harness list
         if st.button("🔄 Refresh List", width='stretch', type="secondary"):
@@ -220,6 +317,16 @@ with right_sidebar_col:
         st.session_state.harness_messages = []
         st.rerun()
 
+    # Memory events button
+    if st.session_state.harness_memory_id:
+        st.divider()
+        st.markdown("##### Memory")
+        st.caption(f"Memory ID: `{st.session_state.harness_memory_id}`")
+
+        if st.button("📜 View Memory Events", width='stretch', type="secondary"):
+            st.session_state.show_memory_events = True
+            st.rerun()
+
 # Process user input
 if prompt:
     # Add user message to history
@@ -317,4 +424,245 @@ if prompt:
             logger.error(error_message)
             st.error(f"❌ {error_message}")
 
+# Memory Events Dialog
+if st.session_state.get('show_memory_events', False):
+    @st.dialog("Memory Events", width="large")
+    def show_memory_events_dialog():
+        st.markdown("##### Memory Events")
 
+        # Show current context
+        st.caption(f"**Memory ID:** `{st.session_state.harness_memory_id}`")
+        st.caption(f"**Session ID:** `{st.session_state.harness_session_id}`")
+        st.caption(f"**Actor ID:** `{st.session_state.harness_user_id}`")
+
+        st.divider()
+
+        # Options
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            include_payloads = st.checkbox("Include Payloads", value=True)
+        with col2:
+            skip_unknown = st.checkbox("Skip Unknown Role", value=True)
+        with col3:
+            max_results = st.slider("Max Results", min_value=10, max_value=100, value=50, step=10)
+
+        if st.button("🔍 Load Events", type="primary"):
+            with st.spinner("Loading memory events..."):
+                result = list_memory_events(
+                    memory_id=st.session_state.harness_memory_id,
+                    session_id=st.session_state.harness_session_id,
+                    actor_id=st.session_state.harness_user_id,
+                    include_payloads=include_payloads,
+                    max_results=max_results
+                )
+
+                if result:
+                    st.success(f"✅ Loaded {result['count']} events")
+
+                    if result['nextToken']:
+                        st.info(f"More events available. Use nextToken: `{result['nextToken']}`")
+
+                    # Display events (reversed to show earliest first)
+                    if result['events']:
+                        for idx, event in enumerate(reversed(result['events']), 1):
+                            # Extract key information
+                            event_id = event.get('eventId', 'N/A')
+                            timestamp = event.get('eventTimestamp', 'N/A')
+                            payloads = event.get('payload', [])
+                            branch = event.get('branch', {})
+                            metadata = event.get('metadata', {})
+
+                            # Determine event type and role from payload
+                            event_type = 'EVENT'
+                            role_display = None
+                            content_preview = ''
+
+                            if payloads and len(payloads) > 0:
+                                first_payload = payloads[0]
+                                if 'conversational' in first_payload:
+                                    conv = first_payload['conversational']
+
+                                    # Extract content.text which contains JSON string
+                                    content = conv.get('content', {})
+                                    text_field = content.get('text', '')
+
+                                    # Parse the JSON string to get message details
+                                    try:
+                                        message_data = json.loads(text_field)
+                                        message = message_data.get('message', {})
+                                        role = message.get('role', 'UNKNOWN').upper()
+                                        role_display = role
+                                        event_type = 'CONVERSATIONAL'
+
+                                        # Extract text from content array
+                                        content_array = message.get('content', [])
+                                        text = ''
+                                        if content_array and len(content_array) > 0:
+                                            if isinstance(content_array[0], dict) and 'text' in content_array[0]:
+                                                text = content_array[0]['text']
+                                        content_preview = text[:80] + ('...' if len(text) > 80 else '')
+                                    except (json.JSONDecodeError, TypeError):
+                                        # Fallback if not JSON or parsing fails
+                                        role_display = 'UNKNOWN'
+                                        event_type = 'CONVERSATIONAL'
+                                        text = text_field
+                                        content_preview = text[:80] + ('...' if len(text) > 80 else '')
+                                elif 'blob' in first_payload:
+                                    event_type = 'BLOB'
+                                    content_preview = str(first_payload['blob'])[:50]
+
+                            # Skip unknown role if option is enabled
+                            if skip_unknown and (role_display == 'UNKNOWN' or role_display is None):
+                                continue
+
+                            # Create expander with meaningful title
+                            if role_display:
+                                # Use emoji for USER/ASSISTANT
+                                if role_display == 'USER':
+                                    title = f"👤 {idx}. USER"
+                                elif role_display == 'ASSISTANT':
+                                    title = f"🤖 {idx}. ASSISTANT"
+                                elif role_display == 'TOOL':
+                                    title = f"🔧 {idx}. TOOL"
+                                else:
+                                    title = f"📝 {idx}. {role_display}"
+                            else:
+                                title = f"📄 {idx}. {event_type}"
+
+                            if timestamp != 'N/A':
+                                if isinstance(timestamp, str):
+                                    title += f" - {timestamp}"
+                                else:
+                                    title += f" - {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+                            if content_preview:
+                                title += f"\n{content_preview}"
+
+                            with st.expander(title, expanded=(idx == 1)):
+                                # Display payload prominently at the top
+                                if payloads:
+                                    for pidx, payload in enumerate(payloads):
+                                        if 'conversational' in payload:
+                                            conv = payload['conversational']
+
+                                            # Extract content.text which contains JSON string
+                                            content = conv.get('content', {})
+                                            text_field = content.get('text', '')
+
+                                            # Parse the JSON string to get message details
+                                            try:
+                                                message_data = json.loads(text_field)
+                                                message = message_data.get('message', {})
+                                                role = message.get('role', 'unknown').upper()
+
+                                                # Extract text from content array
+                                                content_array = message.get('content', [])
+                                                text = ''
+                                                if content_array and len(content_array) > 0:
+                                                    if isinstance(content_array[0], dict) and 'text' in content_array[0]:
+                                                        text = content_array[0]['text']
+
+                                                # Extract metadata from message_data top level
+                                                message_id = message_data.get('message_id', 'N/A')
+                                                created_at = message_data.get('created_at', 'N/A')
+                                                updated_at = message_data.get('updated_at', 'N/A')
+
+                                                # Extract metadata (usage and metrics) from message object (not message_data)
+                                                metadata_obj = message.get('metadata', {})
+                                                usage = metadata_obj.get('usage', {})
+                                                metrics = metadata_obj.get('metrics', {})
+                                            except (json.JSONDecodeError, TypeError):
+                                                # Fallback if not JSON or parsing fails
+                                                role = 'UNKNOWN'
+                                                text = text_field
+                                                message_id = 'N/A'
+                                                created_at = 'N/A'
+                                                updated_at = 'N/A'
+                                                usage = {}
+                                                metrics = {}
+
+                                            # Color-coded role badge
+                                            if role == 'USER':
+                                                st.markdown("### 👤 USER")
+                                            elif role == 'ASSISTANT':
+                                                st.markdown("### 🤖 ASSISTANT")
+                                            elif role == 'TOOL':
+                                                st.markdown("### 🔧 TOOL")
+                                            else:
+                                                st.markdown(f"### 📝 {role}")
+
+                                            # Display message in a nice container
+                                            with st.container(border=True):
+                                                st.markdown(text)
+
+                                            # Show message metadata and metrics
+                                            if role == 'ASSISTANT':
+                                                # Display metrics in columns for assistant messages
+                                                metric_col1, metric_col2, metric_col3 = st.columns(3)
+
+                                                with metric_col1:
+                                                    if usage and any(usage.values()):
+                                                        input_tokens = usage.get('inputTokens', 0)
+                                                        output_tokens = usage.get('outputTokens', 0)
+                                                        total_tokens = usage.get('totalTokens', 0)
+                                                        st.caption(f"🔢 **Tokens:** In={input_tokens} | Out={output_tokens} | Total={total_tokens}")
+
+                                                with metric_col2:
+                                                    if metrics and any(metrics.values()):
+                                                        latency = metrics.get('latencyMs', 0)
+                                                        ttfb = metrics.get('timeToFirstByteMs', 0)
+                                                        st.caption(f"⏱️ **Latency:** {latency}ms | TTFB={ttfb}ms")
+
+                                                with metric_col3:
+                                                    if message_id != 'N/A':
+                                                        st.caption(f"🆔 Msg ID: {message_id}")
+                                            elif message_id != 'N/A':
+                                                st.caption(f"Message ID: {message_id} | Created: {created_at}")
+
+                                        elif 'blob' in payload:
+                                            st.markdown("### 📦 BLOB Data")
+                                            with st.container(border=True):
+                                                st.code(str(payload['blob']))
+
+                                st.divider()
+
+                                # Metadata section
+                                col1, col2 = st.columns(2)
+
+                                with col1:
+                                    st.markdown("**Event Details:**")
+                                    st.caption(f"Event ID: `{event_id}`")
+                                    st.caption(f"Timestamp: {timestamp}")
+
+                                with col2:
+                                    if branch:
+                                        st.markdown("**Branch:**")
+                                        st.caption(f"Name: {branch.get('name', 'N/A')}")
+                                        if branch.get('rootEventId'):
+                                            st.caption(f"Root: `{branch['rootEventId'][:12]}...`")
+
+                                # Display metadata if present
+                                if metadata:
+                                    st.markdown("**Metadata:**")
+                                    metadata_display = {}
+                                    for key, value in metadata.items():
+                                        if isinstance(value, dict) and 'stringValue' in value:
+                                            metadata_display[key] = value['stringValue']
+                                        else:
+                                            metadata_display[key] = str(value)
+                                    st.json(metadata_display)
+
+                                # Show raw JSON in nested expander
+                                with st.expander("🔍 View Raw JSON"):
+                                    st.json(event)
+                    else:
+                        st.warning("No events found matching the criteria")
+                else:
+                    st.error("Failed to load memory events")
+
+        if st.button("Close"):
+            st.session_state.show_memory_events = False
+            st.rerun()
+
+    show_memory_events_dialog()
