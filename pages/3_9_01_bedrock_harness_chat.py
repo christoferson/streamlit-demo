@@ -25,44 +25,34 @@ st.set_page_config(
 
 st.markdown("## 🤖 :blue[Bedrock Agent Harness Chat]")
 
-# Initialize Bedrock AgentCore clients
-bedrock_agentcore = boto3.client('bedrock-agentcore', region_name=AWS_REGION)
-bedrock_agentcore_control = boto3.client('bedrock-agentcore-control', region_name=AWS_REGION)
 
-# Function to list harnesses
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def list_harnesses():
+# ============================================================================
+# API Client Methods
+# ============================================================================
+
+def list_harnesses(bedrock_agentcore_control):
     """List all available harnesses in the account"""
     try:
         response = bedrock_agentcore_control.list_harnesses()
         harnesses = response.get('harnesses', [])
 
-        # Extract harness info
         harness_list = []
         for harness in harnesses:
-            harness_arn = harness.get('arn', '')
-            harness_name = harness.get('harnessName', 'Unknown')
-            harness_id = harness.get('harnessId', '')
-            status = harness.get('status', 'Unknown')
-
-            # Include all harnesses (user can see status)
             harness_list.append({
-                'arn': harness_arn,
-                'name': harness_name,
-                'id': harness_id,
-                'status': status,
-                'display': f"{harness_name} ({harness_id}) - {status}"
+                'arn': harness.get('arn', ''),
+                'name': harness.get('harnessName', 'Unknown'),
+                'id': harness.get('harnessId', ''),
+                'status': harness.get('status', 'Unknown'),
+                'display': f"{harness.get('harnessName', 'Unknown')} ({harness.get('harnessId', '')}) - {harness.get('status', 'Unknown')}"
             })
 
         return harness_list
-    except ClientError as e:
+    except (ClientError, Exception) as e:
         logger.error(f"Error listing harnesses: {e}")
         return []
-    except Exception as e:
-        logger.error(f"Unexpected error listing harnesses: {e}")
-        return []
 
-def get_harness_details(harness_id):
+
+def get_harness_details(bedrock_agentcore_control, harness_id):
     """Get detailed information about a harness including memory ID"""
     try:
         response = bedrock_agentcore_control.get_harness(harnessId=harness_id)
@@ -77,13 +67,8 @@ def get_harness_details(harness_id):
             managed_memory = memory_config.get('managedMemoryConfiguration', {})
             if managed_memory:
                 memory_arn = managed_memory.get('arn', '')
-                # Extract memory ID from ARN: arn:aws:bedrock-agentcore:region:account:memory/MEMORY_ID
                 if memory_arn and 'memory/' in memory_arn:
                     memory_id = memory_arn.split('memory/')[-1]
-
-        # Save memory ID to session state
-        if memory_id != 'Not configured':
-            st.session_state.harness_memory_id = memory_id
 
         return {
             'harnessId': harness_details.get('harnessId', 'N/A'),
@@ -98,66 +83,552 @@ def get_harness_details(harness_id):
             'description': harness_details.get('description', 'No description'),
             'full_response': harness_details
         }
-    except ClientError as e:
+    except (ClientError, Exception) as e:
         logger.error(f"Error getting harness details: {e}")
         return None
-    except Exception as e:
-        logger.error(f"Unexpected error getting harness details: {e}")
-        return None
 
-def list_memory_events(memory_id, session_id, actor_id, include_payloads=True, max_results=50):
-    """List memory events for the given memory ID (sessionId and actorId are required)"""
+
+def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, include_payloads=True, max_results=50):
+    """List memory events for the given memory ID"""
     try:
-        params = {
-            'memoryId': memory_id,
-            'sessionId': session_id,
-            'actorId': actor_id,
-            'includePayloads': include_payloads,
-            'maxResults': max_results
-        }
-
-        response = bedrock_agentcore.list_events(**params)
-
-        events = response.get('events', [])
-        next_token = response.get('nextToken')
+        response = bedrock_agentcore.list_events(
+            memoryId=memory_id,
+            sessionId=session_id,
+            actorId=actor_id,
+            includePayloads=include_payloads,
+            maxResults=max_results
+        )
 
         return {
-            'events': events,
-            'nextToken': next_token,
-            'count': len(events)
+            'events': response.get('events', []),
+            'nextToken': response.get('nextToken'),
+            'count': len(response.get('events', []))
         }
-    except ClientError as e:
+    except (ClientError, Exception) as e:
         logger.error(f"Error listing memory events: {e}")
         return None
-    except Exception as e:
-        logger.error(f"Unexpected error listing memory events: {e}")
+
+
+def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages):
+    """Invoke harness with streaming response"""
+    return bedrock_agentcore.invoke_harness(
+        harnessArn=harness_arn,
+        runtimeSessionId=session_id,
+        actorId=actor_id,
+        messages=messages
+    )
+
+
+def end_agent_session(session_id):
+    """End/terminate an agent session"""
+    try:
+        # Use bedrock-agent-runtime client to end session
+        bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=AWS_REGION)
+        bedrock_agent_runtime.end_session(sessionIdentifier=session_id)
+        logger.info(f"Session {session_id} terminated")
+        return True
+    except (ClientError, Exception) as e:
+        logger.warning(f"Error ending session (may already be expired): {e}")
+        return False
+
+
+def list_long_term_memory_events(bedrock_agentcore, memory_id, actor_id, session_id, namespace):
+    """List long-term memory records for a specific actor and namespace"""
+    try:
+        # Format namespace with actor_id and session_id
+        formatted_namespace = namespace.format(actorId=actor_id, sessionId=session_id)
+
+        response = bedrock_agentcore.list_memory_records(
+            memoryId=memory_id,
+            namespace=formatted_namespace
+        )
+        return {
+            'records': response.get('memoryRecords', []),
+            'nextToken': response.get('nextToken'),
+            'count': len(response.get('memoryRecords', []))
+        }
+    except (ClientError, Exception) as e:
+        logger.error(f"Error listing long-term memory events: {e}")
         return None
 
-# Initialize session state for harness ARN and memory ID
+
+def query_long_term_memory(bedrock_agentcore, memory_id, actor_id, session_id, namespace, query_text, max_results=10):
+    """Query/search long-term memory records with a query string"""
+    try:
+        # Format namespace with actor_id and session_id
+        formatted_namespace = namespace.format(actorId=actor_id, sessionId=session_id)
+
+        response = bedrock_agentcore.query_memory(
+            memoryId=memory_id,
+            namespace=formatted_namespace,
+            queryText=query_text,
+            maxResults=max_results
+        )
+        return {
+            'records': response.get('memoryRecords', []),
+            'nextToken': response.get('nextToken'),
+            'count': len(response.get('memoryRecords', []))
+        }
+    except (ClientError, Exception) as e:
+        logger.error(f"Error querying long-term memory: {e}")
+        return None
+
+
+# ============================================================================
+# Parser Methods
+# ============================================================================
+
+def parse_conversational_event(conv_payload):
+    """Parse a conversational payload from memory events"""
+    result = {
+        'role': 'UNKNOWN',
+        'text': '',
+        'message_id': 'N/A',
+        'created_at': 'N/A',
+        'updated_at': 'N/A',
+        'usage': {},
+        'metrics': {}
+    }
+
+    try:
+        content = conv_payload.get('content', {})
+        text_field = content.get('text', '')
+        message_data = json.loads(text_field)
+        message = message_data.get('message', {})
+
+        result['role'] = message.get('role', 'UNKNOWN').upper()
+
+        content_array = message.get('content', [])
+        if content_array and len(content_array) > 0:
+            if isinstance(content_array[0], dict) and 'text' in content_array[0]:
+                result['text'] = content_array[0]['text']
+
+        result['message_id'] = message_data.get('message_id', 'N/A')
+        result['created_at'] = message_data.get('created_at', 'N/A')
+        result['updated_at'] = message_data.get('updated_at', 'N/A')
+
+        metadata_obj = message.get('metadata', {})
+        result['usage'] = metadata_obj.get('usage', {})
+        result['metrics'] = metadata_obj.get('metrics', {})
+
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse conversational event: {e}")
+        result['text'] = text_field if 'text_field' in locals() else ''
+
+    return result
+
+
+def parse_event_payload(event):
+    """Parse an event and extract payload information"""
+    result = {
+        'event_type': 'EVENT',
+        'role': None,
+        'content_preview': '',
+        'parsed_data': None
+    }
+
+    payloads = event.get('payload', [])
+    if not payloads or len(payloads) == 0:
+        return result
+
+    first_payload = payloads[0]
+
+    if 'conversational' in first_payload:
+        conv = first_payload['conversational']
+        result['event_type'] = 'CONVERSATIONAL'
+        parsed = parse_conversational_event(conv)
+        result['role'] = parsed['role']
+        result['parsed_data'] = parsed
+        text = parsed['text']
+        result['content_preview'] = text[:80] + ('...' if len(text) > 80 else '')
+
+    elif 'blob' in first_payload:
+        result['event_type'] = 'BLOB'
+        result['content_preview'] = str(first_payload['blob'])[:50]
+
+    return result
+
+
+def format_event_title(idx, event_info, timestamp):
+    """Format event title for display"""
+    role = event_info['role']
+    event_type = event_info['event_type']
+    content_preview = event_info['content_preview']
+
+    if role:
+        if role == 'USER':
+            title = f"👤 {idx}. USER"
+        elif role == 'ASSISTANT':
+            title = f"🤖 {idx}. ASSISTANT"
+        elif role == 'TOOL':
+            title = f"🔧 {idx}. TOOL"
+        else:
+            title = f"📝 {idx}. {role}"
+    else:
+        title = f"📄 {idx}. {event_type}"
+
+    if timestamp != 'N/A':
+        if isinstance(timestamp, str):
+            title += f" - {timestamp}"
+        else:
+            title += f" - {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+    if content_preview:
+        title += f"\n{content_preview}"
+
+    return title
+
+
+# ============================================================================
+# UI Render Methods
+# ============================================================================
+
+def render_harness_details_dialog(harness_details):
+    """Render harness details in a dialog"""
+    if harness_details:
+        st.subheader("Harness Details")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Basic Information:**")
+            st.caption(f"ID: `{harness_details['harnessId']}`")
+            st.caption(f"Name: {harness_details['harnessName']}")
+            st.caption(f"Status: {harness_details['status']}")
+
+        with col2:
+            st.markdown("**Configuration:**")
+            st.caption(f"Max Iterations: {harness_details['maxIterations']}")
+            st.caption(f"Timeout: {harness_details['timeoutSeconds']}s")
+
+        st.markdown("**Memory Configuration:**")
+        st.caption(f"Memory ID: `{harness_details['memoryId']}`")
+
+        if harness_details.get('description') != 'No description':
+            st.markdown("**Description:**")
+            st.info(harness_details['description'])
+
+        st.markdown("**Timestamps:**")
+        st.caption(f"Created: {harness_details['createdAt']}")
+        st.caption(f"Updated: {harness_details['updatedAt']}")
+
+        with st.expander("📄 Full Response", expanded=False):
+            st.json(harness_details['full_response'])
+    else:
+        st.error("Failed to load harness details")
+
+
+def render_conversational_payload(parsed_data):
+    """Render a parsed conversational payload"""
+    role = parsed_data['role']
+    text = parsed_data['text']
+    message_id = parsed_data['message_id']
+    created_at = parsed_data['created_at']
+    usage = parsed_data['usage']
+    metrics = parsed_data['metrics']
+
+    if role == 'USER':
+        st.markdown("### 👤 USER")
+    elif role == 'ASSISTANT':
+        st.markdown("### 🤖 ASSISTANT")
+    elif role == 'TOOL':
+        st.markdown("### 🔧 TOOL")
+    else:
+        st.markdown(f"### 📝 {role}")
+
+    with st.container(border=True):
+        st.markdown(text)
+
+    if role == 'ASSISTANT':
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
+
+        with metric_col1:
+            if usage and any(usage.values()):
+                input_tokens = usage.get('inputTokens', 0)
+                output_tokens = usage.get('outputTokens', 0)
+                total_tokens = usage.get('totalTokens', 0)
+                st.caption(f"🔢 **Tokens:** In={input_tokens} | Out={output_tokens} | Total={total_tokens}")
+
+        with metric_col2:
+            if metrics and any(metrics.values()):
+                latency = metrics.get('latencyMs', 0)
+                ttfb = metrics.get('timeToFirstByteMs', 0)
+                st.caption(f"⏱️ **Latency:** {latency}ms | TTFB={ttfb}ms")
+
+        with metric_col3:
+            if message_id != 'N/A':
+                st.caption(f"🆔 Msg ID: {message_id}")
+    elif message_id != 'N/A':
+        st.caption(f"Message ID: {message_id} | Created: {created_at}")
+
+
+def render_memory_event(idx, event, skip_unknown=True):
+    """Render a single memory event. Returns True if rendered, False if skipped"""
+    event_id = event.get('eventId', 'N/A')
+    timestamp = event.get('eventTimestamp', 'N/A')
+    payloads = event.get('payload', [])
+    branch = event.get('branch', {})
+    metadata = event.get('metadata', {})
+
+    event_info = parse_event_payload(event)
+    role = event_info['role']
+
+    if skip_unknown and (role == 'UNKNOWN' or role is None):
+        return False
+
+    title = format_event_title(idx, event_info, timestamp)
+
+    with st.expander(title, expanded=(idx == 1)):
+        if payloads:
+            for pidx, payload in enumerate(payloads):
+                if 'conversational' in payload:
+                    parsed = event_info['parsed_data']
+                    render_conversational_payload(parsed)
+                elif 'blob' in payload:
+                    st.markdown("### 📦 BLOB Data")
+                    with st.container(border=True):
+                        st.code(str(payload['blob']))
+
+        st.divider()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Event Details:**")
+            st.caption(f"Event ID: `{event_id}`")
+            st.caption(f"Timestamp: {timestamp}")
+
+        with col2:
+            if branch:
+                st.markdown("**Branch:**")
+                st.caption(f"Name: {branch.get('name', 'N/A')}")
+                if branch.get('rootEventId'):
+                    st.caption(f"Root: `{branch['rootEventId'][:12]}...`")
+
+        if metadata:
+            with st.expander("🔍 Event Metadata", expanded=False):
+                st.json(metadata)
+
+    return True
+
+
+def render_memory_events_dialog(list_memory_events_fn, memory_id, session_id, actor_id):
+    """Render memory events dialog"""
+    st.subheader("Memory Events")
+
+    with st.container(border=True):
+        st.caption(f"**Memory ID:** `{memory_id}`")
+        st.caption(f"**Session ID:** `{session_id}`")
+        st.caption(f"**Actor ID:** `{actor_id}`")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        include_payloads = st.checkbox("Include Payloads", value=True)
+    with col2:
+        skip_unknown = st.checkbox("Skip Unknown Role", value=True)
+    with col3:
+        max_results = st.slider("Max Results", min_value=10, max_value=100, value=50, step=10)
+
+    if st.button("🔍 Load Events", type="primary"):
+        with st.spinner("Loading memory events..."):
+            result = list_memory_events_fn(
+                memory_id=memory_id,
+                session_id=session_id,
+                actor_id=actor_id,
+                include_payloads=include_payloads,
+                max_results=max_results
+            )
+
+            if result:
+                st.success(f"✅ Loaded {result['count']} events")
+
+                if result['nextToken']:
+                    st.info(f"More events available. Use nextToken: `{result['nextToken']}`")
+
+                if result['events']:
+                    rendered_count = 0
+                    for idx, event in enumerate(reversed(result['events']), 1):
+                        if render_memory_event(idx, event, skip_unknown):
+                            rendered_count += 1
+
+                    if rendered_count == 0:
+                        st.info("No events to display (all filtered out)")
+                else:
+                    st.info("No events found")
+            else:
+                st.error("Failed to load memory events")
+
+
+def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_memory_fn, memory_id, actor_id, session_id):
+    """Render long-term memory records dialog"""
+    st.subheader("Long-Term Memory Events")
+
+    with st.container(border=True):
+        st.caption(f"**Memory ID:** `{memory_id}`")
+        st.caption(f"**Actor ID:** `{actor_id}`")
+        st.caption(f"**Session ID:** `{session_id}`")
+
+    # Built-in namespace options (with default managed harness namespaces)
+    namespace_options = {
+        "Semantic Facts (Default)": "/actors/{actorId}/semantic",
+        "Session Summaries (Default)": "/actors/{actorId}/{sessionId}/summary",
+        "Facts (Common Pattern)": "/app/{actorId}/facts",
+        "Preferences (Common Pattern)": "/app/{actorId}/preferences",
+        "Summaries (Common Pattern)": "/summaries/{actorId}",
+        "Episodic (Common Pattern)": "/episodic/{actorId}",
+        "Custom Namespace": "custom"
+    }
+
+    selected_namespace_type = st.selectbox(
+        "Namespace Type",
+        options=list(namespace_options.keys()),
+        index=0,
+        help="Select the type of long-term memory to view"
+    )
+
+    namespace = namespace_options[selected_namespace_type]
+
+    # Allow custom namespace input
+    if selected_namespace_type == "Custom Namespace":
+        namespace = st.text_input(
+            "Custom Namespace Path",
+            value="/actors/{actorId}/custom",
+            help="Use {actorId} and {sessionId} placeholders for dynamic substitution"
+        )
+    else:
+        st.caption(f"**Namespace:** `{namespace}`")
+
+    # Search or List tabs
+    tab1, tab2 = st.tabs(["📚 List All", "🔍 Search"])
+
+    with tab1:
+        if st.button("📚 Load All Records", type="primary", key="load_all"):
+            with st.spinner("Loading long-term memory events..."):
+                result = list_long_term_memory_fn(
+                    memory_id=memory_id,
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    namespace=namespace
+                )
+
+                _render_memory_records_result(result)
+
+    with tab2:
+        query_text = st.text_input(
+            "Search Query",
+            placeholder="Enter search keywords...",
+            help="Search for specific content in long-term memory"
+        )
+
+        max_results = st.slider("Max Results", min_value=5, max_value=50, value=10, step=5)
+
+        if st.button("🔍 Search", type="primary", key="search", disabled=not query_text):
+            with st.spinner(f"Searching for '{query_text}'..."):
+                result = query_long_term_memory_fn(
+                    memory_id=memory_id,
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    namespace=namespace,
+                    query_text=query_text,
+                    max_results=max_results
+                )
+
+                _render_memory_records_result(result)
+
+
+def _render_memory_records_result(result):
+    """Helper to render memory records result"""
+    if result:
+        st.success(f"✅ Found {result['count']} memory records")
+
+        if result['nextToken']:
+            st.info(f"More records available. Use nextToken: `{result['nextToken']}`")
+
+        if result['records']:
+            for idx, record in enumerate(result['records'], 1):
+                with st.expander(f"📝 {idx}. Memory Record", expanded=(idx == 1)):
+                    payload = record.get('payload', {})
+                    text = payload.get('text', 'N/A')
+
+                    with st.container(border=True):
+                        st.markdown(text)
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        relevance_score = record.get('relevanceScore', 'N/A')
+                        if relevance_score != 'N/A':
+                            st.caption(f"**Relevance Score:** {relevance_score:.4f}")
+
+                    with col2:
+                        record_id = record.get('memoryRecordId', 'N/A')
+                        if record_id != 'N/A':
+                            st.caption(f"**Record ID:** `{record_id}`")
+
+                    with st.expander("🔍 View Raw Record"):
+                        st.json(record)
+        else:
+            st.info("No memory records found")
+    else:
+        st.error("Failed to retrieve memory records")
+
+
+def render_session_info_panel(session_id, actor_id, memory_id):
+    """Render session information panel in sidebar"""
+    st.divider()
+    st.subheader("📊 Session Info")
+
+    with st.container(border=True):
+        st.caption(f"**Session ID:** `{session_id}`")
+        st.caption(f"**Actor ID:** `{actor_id}`")
+        if memory_id:
+            st.caption(f"**Memory ID:** `{memory_id}`")
+
+
+# ============================================================================
+# Main Application
+# ============================================================================
+
+# Initialize Bedrock AgentCore clients
+bedrock_agentcore = boto3.client('bedrock-agentcore', region_name=AWS_REGION)
+bedrock_agentcore_control = boto3.client('bedrock-agentcore-control', region_name=AWS_REGION)
+
+# Cached wrapper for list_harnesses
+@st.cache_data(ttl=300)
+def list_harnesses_cached():
+    """List all available harnesses in the account (cached for 5 minutes)"""
+    return list_harnesses(bedrock_agentcore_control)
+
+# Initialize session state
 if "selected_harness_arn" not in st.session_state:
     st.session_state.selected_harness_arn = None
 if "harness_memory_id" not in st.session_state:
     st.session_state.harness_memory_id = None
+if "harness_session_id" not in st.session_state:
+    st.session_state.harness_session_id = str(uuid.uuid4())
+if "harness_user_id" not in st.session_state:
+    st.session_state.harness_user_id = "default-user"
+if "harness_messages" not in st.session_state:
+    st.session_state.harness_messages = []
+if "latest_tool_use" not in st.session_state:
+    st.session_state.latest_tool_use = []
 
 # Sidebar configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
 
-    # List and select harness
     with st.spinner("Loading harnesses..."):
-        available_harnesses = list_harnesses()
+        available_harnesses = list_harnesses_cached()
 
     if available_harnesses:
-        # Create selectbox options
         harness_options = {h['display']: h['arn'] for h in available_harnesses}
 
-        # Auto-select first harness if none selected
         if st.session_state.selected_harness_arn is None:
             first_arn = list(harness_options.values())[0]
             st.session_state.selected_harness_arn = first_arn
             logger.info(f"Auto-initialized harness to first available: {first_arn}")
 
-        # Find the display name for the selected ARN
         selected_index = 0
         for idx, (display, arn) in enumerate(harness_options.items()):
             if arn == st.session_state.selected_harness_arn:
@@ -172,497 +643,212 @@ with st.sidebar:
             key="harness_selectbox"
         )
 
-        # Get the ARN for the displayed harness
         current_harness_arn = harness_options[selected_display]
 
-        # Show harness details
         selected_harness = next(h for h in available_harnesses if h['display'] == selected_display)
         with st.container(border=True):
             st.caption(f"**Name:** {selected_harness['name']}")
             st.caption(f"**ID:** {selected_harness['id']}")
-            #st.caption(f"**Status:** {selected_harness['status']}")
             st.caption(f"**ARN:** `{selected_harness['arn']}`")
 
-            # Show current selection status
             is_selected = st.session_state.selected_harness_arn == current_harness_arn
 
             if is_selected:
                 st.success("✓ Active")
             else:
-                if st.button("Select This Harness", width='stretch', type="primary"):
+                if st.button("Select This Harness", use_container_width=True, type="primary"):
                     st.session_state.selected_harness_arn = current_harness_arn
                     logger.info(f"Harness selected: {current_harness_arn}")
                     st.rerun()
 
-            # Button to show detailed information
-            if st.button("📋 Show Details", width='stretch', type="secondary", key=f"details_{selected_harness['id']}"):
+            if st.button("📋 Show Details", use_container_width=True, type="secondary", key=f"details_{selected_harness['id']}"):
                 with st.spinner("Loading harness details..."):
-                    details = get_harness_details(selected_harness['id'])
+                    details = get_harness_details(bedrock_agentcore_control, selected_harness['id'])
+                    if details and details['memoryId'] != 'Not configured':
+                        st.session_state.harness_memory_id = details['memoryId']
 
-                    if details:
-                        st.markdown("---")
-                        st.markdown("**Detailed Information:**")
-                        st.caption(f"**Memory ID:** `{details['memoryId']}`")
-                        st.caption(f"**Memory ARN:** `{details['memoryArn']}`")
-                        st.caption(f"**Status:** {details['status']}")
-                        st.caption(f"**Max Iterations:** {details['maxIterations']}")
-                        st.caption(f"**Timeout:** {details['timeoutSeconds']}s")
-                        st.caption(f"**Created:** {details['createdAt']}")
-                        st.caption(f"**Updated:** {details['updatedAt']}")
-                        if details['description'] != 'No description':
-                            st.caption(f"**Description:** {details['description']}")
+                @st.dialog("Harness Details", width="large")
+                def show_details_dialog():
+                    render_harness_details_dialog(details)
 
-                        # Show full response in expander
-                        with st.expander("🔍 View Full Response"):
-                            st.json(details['full_response'])
-                    else:
-                        st.error("Failed to load harness details")
+                show_details_dialog()
 
-        # Refresh button for harness list
-        if st.button("🔄 Refresh List", width='stretch', type="secondary"):
-            st.cache_data.clear()
-            st.rerun()
+            if st.session_state.harness_memory_id:
+                if st.button("📜 View Memory Events", use_container_width=True, type="secondary"):
+                    @st.dialog("Memory Events", width="large")
+                    def show_memory_events_dialog():
+                        def list_events_wrapper(**kwargs):
+                            return list_memory_events(bedrock_agentcore, **kwargs)
+
+                        render_memory_events_dialog(
+                            list_events_wrapper,
+                            st.session_state.harness_memory_id,
+                            st.session_state.harness_session_id,
+                            st.session_state.harness_user_id
+                        )
+
+                    show_memory_events_dialog()
+
+                if st.button("📚 View Long-Term Memory", use_container_width=True, type="secondary"):
+                    @st.dialog("Long-Term Memory Events", width="large")
+                    def show_long_term_memory_dialog():
+                        def list_long_term_memory_wrapper(**kwargs):
+                            return list_long_term_memory_events(bedrock_agentcore, **kwargs)
+
+                        def query_long_term_memory_wrapper(**kwargs):
+                            return query_long_term_memory(bedrock_agentcore, **kwargs)
+
+                        render_long_term_memory_dialog(
+                            list_long_term_memory_wrapper,
+                            query_long_term_memory_wrapper,
+                            st.session_state.harness_memory_id,
+                            st.session_state.harness_user_id,
+                            st.session_state.harness_session_id
+                        )
+
+                    show_long_term_memory_dialog()
+
     else:
-        st.error("No harnesses found. Please check your permissions or region.")
-        st.info("Required permission: `bedrock-agentcore-control:ListHarnesses`")
-        st.session_state.selected_harness_arn = None
+        st.warning("No harnesses found in your account")
 
-    st.divider()
-
-    # Session configuration
-    st.subheader("Session Settings")
-
-    # Actor ID input
-    if "harness_user_id" not in st.session_state:
-        st.session_state.harness_user_id = "default-user"
-
-    user_id = st.text_input(
-        "Actor ID",
-        value=st.session_state.harness_user_id,
-        help="Scopes/overrides the memory boundary to this user ID",
-        key="user_id_input"
+    render_session_info_panel(
+        st.session_state.harness_session_id,
+        st.session_state.harness_user_id,
+        st.session_state.harness_memory_id
     )
 
-    # Update session state if user changes the ID
-    if user_id != st.session_state.harness_user_id:
-        st.session_state.harness_user_id = user_id
-
-    if "harness_session_id" not in st.session_state:
-        # Generate a new session ID (minimum 2 characters)
-        st.session_state.harness_session_id = str(uuid.uuid4())
-
-    session_id_display = st.session_state.harness_session_id
-    st.text_input("Runtime Session ID", value=session_id_display, disabled=True)
-
-    if st.button("🔄 New Session", width='stretch'):
-        st.session_state.harness_session_id = str(uuid.uuid4())
-        st.session_state.harness_messages = []
-        st.rerun()
+    # Display latest tool use
+    if st.session_state.latest_tool_use:
+        st.divider()
+        st.subheader("🔧 Latest Tool Use")
+        with st.container(border=True):
+            for idx, tool in enumerate(st.session_state.latest_tool_use, 1):
+                st.caption(f"**{idx}. {tool['name']}**")
+                if tool['id'] != 'N/A':
+                    st.caption(f"ID: `{tool['id']}`")
+                if tool['input']:
+                    with st.expander("View Input"):
+                        try:
+                            st.json(json.loads(tool['input']))
+                        except:
+                            st.code(tool['input'])
 
     st.divider()
+    if st.button("🔄 New Session", use_container_width=True, type="secondary"):
+        # End current session if exists
+        if st.session_state.harness_session_id:
+            with st.spinner("Ending current session..."):
+                success = end_agent_session(st.session_state.harness_session_id)
+                if success:
+                    st.toast("✅ Session ended")
+                else:
+                    st.toast("⚠️ Session may already be expired")
 
-    # Agent parameters
-    st.subheader("Agent Parameters")
-
-    enable_trace = st.checkbox("Enable Trace", value=False, help="Show agent reasoning trace")
-    max_tokens = st.slider("Max Tokens", min_value=100, max_value=4096, value=2048, step=100)
-
-# Initialize session state for messages
-if "harness_messages" not in st.session_state:
-    st.session_state.harness_messages = []
-
-# Create main layout
-main_col, right_sidebar_col = st.columns([3, 1])
+        # Clear messages, tool use, and generate new session ID
+        st.session_state.harness_messages = []
+        st.session_state.latest_tool_use = []
+        st.session_state.harness_session_id = str(uuid.uuid4())
+        st.rerun()
 
 # Main chat area
-with main_col:
-    # Container for chat history
-    chat_container = st.container(height=500)
+if not st.session_state.selected_harness_arn:
+    st.info("👈 Please select a harness from the sidebar to start chatting")
+else:
+    for message in st.session_state.harness_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    with chat_container:
-        for msg in st.session_state.harness_messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+    if prompt := st.chat_input("Type your message here..."):
+        st.session_state.harness_messages.append({"role": "user", "content": prompt})
 
-                # Show trace if available
-                if "trace" in msg and msg["trace"]:
-                    with st.expander("🔍 View Trace"):
-                        st.json(msg["trace"])
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    # Chat input
-    prompt = st.chat_input("Ask the agent...")
+        messages = [{'role': 'user', 'content': [{'text': prompt}]}]
 
-# Right sidebar for session info
-with right_sidebar_col:
-    st.markdown("##### Session Info")
+        with st.chat_message("assistant"):
+            result_area = st.empty()
+            full_response = ""
+            tool_uses = []
 
-    with st.container(border=True):
-        st.metric("Messages", len(st.session_state.harness_messages))
-        st.caption(f"**Actor:** {st.session_state.get('harness_user_id', 'N/A')}")
-
-        if st.session_state.harness_session_id:
-            st.caption(f"Active session")
-        else:
-            st.caption("No active session")
-        st.caption(f"Arn: {st.session_state.selected_harness_arn}")
-
-    st.divider()
-
-    st.markdown("##### Actions")
-
-    if st.button("Clear History",
-                 width='stretch',
-                 type="secondary",
-                 disabled=len(st.session_state.harness_messages) == 0):
-        st.session_state.harness_messages = []
-        st.rerun()
-
-    # Memory events button
-    if st.session_state.harness_memory_id:
-        st.divider()
-        st.markdown("##### Memory")
-        st.caption(f"Memory ID: `{st.session_state.harness_memory_id}`")
-
-        if st.button("📜 View Memory Events", width='stretch', type="secondary"):
-            st.session_state.show_memory_events = True
-            st.rerun()
-
-# Process user input
-if prompt:
-    # Add user message to history
-    st.session_state.harness_messages.append({"role": "user", "content": prompt})
-
-    # Display user message
-    with main_col:
-        with chat_container:
-            st.chat_message("user").write(prompt)
-    # Check if harness is selected
-    if not st.session_state.selected_harness_arn:
-        st.error("Please select a harness first")
-        st.stop()
-
-    logger.info(f"Invoking harness - ARN: {st.session_state.selected_harness_arn} | Session: {st.session_state.harness_session_id} | Actor: {st.session_state.harness_user_id}")
-
-    with st.spinner("Processing..."):
-        try:
-            # Call Bedrock AgentCore invoke_harness
-            response = bedrock_agentcore.invoke_harness(
-                harnessArn=st.session_state.selected_harness_arn,
-                runtimeSessionId=st.session_state.harness_session_id,
-                actorId=st.session_state.harness_user_id,
-                messages=[
-                    {
-                        'role': 'user',
-                        'content': [{'text': prompt}]
-                    }
-                ]
-            )
-
-            # Process streaming response
-            result_text = ""
-            trace_data = []
-
-            event_stream = response.get('stream', [])
-
-            # Create placeholders for streaming
-            with main_col:
-                with chat_container:
-                    with st.chat_message("assistant"):
-                        result_container = st.container(border=True)
-                        result_area = st.empty()
-
-                        for event in event_stream:
-                            # Handle contentBlockDelta events
-                            if 'contentBlockDelta' in event:
-                                delta = event['contentBlockDelta'].get('delta', {})
-                                if 'text' in delta:
-                                    text_chunk = delta['text']
-                                    result_text += text_chunk
-                                    result_area.write(result_text)
-
-                            # Handle messageStop event
-                            elif 'messageStop' in event:
-                                stop_reason = event['messageStop'].get('stopReason', 'end_turn')
-                                if stop_reason != 'end_turn':
-                                    result_container.caption(f"Stop reason: {stop_reason}")
-
-                            # Handle trace events if enabled
-                            elif 'trace' in event and enable_trace:
-                                trace_data.append(event['trace'])
-
-                            # Handle metadata
-                            elif 'metadata' in event:
-                                metadata = event['metadata']
-                                if 'usage' in metadata:
-                                    usage = metadata['usage']
-                                    stats = f"| Input: {usage.get('inputTokens', 0)} | Output: {usage.get('outputTokens', 0)}"
-                                    result_container.caption(stats)
-
-            # Add assistant message to history
-            assistant_message = {
-                "role": "assistant",
-                "content": result_text or "No response received"
-            }
-
-            if trace_data and enable_trace:
-                assistant_message["trace"] = trace_data
-
-            st.session_state.harness_messages.append(assistant_message)
-            st.rerun()
-
-        except ClientError as err:
-            error_message = err.response["Error"]["Message"]
-            logger.error("AWS Client Error: %s", error_message)
-            st.error(f"❌ AWS Error: {error_message}")
-
-            # Show more details in expander
-            with st.expander("Error Details"):
-                st.json(err.response)
-
-        except Exception as e:
-            error_message = f"An error occurred: {str(e)}"
-            logger.error(error_message)
-            st.error(f"❌ {error_message}")
-
-# Memory Events Dialog
-if st.session_state.get('show_memory_events', False):
-    @st.dialog("Memory Events", width="large")
-    def show_memory_events_dialog():
-        st.markdown("##### Memory Events")
-
-        # Show current context
-        st.caption(f"**Memory ID:** `{st.session_state.harness_memory_id}`")
-        st.caption(f"**Session ID:** `{st.session_state.harness_session_id}`")
-        st.caption(f"**Actor ID:** `{st.session_state.harness_user_id}`")
-
-        st.divider()
-
-        # Options
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            include_payloads = st.checkbox("Include Payloads", value=True)
-        with col2:
-            skip_unknown = st.checkbox("Skip Unknown Role", value=True)
-        with col3:
-            max_results = st.slider("Max Results", min_value=10, max_value=100, value=50, step=10)
-
-        if st.button("🔍 Load Events", type="primary"):
-            with st.spinner("Loading memory events..."):
-                result = list_memory_events(
-                    memory_id=st.session_state.harness_memory_id,
-                    session_id=st.session_state.harness_session_id,
-                    actor_id=st.session_state.harness_user_id,
-                    include_payloads=include_payloads,
-                    max_results=max_results
+            try:
+                response = invoke_harness_stream(
+                    bedrock_agentcore,
+                    st.session_state.selected_harness_arn,
+                    st.session_state.harness_session_id,
+                    st.session_state.harness_user_id,
+                    messages
                 )
 
-                if result:
-                    st.success(f"✅ Loaded {result['count']} events")
+                event_stream = response.get('stream', [])
 
-                    if result['nextToken']:
-                        st.info(f"More events available. Use nextToken: `{result['nextToken']}`")
+                for event in event_stream:
+                    # Handle contentBlockStart for tool use
+                    if 'contentBlockStart' in event:
+                        start = event['contentBlockStart'].get('start', {})
+                        if 'toolUse' in start:
+                            tool_use = start['toolUse']
+                            tool_name = tool_use.get('name', 'Unknown')
+                            tool_use_id = tool_use.get('toolUseId', 'N/A')
+                            tool_uses.append({
+                                'name': tool_name,
+                                'id': tool_use_id,
+                                'input': None
+                            })
 
-                    # Display events (reversed to show earliest first)
-                    if result['events']:
-                        for idx, event in enumerate(reversed(result['events']), 1):
-                            # Extract key information
-                            event_id = event.get('eventId', 'N/A')
-                            timestamp = event.get('eventTimestamp', 'N/A')
-                            payloads = event.get('payload', [])
-                            branch = event.get('branch', {})
-                            metadata = event.get('metadata', {})
-
-                            # Determine event type and role from payload
-                            event_type = 'EVENT'
-                            role_display = None
-                            content_preview = ''
-
-                            if payloads and len(payloads) > 0:
-                                first_payload = payloads[0]
-                                if 'conversational' in first_payload:
-                                    conv = first_payload['conversational']
-
-                                    # Extract content.text which contains JSON string
-                                    content = conv.get('content', {})
-                                    text_field = content.get('text', '')
-
-                                    # Parse the JSON string to get message details
-                                    try:
-                                        message_data = json.loads(text_field)
-                                        message = message_data.get('message', {})
-                                        role = message.get('role', 'UNKNOWN').upper()
-                                        role_display = role
-                                        event_type = 'CONVERSATIONAL'
-
-                                        # Extract text from content array
-                                        content_array = message.get('content', [])
-                                        text = ''
-                                        if content_array and len(content_array) > 0:
-                                            if isinstance(content_array[0], dict) and 'text' in content_array[0]:
-                                                text = content_array[0]['text']
-                                        content_preview = text[:80] + ('...' if len(text) > 80 else '')
-                                    except (json.JSONDecodeError, TypeError):
-                                        # Fallback if not JSON or parsing fails
-                                        role_display = 'UNKNOWN'
-                                        event_type = 'CONVERSATIONAL'
-                                        text = text_field
-                                        content_preview = text[:80] + ('...' if len(text) > 80 else '')
-                                elif 'blob' in first_payload:
-                                    event_type = 'BLOB'
-                                    content_preview = str(first_payload['blob'])[:50]
-
-                            # Skip unknown role if option is enabled
-                            if skip_unknown and (role_display == 'UNKNOWN' or role_display is None):
-                                continue
-
-                            # Create expander with meaningful title
-                            if role_display:
-                                # Use emoji for USER/ASSISTANT
-                                if role_display == 'USER':
-                                    title = f"👤 {idx}. USER"
-                                elif role_display == 'ASSISTANT':
-                                    title = f"🤖 {idx}. ASSISTANT"
-                                elif role_display == 'TOOL':
-                                    title = f"🔧 {idx}. TOOL"
+                    # Handle contentBlockDelta events
+                    elif 'contentBlockDelta' in event:
+                        delta = event['contentBlockDelta'].get('delta', {})
+                        if 'text' in delta:
+                            text_chunk = delta['text']
+                            full_response += text_chunk
+                            result_area.markdown(full_response + "▌")
+                        elif 'toolUse' in delta:
+                            # Collect tool input
+                            tool_delta = delta['toolUse']
+                            if 'input' in tool_delta and tool_uses:
+                                if tool_uses[-1]['input'] is None:
+                                    tool_uses[-1]['input'] = tool_delta['input']
                                 else:
-                                    title = f"📝 {idx}. {role_display}"
-                            else:
-                                title = f"📄 {idx}. {event_type}"
+                                    tool_uses[-1]['input'] += tool_delta['input']
 
-                            if timestamp != 'N/A':
-                                if isinstance(timestamp, str):
-                                    title += f" - {timestamp}"
-                                else:
-                                    title += f" - {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+                    # Handle contentBlockStop for tool use
+                    elif 'contentBlockStop' in event:
+                        pass  # Tool use completed
 
-                            if content_preview:
-                                title += f"\n{content_preview}"
+                    # Handle messageStop event
+                    elif 'messageStop' in event:
+                        stop_reason = event['messageStop'].get('stopReason', 'end_turn')
+                        if stop_reason != 'end_turn':
+                            st.caption(f"⚠️ Stop reason: {stop_reason}")
 
-                            with st.expander(title, expanded=(idx == 1)):
-                                # Display payload prominently at the top
-                                if payloads:
-                                    for pidx, payload in enumerate(payloads):
-                                        if 'conversational' in payload:
-                                            conv = payload['conversational']
+                    # Handle metadata
+                    elif 'metadata' in event:
+                        metadata = event['metadata']
+                        if 'usage' in metadata:
+                            usage = metadata['usage']
+                            stats = f"| Input: {usage.get('inputTokens', 0)} | Output: {usage.get('outputTokens', 0)}"
+                            st.caption(stats)
 
-                                            # Extract content.text which contains JSON string
-                                            content = conv.get('content', {})
-                                            text_field = content.get('text', '')
+                # Final update without cursor
+                result_area.markdown(full_response or "No response received")
 
-                                            # Parse the JSON string to get message details
-                                            try:
-                                                message_data = json.loads(text_field)
-                                                message = message_data.get('message', {})
-                                                role = message.get('role', 'unknown').upper()
+                # Store tool use info for latest exchange
+                st.session_state.latest_tool_use = tool_uses
 
-                                                # Extract text from content array
-                                                content_array = message.get('content', [])
-                                                text = ''
-                                                if content_array and len(content_array) > 0:
-                                                    if isinstance(content_array[0], dict) and 'text' in content_array[0]:
-                                                        text = content_array[0]['text']
+                # Add assistant message to history
+                st.session_state.harness_messages.append({
+                    "role": "assistant",
+                    "content": full_response or "No response received"
+                })
 
-                                                # Extract metadata from message_data top level
-                                                message_id = message_data.get('message_id', 'N/A')
-                                                created_at = message_data.get('created_at', 'N/A')
-                                                updated_at = message_data.get('updated_at', 'N/A')
+                st.rerun()
 
-                                                # Extract metadata (usage and metrics) from message object (not message_data)
-                                                metadata_obj = message.get('metadata', {})
-                                                usage = metadata_obj.get('usage', {})
-                                                metrics = metadata_obj.get('metrics', {})
-                                            except (json.JSONDecodeError, TypeError):
-                                                # Fallback if not JSON or parsing fails
-                                                role = 'UNKNOWN'
-                                                text = text_field
-                                                message_id = 'N/A'
-                                                created_at = 'N/A'
-                                                updated_at = 'N/A'
-                                                usage = {}
-                                                metrics = {}
-
-                                            # Color-coded role badge
-                                            if role == 'USER':
-                                                st.markdown("### 👤 USER")
-                                            elif role == 'ASSISTANT':
-                                                st.markdown("### 🤖 ASSISTANT")
-                                            elif role == 'TOOL':
-                                                st.markdown("### 🔧 TOOL")
-                                            else:
-                                                st.markdown(f"### 📝 {role}")
-
-                                            # Display message in a nice container
-                                            with st.container(border=True):
-                                                st.markdown(text)
-
-                                            # Show message metadata and metrics
-                                            if role == 'ASSISTANT':
-                                                # Display metrics in columns for assistant messages
-                                                metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-                                                with metric_col1:
-                                                    if usage and any(usage.values()):
-                                                        input_tokens = usage.get('inputTokens', 0)
-                                                        output_tokens = usage.get('outputTokens', 0)
-                                                        total_tokens = usage.get('totalTokens', 0)
-                                                        st.caption(f"🔢 **Tokens:** In={input_tokens} | Out={output_tokens} | Total={total_tokens}")
-
-                                                with metric_col2:
-                                                    if metrics and any(metrics.values()):
-                                                        latency = metrics.get('latencyMs', 0)
-                                                        ttfb = metrics.get('timeToFirstByteMs', 0)
-                                                        st.caption(f"⏱️ **Latency:** {latency}ms | TTFB={ttfb}ms")
-
-                                                with metric_col3:
-                                                    if message_id != 'N/A':
-                                                        st.caption(f"🆔 Msg ID: {message_id}")
-                                            elif message_id != 'N/A':
-                                                st.caption(f"Message ID: {message_id} | Created: {created_at}")
-
-                                        elif 'blob' in payload:
-                                            st.markdown("### 📦 BLOB Data")
-                                            with st.container(border=True):
-                                                st.code(str(payload['blob']))
-
-                                st.divider()
-
-                                # Metadata section
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-                                    st.markdown("**Event Details:**")
-                                    st.caption(f"Event ID: `{event_id}`")
-                                    st.caption(f"Timestamp: {timestamp}")
-
-                                with col2:
-                                    if branch:
-                                        st.markdown("**Branch:**")
-                                        st.caption(f"Name: {branch.get('name', 'N/A')}")
-                                        if branch.get('rootEventId'):
-                                            st.caption(f"Root: `{branch['rootEventId'][:12]}...`")
-
-                                # Display metadata if present
-                                if metadata:
-                                    st.markdown("**Metadata:**")
-                                    metadata_display = {}
-                                    for key, value in metadata.items():
-                                        if isinstance(value, dict) and 'stringValue' in value:
-                                            metadata_display[key] = value['stringValue']
-                                        else:
-                                            metadata_display[key] = str(value)
-                                    st.json(metadata_display)
-
-                                # Show raw JSON in nested expander
-                                with st.expander("🔍 View Raw JSON"):
-                                    st.json(event)
-                    else:
-                        st.warning("No events found matching the criteria")
-                else:
-                    st.error("Failed to load memory events")
-
-        if st.button("Close"):
-            st.session_state.show_memory_events = False
-            st.rerun()
-
-    show_memory_events_dialog()
+            except ClientError as e:
+                error_message = f"❌ Error: {e.response['Error']['Message']}"
+                logger.error(error_message)
+                st.error(error_message)
+            except Exception as e:
+                error_message = f"❌ Unexpected error: {str(e)}"
+                logger.error(error_message)
+                st.error(error_message)
