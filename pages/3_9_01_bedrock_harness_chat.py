@@ -64,11 +64,18 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
 
         memory_config = harness_details.get('memory', {})
         if memory_config:
-            managed_memory = memory_config.get('managedMemoryConfiguration', {})
-            if managed_memory:
-                memory_arn = managed_memory.get('arn', '')
-                if memory_arn and 'memory/' in memory_arn:
-                    memory_id = memory_arn.split('memory/')[-1]
+            # Try agentCoreMemoryConfiguration first (newer format)
+            agent_core_memory = memory_config.get('agentCoreMemoryConfiguration', {})
+            if agent_core_memory:
+                memory_arn = agent_core_memory.get('arn', '')
+            else:
+                # Fallback to managedMemoryConfiguration (older format)
+                managed_memory = memory_config.get('managedMemoryConfiguration', {})
+                if managed_memory:
+                    memory_arn = managed_memory.get('arn', '')
+
+            if memory_arn and 'memory/' in memory_arn:
+                memory_id = memory_arn.split('memory/')[-1]
 
         return {
             'harnessId': harness_details.get('harnessId', 'N/A'),
@@ -88,16 +95,21 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
         return None
 
 
-def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, include_payloads=True, max_results=50):
+def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, include_payloads=True, max_results=50, next_token=None):
     """List memory events for the given memory ID"""
     try:
-        response = bedrock_agentcore.list_events(
-            memoryId=memory_id,
-            sessionId=session_id,
-            actorId=actor_id,
-            includePayloads=include_payloads,
-            maxResults=max_results
-        )
+        params = {
+            'memoryId': memory_id,
+            'sessionId': session_id,
+            'actorId': actor_id,
+            'includePayloads': include_payloads,
+            'maxResults': max_results
+        }
+
+        if next_token:
+            params['nextToken'] = next_token
+
+        response = bedrock_agentcore.list_events(**params)
 
         return {
             'events': response.get('events', []),
@@ -421,6 +433,12 @@ def render_memory_events_dialog(list_memory_events_fn, memory_id, session_id, ac
         st.caption(f"**Session ID:** `{session_id}`")
         st.caption(f"**Actor ID:** `{actor_id}`")
 
+    # Initialize session state for accumulated events and next token
+    if 'memory_events_accumulated' not in st.session_state:
+        st.session_state.memory_events_accumulated = []
+    if 'memory_events_next_token' not in st.session_state:
+        st.session_state.memory_events_next_token = None
+
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -430,34 +448,63 @@ def render_memory_events_dialog(list_memory_events_fn, memory_id, session_id, ac
     with col3:
         max_results = st.slider("Max Results", min_value=10, max_value=100, value=50, step=10)
 
-    if st.button("🔍 Load Events", type="primary"):
-        with st.spinner("Loading memory events..."):
-            result = list_memory_events_fn(
-                memory_id=memory_id,
-                session_id=session_id,
-                actor_id=actor_id,
-                include_payloads=include_payloads,
-                max_results=max_results
-            )
+    col_btn1, col_btn2 = st.columns(2)
 
-            if result:
-                st.success(f"✅ Loaded {result['count']} events")
+    with col_btn1:
+        if st.button("🔍 Load Events", type="primary", use_container_width=True):
+            with st.spinner("Loading memory events..."):
+                # Clear accumulated events for fresh load
+                st.session_state.memory_events_accumulated = []
+                st.session_state.memory_events_next_token = None
 
-                if result['nextToken']:
-                    st.info(f"More events available. Use nextToken: `{result['nextToken']}`")
+                result = list_memory_events_fn(
+                    memory_id=memory_id,
+                    session_id=session_id,
+                    actor_id=actor_id,
+                    include_payloads=include_payloads,
+                    max_results=max_results
+                )
 
-                if result['events']:
-                    rendered_count = 0
-                    for idx, event in enumerate(reversed(result['events']), 1):
-                        if render_memory_event(idx, event, skip_unknown):
-                            rendered_count += 1
+                if result:
+                    st.session_state.memory_events_accumulated = result['events']
+                    st.session_state.memory_events_next_token = result.get('nextToken')
 
-                    if rendered_count == 0:
-                        st.info("No events to display (all filtered out)")
-                else:
-                    st.info("No events found")
-            else:
-                st.error("Failed to load memory events")
+    with col_btn2:
+        if st.button("📥 Load Next Events",
+                     type="secondary",
+                     use_container_width=True,
+                     disabled=not st.session_state.memory_events_next_token):
+            with st.spinner("Loading more events..."):
+                result = list_memory_events_fn(
+                    memory_id=memory_id,
+                    session_id=session_id,
+                    actor_id=actor_id,
+                    include_payloads=include_payloads,
+                    max_results=max_results,
+                    next_token=st.session_state.memory_events_next_token
+                )
+
+                if result:
+                    # Append new events
+                    st.session_state.memory_events_accumulated.extend(result['events'])
+                    st.session_state.memory_events_next_token = result.get('nextToken')
+
+    # Display accumulated events
+    if st.session_state.memory_events_accumulated:
+        st.success(f"✅ Loaded {len(st.session_state.memory_events_accumulated)} total events")
+
+        if st.session_state.memory_events_next_token:
+            st.info("More events available. Click 'Load Next Events' to continue.")
+
+        rendered_count = 0
+        for idx, event in enumerate(reversed(st.session_state.memory_events_accumulated), 1):
+            if render_memory_event(idx, event, skip_unknown):
+                rendered_count += 1
+
+        if rendered_count == 0:
+            st.info("No events to display (all filtered out)")
+    elif st.session_state.memory_events_accumulated is not None and len(st.session_state.memory_events_accumulated) == 0:
+        st.info("No events found")
 
 
 def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_memory_fn, memory_id, actor_id, session_id):
@@ -576,8 +623,8 @@ def _render_memory_records_result(result):
 
 def render_session_info_panel(session_id, actor_id, memory_id):
     """Render session information panel in sidebar"""
-    st.divider()
-    st.subheader("📊 Session Info")
+    #st.divider()
+    st.markdown("##### Session Info")
 
     with st.container(border=True):
         st.caption(f"**Session ID:** `{session_id}`")
@@ -613,6 +660,8 @@ if "harness_messages" not in st.session_state:
     st.session_state.harness_messages = []
 if "latest_tool_use" not in st.session_state:
     st.session_state.latest_tool_use = []
+if "latest_usage_stats" not in st.session_state:
+    st.session_state.latest_usage_stats = None
 
 # Sidebar configuration
 with st.sidebar:
@@ -664,8 +713,16 @@ with st.sidebar:
             if st.button("📋 Show Details", use_container_width=True, type="secondary", key=f"details_{selected_harness['id']}"):
                 with st.spinner("Loading harness details..."):
                     details = get_harness_details(bedrock_agentcore_control, selected_harness['id'])
-                    if details and details['memoryId'] != 'Not configured':
-                        st.session_state.harness_memory_id = details['memoryId']
+                    logger.info(f"Details fetched: {details}")
+                    if details:
+                        logger.info(f"Memory ID from details: {details['memoryId']}")
+                        if details['memoryId'] != 'Not configured':
+                            st.session_state.harness_memory_id = details['memoryId']
+                            logger.info(f"Memory ID set in session state: {st.session_state.harness_memory_id}")
+                        else:
+                            logger.warning("Memory ID is 'Not configured'")
+                    else:
+                        logger.error("Details is None")
 
                 @st.dialog("Harness Details", width="large")
                 def show_details_dialog():
@@ -673,43 +730,11 @@ with st.sidebar:
 
                 show_details_dialog()
 
-            if st.session_state.harness_memory_id:
-                if st.button("📜 View Memory Events", use_container_width=True, type="secondary"):
-                    @st.dialog("Memory Events", width="large")
-                    def show_memory_events_dialog():
-                        def list_events_wrapper(**kwargs):
-                            return list_memory_events(bedrock_agentcore, **kwargs)
-
-                        render_memory_events_dialog(
-                            list_events_wrapper,
-                            st.session_state.harness_memory_id,
-                            st.session_state.harness_session_id,
-                            st.session_state.harness_user_id
-                        )
-
-                    show_memory_events_dialog()
-
-                if st.button("📚 View Long-Term Memory", use_container_width=True, type="secondary"):
-                    @st.dialog("Long-Term Memory Events", width="large")
-                    def show_long_term_memory_dialog():
-                        def list_long_term_memory_wrapper(**kwargs):
-                            return list_long_term_memory_events(bedrock_agentcore, **kwargs)
-
-                        def query_long_term_memory_wrapper(**kwargs):
-                            return query_long_term_memory(bedrock_agentcore, **kwargs)
-
-                        render_long_term_memory_dialog(
-                            list_long_term_memory_wrapper,
-                            query_long_term_memory_wrapper,
-                            st.session_state.harness_memory_id,
-                            st.session_state.harness_user_id,
-                            st.session_state.harness_session_id
-                        )
-
-                    show_long_term_memory_dialog()
-
     else:
         st.warning("No harnesses found in your account")
+
+    # Debug: Show current memory ID state
+    logger.info(f"Current memory ID state: {st.session_state.get('harness_memory_id', 'Not set')}")
 
     render_session_info_panel(
         st.session_state.harness_session_id,
@@ -717,10 +742,53 @@ with st.sidebar:
         st.session_state.harness_memory_id
     )
 
+    # Memory query buttons (in Session Info region, but need to be after harness selection)
+    if available_harnesses and st.session_state.harness_memory_id:
+        if st.button("📜 View Memory Events", use_container_width=True, type="secondary"):
+            @st.dialog("Memory Events", width="large")
+            def show_memory_events_dialog():
+                def list_events_wrapper(**kwargs):
+                    return list_memory_events(bedrock_agentcore, **kwargs)
+
+                render_memory_events_dialog(
+                    list_events_wrapper,
+                    st.session_state.harness_memory_id,
+                    st.session_state.harness_session_id,
+                    st.session_state.harness_user_id
+                )
+
+            show_memory_events_dialog()
+
+        if st.button("📚 View Long-Term Memory", use_container_width=True, type="secondary"):
+            @st.dialog("Long-Term Memory Events", width="large")
+            def show_long_term_memory_dialog():
+                def list_long_term_memory_wrapper(**kwargs):
+                    return list_long_term_memory_events(bedrock_agentcore, **kwargs)
+
+                def query_long_term_memory_wrapper(**kwargs):
+                    return query_long_term_memory(bedrock_agentcore, **kwargs)
+
+                render_long_term_memory_dialog(
+                    list_long_term_memory_wrapper,
+                    query_long_term_memory_wrapper,
+                    st.session_state.harness_memory_id,
+                    st.session_state.harness_user_id,
+                    st.session_state.harness_session_id
+                )
+
+            show_long_term_memory_dialog()
+
+    # Display latest usage stats
+    if st.session_state.latest_usage_stats:
+        #st.divider()
+        st.markdown("##### Latest Response Stats")
+        usage = st.session_state.latest_usage_stats
+        st.caption(f"In: {usage.get('inputTokens', 0)} | Out: {usage.get('outputTokens', 0)} | Total: {usage.get('totalTokens', 0)}")
+
     # Display latest tool use
     if st.session_state.latest_tool_use:
-        st.divider()
-        st.subheader("🔧 Latest Tool Use")
+        #st.divider()
+        st.markdown("##### Latest Tool Use")
         with st.container(border=True):
             for idx, tool in enumerate(st.session_state.latest_tool_use, 1):
                 st.caption(f"**{idx}. {tool['name']}**")
@@ -744,9 +812,10 @@ with st.sidebar:
                 else:
                     st.toast("⚠️ Session may already be expired")
 
-        # Clear messages, tool use, and generate new session ID
+        # Clear messages, tool use, stats, and generate new session ID
         st.session_state.harness_messages = []
         st.session_state.latest_tool_use = []
+        st.session_state.latest_usage_stats = None
         st.session_state.harness_session_id = str(uuid.uuid4())
         st.rerun()
 
@@ -767,18 +836,21 @@ else:
         messages = [{'role': 'user', 'content': [{'text': prompt}]}]
 
         with st.chat_message("assistant"):
+            status_area = st.empty()
             result_area = st.empty()
             full_response = ""
             tool_uses = []
+            current_tool_input = ""
 
             try:
-                response = invoke_harness_stream(
-                    bedrock_agentcore,
-                    st.session_state.selected_harness_arn,
-                    st.session_state.harness_session_id,
-                    st.session_state.harness_user_id,
-                    messages
-                )
+                with st.spinner("Waiting for response..."):
+                    response = invoke_harness_stream(
+                        bedrock_agentcore,
+                        st.session_state.selected_harness_arn,
+                        st.session_state.harness_session_id,
+                        st.session_state.harness_user_id,
+                        messages
+                    )
 
                 event_stream = response.get('stream', [])
 
@@ -795,6 +867,9 @@ else:
                                 'id': tool_use_id,
                                 'input': None
                             })
+                            current_tool_input = ""
+                            # Show initial status
+                            status_area.caption(f"🔧 Calling **{tool_name}** ...")
 
                     # Handle contentBlockDelta events
                     elif 'contentBlockDelta' in event:
@@ -807,30 +882,48 @@ else:
                             # Collect tool input
                             tool_delta = delta['toolUse']
                             if 'input' in tool_delta and tool_uses:
+                                input_chunk = tool_delta['input']
+                                current_tool_input += input_chunk
                                 if tool_uses[-1]['input'] is None:
-                                    tool_uses[-1]['input'] = tool_delta['input']
+                                    tool_uses[-1]['input'] = input_chunk
                                 else:
-                                    tool_uses[-1]['input'] += tool_delta['input']
+                                    tool_uses[-1]['input'] += input_chunk
+
+                                # Update status with input preview
+                                try:
+                                    input_preview = json.loads(current_tool_input)
+                                    input_str = json.dumps(input_preview, indent=None)
+                                    if len(input_str) > 100:
+                                        input_str = input_str[:100] + "..."
+                                    status_area.caption(f"🔧 Calling **{tool_uses[-1]['name']}** {input_str}")
+                                except:
+                                    # Not valid JSON yet, show what we have
+                                    preview = current_tool_input[:100]
+                                    if len(current_tool_input) > 100:
+                                        preview += "..."
+                                    status_area.caption(f"🔧 Calling **{tool_uses[-1]['name']}** {preview}")
 
                     # Handle contentBlockStop for tool use
                     elif 'contentBlockStop' in event:
-                        pass  # Tool use completed
+                        # Clear status when tool completes
+                        status_area.empty()
 
                     # Handle messageStop event
                     elif 'messageStop' in event:
                         stop_reason = event['messageStop'].get('stopReason', 'end_turn')
-                        if stop_reason != 'end_turn':
-                            st.caption(f"⚠️ Stop reason: {stop_reason}")
+                        if stop_reason == 'tool_use':
+                            # Clear status for tool_use stop
+                            status_area.empty()
 
                     # Handle metadata
                     elif 'metadata' in event:
                         metadata = event['metadata']
                         if 'usage' in metadata:
-                            usage = metadata['usage']
-                            stats = f"| Input: {usage.get('inputTokens', 0)} | Output: {usage.get('outputTokens', 0)}"
-                            st.caption(stats)
+                            # Store usage stats for sidebar display
+                            st.session_state.latest_usage_stats = metadata['usage']
 
-                # Final update without cursor
+                # Clear status and final update without cursor
+                status_area.empty()
                 result_area.markdown(full_response or "No response received")
 
                 # Store tool use info for latest exchange
