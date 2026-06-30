@@ -150,14 +150,22 @@ def list_long_term_memory_events(bedrock_agentcore, memory_id, actor_id, session
         # Format namespace with actor_id and session_id
         formatted_namespace = namespace.format(actorId=actor_id, sessionId=session_id)
 
+        logger.info(f"Listing memory records - Memory ID: {memory_id}, Actor ID: {actor_id}, Namespace: {formatted_namespace}")
+
         response = bedrock_agentcore.list_memory_records(
             memoryId=memory_id,
             namespace=formatted_namespace
         )
+
+        logger.info(f"Response: {response}")
+
+        # API returns 'memoryRecordSummaries' not 'memoryRecords'
+        records = response.get('memoryRecordSummaries', [])
+
         return {
-            'records': response.get('memoryRecords', []),
+            'records': records,
             'nextToken': response.get('nextToken'),
-            'count': len(response.get('memoryRecords', []))
+            'count': len(records)
         }
     except (ClientError, Exception) as e:
         logger.error(f"Error listing long-term memory events: {e}")
@@ -176,10 +184,14 @@ def query_long_term_memory(bedrock_agentcore, memory_id, actor_id, session_id, n
             queryText=query_text,
             maxResults=max_results
         )
+
+        # API returns 'memoryRecordSummaries' not 'memoryRecords'
+        records = response.get('memoryRecordSummaries', [])
+
         return {
-            'records': response.get('memoryRecords', []),
+            'records': records,
             'nextToken': response.get('nextToken'),
-            'count': len(response.get('memoryRecords', []))
+            'count': len(records)
         }
     except (ClientError, Exception) as e:
         logger.error(f"Error querying long-term memory: {e}")
@@ -516,14 +528,15 @@ def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_mem
         st.caption(f"**Actor ID:** `{actor_id}`")
         st.caption(f"**Session ID:** `{session_id}`")
 
-    # Built-in namespace options (with default managed harness namespaces)
+    # Built-in namespace options (based on actual harness configuration)
     namespace_options = {
-        "Semantic Facts (Default)": "/actors/{actorId}/semantic",
-        "Session Summaries (Default)": "/actors/{actorId}/{sessionId}/summary",
-        "Facts (Common Pattern)": "/app/{actorId}/facts",
-        "Preferences (Common Pattern)": "/app/{actorId}/preferences",
-        "Summaries (Common Pattern)": "/summaries/{actorId}",
-        "Episodic (Common Pattern)": "/episodic/{actorId}",
+        "Facts": "/facts/{actorId}/",
+        "Session Summaries": "/summaries/{actorId}/{sessionId}/",
+        "Semantic Facts (Alt)": "/actors/{actorId}/semantic",
+        "Session Summaries (Alt)": "/actors/{actorId}/{sessionId}/summary",
+        "App Facts": "/app/{actorId}/facts",
+        "App Preferences": "/app/{actorId}/preferences",
+        "Episodic": "/episodic/{actorId}",
         "Custom Namespace": "custom"
     }
 
@@ -595,26 +608,43 @@ def _render_memory_records_result(result):
         if result['records']:
             for idx, record in enumerate(result['records'], 1):
                 with st.expander(f"📝 {idx}. Memory Record", expanded=(idx == 1)):
-                    payload = record.get('payload', {})
-                    text = payload.get('text', 'N/A')
+                    # Extract content - API returns 'content' not 'payload'
+                    content = record.get('content', {})
+                    text = content.get('text', 'N/A')
 
                     with st.container(border=True):
                         st.markdown(text)
 
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
 
                     with col1:
                         relevance_score = record.get('relevanceScore', 'N/A')
                         if relevance_score != 'N/A':
                             st.caption(f"**Relevance Score:** {relevance_score:.4f}")
+                        else:
+                            st.caption("**Relevance Score:** N/A")
 
                     with col2:
                         record_id = record.get('memoryRecordId', 'N/A')
-                        if record_id != 'N/A':
-                            st.caption(f"**Record ID:** `{record_id}`")
+                        st.caption(f"**Record ID:** `{record_id[:20]}...`" if len(str(record_id)) > 20 else f"**Record ID:** `{record_id}`")
+
+                    with col3:
+                        strategy_id = record.get('memoryStrategyId', 'N/A')
+                        if strategy_id != 'N/A':
+                            # Show short version of strategy
+                            short_strategy = strategy_id.split('-')[0] if '-' in strategy_id else strategy_id
+                            st.caption(f"**Strategy:** {short_strategy}")
+
+                    # Show created date
+                    created_at = record.get('createdAt')
+                    if created_at:
+                        st.caption(f"**Created:** {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
 
                     with st.expander("🔍 View Raw Record"):
-                        st.json(record)
+                        # Convert datetime objects to strings for JSON display
+                        import json as json_module
+                        record_json = json_module.loads(json_module.dumps(record, default=str))
+                        st.json(record_json)
         else:
             st.info("No memory records found")
     else:
