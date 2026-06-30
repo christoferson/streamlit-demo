@@ -172,6 +172,55 @@ def list_long_term_memory_events(bedrock_agentcore, memory_id, actor_id, session
         return None
 
 
+def get_memory_namespaces(bedrock_agentcore_control, memory_id):
+    """Get configured namespace paths from memory resource"""
+    try:
+        response = bedrock_agentcore_control.get_memory(memoryId=memory_id)
+        logger.info(f"get_memory response: {response}")
+
+        memory = response.get('memory', {})
+        logger.info(f"memory object: {memory}")
+
+        # Try to get strategies from different possible locations
+        strategies = memory.get('strategies', [])
+
+        if not strategies:
+            # If no strategies, check for retrievalConfig (alternative structure)
+            retrieval_config = memory.get('retrievalConfig', {})
+            if retrieval_config:
+                # extractConfig has namespaces as keys
+                namespace_info = []
+                for namespace_path, config in retrieval_config.items():
+                    strategy_id = config.get('strategyId', 'Unknown')
+                    namespace_info.append({
+                        'strategy_type': strategy_id,
+                        'namespaces': [namespace_path]
+                    })
+                return namespace_info
+
+        namespace_info = []
+        for strategy in strategies:
+            # Strategy is a flat dict with strategyId, name, type, namespaces
+            strategy_name = strategy.get('name', 'Unknown')
+            strategy_type = strategy.get('type', 'Unknown')
+            strategy_id = strategy.get('strategyId', 'Unknown')
+            namespaces = strategy.get('namespaces', [])
+            status = strategy.get('status', 'Unknown')
+
+            namespace_info.append({
+                'strategy_name': strategy_name,
+                'strategy_type': strategy_type,
+                'strategy_id': strategy_id,
+                'namespaces': namespaces,
+                'status': status
+            })
+
+        return namespace_info
+    except (ClientError, Exception) as e:
+        logger.error(f"Error getting memory namespaces: {e}")
+        return None
+
+
 def query_long_term_memory(bedrock_agentcore, memory_id, actor_id, session_id, namespace, query_text, max_results=10):
     """Query/search long-term memory records with a query string"""
     try:
@@ -316,25 +365,25 @@ def render_harness_details_dialog(harness_details):
 
         with col1:
             st.markdown("**Basic Information:**")
-            st.caption(f"ID: `{harness_details['harnessId']}`")
-            st.caption(f"Name: {harness_details['harnessName']}")
-            st.caption(f"Status: {harness_details['status']}")
+            st.markdown(f":blue[ID: `{harness_details['harnessId']}`]")
+            st.markdown(f":blue[Name: {harness_details['harnessName']}]")
+            st.markdown(f":blue[Status: {harness_details['status']}]")
 
         with col2:
             st.markdown("**Configuration:**")
-            st.caption(f"Max Iterations: {harness_details['maxIterations']}")
-            st.caption(f"Timeout: {harness_details['timeoutSeconds']}s")
+            st.markdown(f":blue[Max Iterations: {harness_details['maxIterations']}]")
+            st.markdown(f":blue[Timeout: {harness_details['timeoutSeconds']}s]")
 
         st.markdown("**Memory Configuration:**")
-        st.caption(f"Memory ID: `{harness_details['memoryId']}`")
+        st.markdown(f":blue[Memory ID: `{harness_details['memoryId']}`]")
 
         if harness_details.get('description') != 'No description':
             st.markdown("**Description:**")
             st.info(harness_details['description'])
 
         st.markdown("**Timestamps:**")
-        st.caption(f"Created: {harness_details['createdAt']}")
-        st.caption(f"Updated: {harness_details['updatedAt']}")
+        st.markdown(f":blue[Created: {harness_details['createdAt']}]")
+        st.markdown(f":blue[Updated: {harness_details['updatedAt']}]")
 
         with st.expander("📄 Full Response", expanded=False):
             st.json(harness_details['full_response'])
@@ -371,19 +420,19 @@ def render_conversational_payload(parsed_data):
                 input_tokens = usage.get('inputTokens', 0)
                 output_tokens = usage.get('outputTokens', 0)
                 total_tokens = usage.get('totalTokens', 0)
-                st.caption(f"🔢 **Tokens:** In={input_tokens} | Out={output_tokens} | Total={total_tokens}")
+                st.markdown(f":blue[**Tokens:** In={input_tokens} | Out={output_tokens} | Total={total_tokens}]")
 
         with metric_col2:
             if metrics and any(metrics.values()):
                 latency = metrics.get('latencyMs', 0)
                 ttfb = metrics.get('timeToFirstByteMs', 0)
-                st.caption(f"⏱️ **Latency:** {latency}ms | TTFB={ttfb}ms")
+                st.markdown(f":blue[**Latency:** {latency}ms | TTFB={ttfb}ms]")
 
         with metric_col3:
             if message_id != 'N/A':
-                st.caption(f"🆔 Msg ID: {message_id}")
+                st.markdown(f":blue[Msg ID: {message_id}]")
     elif message_id != 'N/A':
-        st.caption(f"Message ID: {message_id} | Created: {created_at}")
+        st.markdown(f":blue[Message ID: {message_id} | Created: {created_at}]")
 
 
 def render_memory_event(idx, event, skip_unknown=True):
@@ -419,15 +468,15 @@ def render_memory_event(idx, event, skip_unknown=True):
 
         with col1:
             st.markdown("**Event Details:**")
-            st.caption(f"Event ID: `{event_id}`")
-            st.caption(f"Timestamp: {timestamp}")
+            st.markdown(f":blue[Event ID: `{event_id}`]")
+            st.markdown(f":blue[Timestamp: {timestamp}]")
 
         with col2:
             if branch:
                 st.markdown("**Branch:**")
-                st.caption(f"Name: {branch.get('name', 'N/A')}")
+                st.markdown(f":blue[Name: {branch.get('name', 'N/A')}]")
                 if branch.get('rootEventId'):
-                    st.caption(f"Root: `{branch['rootEventId'][:12]}...`")
+                    st.markdown(f":blue[Root: `{branch['rootEventId'][:12]}...`]")
 
         if metadata:
             with st.expander("🔍 Event Metadata", expanded=False):
@@ -441,9 +490,9 @@ def render_memory_events_dialog(list_memory_events_fn, memory_id, session_id, ac
     st.subheader("Memory Events")
 
     with st.container(border=True):
-        st.caption(f"**Memory ID:** `{memory_id}`")
-        st.caption(f"**Session ID:** `{session_id}`")
-        st.caption(f"**Actor ID:** `{actor_id}`")
+        st.markdown(f":violet[**Memory ID:** `{memory_id}`]")
+        st.markdown(f":violet[**Session ID:** `{session_id}`]")
+        st.markdown(f":violet[**Actor ID:** `{actor_id}`]")
 
     # Initialize session state for accumulated events and next token
     if 'memory_events_accumulated' not in st.session_state:
@@ -519,14 +568,30 @@ def render_memory_events_dialog(list_memory_events_fn, memory_id, session_id, ac
         st.info("No events found")
 
 
-def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_memory_fn, memory_id, actor_id, session_id):
+def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_memory_fn, get_namespaces_fn, memory_id, actor_id, session_id):
     """Render long-term memory records dialog"""
     st.subheader("Long-Term Memory Events")
 
     with st.container(border=True):
-        st.caption(f"**Memory ID:** `{memory_id}`")
-        st.caption(f"**Actor ID:** `{actor_id}`")
-        st.caption(f"**Session ID:** `{session_id}`")
+        st.markdown(f":violet[**Memory ID:** `{memory_id}`]")
+        st.markdown(f":violet[**Actor ID:** `{actor_id}`]")
+        st.markdown(f":violet[**Session ID:** `{session_id}`]")
+
+    # Initialize cached namespace info
+    if 'cached_namespace_info' not in st.session_state:
+        st.session_state.cached_namespace_info = None
+
+    # Full width namespace listing
+    if st.button("📋 List Configured Namespaces", type="secondary", use_container_width=True):
+        with st.spinner("Loading namespaces..."):
+            st.session_state.cached_namespace_info = get_namespaces_fn(memory_id=memory_id)
+
+    if st.session_state.cached_namespace_info:
+        with st.container(border=True):
+            st.markdown("**Configured Namespaces**")
+            for info in st.session_state.cached_namespace_info:
+                ns_list = " | ".join([f"`{ns}`" for ns in info['namespaces']])
+                st.markdown(f":blue[**{info['strategy_name']}** ({info['strategy_type']}) → {ns_list} — {info['status']}]")
 
     # Built-in namespace options (based on actual harness configuration)
     namespace_options = {
@@ -557,7 +622,11 @@ def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_mem
             help="Use {actorId} and {sessionId} placeholders for dynamic substitution"
         )
     else:
-        st.caption(f"**Namespace:** `{namespace}`")
+        st.markdown(f":blue[**Namespace:** `{namespace}`]")
+
+    # Initialize cached results
+    if 'cached_memory_records' not in st.session_state:
+        st.session_state.cached_memory_records = None
 
     # Search or List tabs
     tab1, tab2 = st.tabs(["📚 List All", "🔍 Search"])
@@ -565,14 +634,15 @@ def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_mem
     with tab1:
         if st.button("📚 Load All Records", type="primary", key="load_all"):
             with st.spinner("Loading long-term memory events..."):
-                result = list_long_term_memory_fn(
+                st.session_state.cached_memory_records = list_long_term_memory_fn(
                     memory_id=memory_id,
                     actor_id=actor_id,
                     session_id=session_id,
                     namespace=namespace
                 )
 
-                _render_memory_records_result(result)
+        if st.session_state.cached_memory_records:
+            _render_memory_records_result(st.session_state.cached_memory_records)
 
     with tab2:
         query_text = st.text_input(
@@ -585,7 +655,7 @@ def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_mem
 
         if st.button("🔍 Search", type="primary", key="search", disabled=not query_text):
             with st.spinner(f"Searching for '{query_text}'..."):
-                result = query_long_term_memory_fn(
+                st.session_state.cached_memory_records = query_long_term_memory_fn(
                     memory_id=memory_id,
                     actor_id=actor_id,
                     session_id=session_id,
@@ -594,7 +664,8 @@ def render_long_term_memory_dialog(list_long_term_memory_fn, query_long_term_mem
                     max_results=max_results
                 )
 
-                _render_memory_records_result(result)
+        if st.session_state.cached_memory_records:
+            _render_memory_records_result(st.session_state.cached_memory_records)
 
 
 def _render_memory_records_result(result):
@@ -607,41 +678,27 @@ def _render_memory_records_result(result):
 
         if result['records']:
             for idx, record in enumerate(result['records'], 1):
-                with st.expander(f"📝 {idx}. Memory Record", expanded=(idx == 1)):
-                    # Extract content - API returns 'content' not 'payload'
-                    content = record.get('content', {})
-                    text = content.get('text', 'N/A')
+                content = record.get('content', {})
+                text = content.get('text', 'N/A')
+                record_id = record.get('memoryRecordId', 'N/A')
+                strategy_id = record.get('memoryStrategyId', 'N/A')
+                created_at = record.get('createdAt')
+                relevance_score = record.get('relevanceScore')
 
-                    with st.container(border=True):
-                        st.markdown(text)
+                # Build compact metadata line
+                meta_parts = [f"Record ID: {record_id}"]
+                if strategy_id != 'N/A':
+                    meta_parts.append(f"Strategy: {strategy_id}")
+                if created_at:
+                    meta_parts.append(f"Created: {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                if relevance_score is not None:
+                    meta_parts.append(f"Relevance Score: {relevance_score:.4f}")
 
-                    col1, col2, col3 = st.columns(3)
+                with st.expander(f"{idx}. {text[:80]}{'...' if len(text) > 80 else ''}", expanded=False):
+                    st.markdown(text)
+                    st.markdown(f":blue[{' | '.join(meta_parts)}]")
 
-                    with col1:
-                        relevance_score = record.get('relevanceScore', 'N/A')
-                        if relevance_score != 'N/A':
-                            st.caption(f"**Relevance Score:** {relevance_score:.4f}")
-                        else:
-                            st.caption("**Relevance Score:** N/A")
-
-                    with col2:
-                        record_id = record.get('memoryRecordId', 'N/A')
-                        st.caption(f"**Record ID:** `{record_id[:20]}...`" if len(str(record_id)) > 20 else f"**Record ID:** `{record_id}`")
-
-                    with col3:
-                        strategy_id = record.get('memoryStrategyId', 'N/A')
-                        if strategy_id != 'N/A':
-                            # Show short version of strategy
-                            short_strategy = strategy_id.split('-')[0] if '-' in strategy_id else strategy_id
-                            st.caption(f"**Strategy:** {short_strategy}")
-
-                    # Show created date
-                    created_at = record.get('createdAt')
-                    if created_at:
-                        st.caption(f"**Created:** {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-
-                    with st.expander("🔍 View Raw Record"):
-                        # Convert datetime objects to strings for JSON display
+                    with st.expander("View Raw Record"):
                         import json as json_module
                         record_json = json_module.loads(json_module.dumps(record, default=str))
                         st.json(record_json)
@@ -657,10 +714,10 @@ def render_session_info_panel(session_id, actor_id, memory_id):
     st.markdown("##### Session Info")
 
     with st.container(border=True):
-        st.caption(f"**Session ID:** `{session_id}`")
-        st.caption(f"**Actor ID:** `{actor_id}`")
+        st.markdown(f":violet[**Session ID:** `{session_id}`]")
+        st.markdown(f":violet[**Actor ID:** `{actor_id}`]")
         if memory_id:
-            st.caption(f"**Memory ID:** `{memory_id}`")
+            st.markdown(f":violet[**Memory ID:** `{memory_id}`]")
 
 
 # ============================================================================
@@ -726,9 +783,9 @@ with st.sidebar:
 
         selected_harness = next(h for h in available_harnesses if h['display'] == selected_display)
         with st.container(border=True):
-            st.caption(f"**Name:** {selected_harness['name']}")
-            st.caption(f"**ID:** {selected_harness['id']}")
-            st.caption(f"**ARN:** `{selected_harness['arn']}`")
+            st.markdown(f":blue[**Name:** {selected_harness['name']}]")
+            st.markdown(f":blue[**ID:** {selected_harness['id']}]")
+            st.markdown(f":blue[**ARN:** `{selected_harness['arn']}`]")
 
             is_selected = st.session_state.selected_harness_arn == current_harness_arn
 
@@ -798,9 +855,13 @@ with st.sidebar:
                 def query_long_term_memory_wrapper(**kwargs):
                     return query_long_term_memory(bedrock_agentcore, **kwargs)
 
+                def get_namespaces_wrapper(**kwargs):
+                    return get_memory_namespaces(bedrock_agentcore_control, **kwargs)
+
                 render_long_term_memory_dialog(
                     list_long_term_memory_wrapper,
                     query_long_term_memory_wrapper,
+                    get_namespaces_wrapper,
                     st.session_state.harness_memory_id,
                     st.session_state.harness_user_id,
                     st.session_state.harness_session_id
@@ -813,7 +874,7 @@ with st.sidebar:
         #st.divider()
         st.markdown("##### Latest Response Stats")
         usage = st.session_state.latest_usage_stats
-        st.caption(f"In: {usage.get('inputTokens', 0)} | Out: {usage.get('outputTokens', 0)} | Total: {usage.get('totalTokens', 0)}")
+        st.markdown(f":blue[In: {usage.get('inputTokens', 0)} | Out: {usage.get('outputTokens', 0)} | Total: {usage.get('totalTokens', 0)}]")
 
     # Display latest tool use
     if st.session_state.latest_tool_use:
@@ -821,9 +882,9 @@ with st.sidebar:
         st.markdown("##### Latest Tool Use")
         with st.container(border=True):
             for idx, tool in enumerate(st.session_state.latest_tool_use, 1):
-                st.caption(f"**{idx}. {tool['name']}**")
+                st.markdown(f":blue[**{idx}. {tool['name']}**]")
                 if tool['id'] != 'N/A':
-                    st.caption(f"ID: `{tool['id']}`")
+                    st.markdown(f":blue[ID: `{tool['id']}`]")
                 if tool['input']:
                     with st.expander("View Input"):
                         try:
