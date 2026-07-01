@@ -131,6 +131,35 @@ def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, 
     )
 
 
+def invoke_runtime_command(bedrock_agentcore, harness_arn, session_id, command):
+    """Invoke a shell command in the harness runtime environment via InvokeAgentRuntimeCommand"""
+    try:
+        response = bedrock_agentcore.invoke_agent_runtime_command(
+            agentRuntimeArn=harness_arn,
+            runtimeSessionId=session_id,
+            body={"command": command}
+        )
+        stdout = ""
+        stderr = ""
+        exit_code = -1
+        for event in response.get("stream", []):
+            chunk = event.get("chunk", {})
+            if "contentDelta" in chunk:
+                delta = chunk["contentDelta"]
+                stdout += delta.get("stdout", "")
+                stderr += delta.get("stderr", "")
+            elif "contentStop" in chunk:
+                exit_code = chunk["contentStop"].get("exitCode", -1)
+        return {
+            'stdout': stdout,
+            'stderr': stderr,
+            'exitCode': exit_code
+        }
+    except (ClientError, Exception) as e:
+        logger.error(f"Error invoking runtime command: {e}")
+        return None
+
+
 def end_agent_session(session_id):
     """End/terminate an agent session"""
     try:
@@ -708,6 +737,66 @@ def _render_memory_records_result(result):
         st.error("Failed to retrieve memory records")
 
 
+def render_custom_environment_dialog(invoke_runtime_command_fn, harness_arn, session_id, actor_id):
+    """Render Run Command / InvokeAgentRuntimeCommand dialog"""
+    st.subheader("Run Command")
+
+    with st.container(border=True):
+        st.markdown(f":violet[**Harness ARN:** `{harness_arn}`]")
+        st.markdown(f":violet[**Session ID:** `{session_id}`]")
+        st.markdown(f":violet[**Actor ID:** `{actor_id}`]")
+
+    st.markdown("""
+Direct shell access to the harness microVM — no model reasoning, no token cost.
+Use it to prepare the environment, inspect the VM, run scripts, or act on agent output.
+""")
+
+    preset_commands = {
+        "Python version": "python --version",
+        "Python packages": "pip list",
+        "Bash version": "bash --version",
+        "OS info": "cat /etc/os-release",
+        "Architecture": "uname -m",
+        "Working directory": "pwd",
+        "Environment variables": "env",
+        "Disk usage": "df -h",
+        "Running processes": "ps aux",
+        "Custom command": ""
+    }
+
+    selected_preset = st.selectbox("Preset Commands", options=list(preset_commands.keys()), index=0)
+
+    default_cmd = preset_commands[selected_preset]
+    command = st.text_input("Command", value=default_cmd, placeholder="e.g. python --version")
+
+    if st.button("▶ Run Command", type="primary", use_container_width=True, disabled=not command.strip()):
+        with st.spinner(f"Running: `{command}` ..."):
+            result = invoke_runtime_command_fn(command=command.strip())
+
+        if result is None:
+            st.error("Command invocation failed. Check logs for details.")
+        else:
+            exit_code = result.get('exitCode', -1)
+            stdout = result.get('stdout', '')
+            stderr = result.get('stderr', '')
+
+            if exit_code == 0:
+                st.success(f"Exit code: {exit_code}")
+            else:
+                st.warning(f"Exit code: {exit_code}")
+
+            if stdout:
+                st.markdown("**stdout**")
+                st.code(stdout, language="bash")
+
+            if stderr:
+                st.markdown("**stderr**")
+                st.code(stderr, language="bash")
+
+            if not stdout and not stderr:
+                st.info("Command produced no output.")
+
+
 def render_session_info_panel(session_id, actor_id, memory_id):
     """Render session information panel in sidebar"""
     #st.divider()
@@ -892,6 +981,27 @@ with st.sidebar:
                         except:
                             st.code(tool['input'])
 
+    if st.session_state.selected_harness_arn:
+        if st.button("⚡ Run Command", use_container_width=True, type="secondary"):
+            @st.dialog("Run Command", width="large")
+            def show_custom_environment_dialog():
+                def invoke_runtime_command_wrapper(**kwargs):
+                    return invoke_runtime_command(
+                        bedrock_agentcore,
+                        st.session_state.selected_harness_arn,
+                        st.session_state.harness_session_id,
+                        **kwargs
+                    )
+
+                render_custom_environment_dialog(
+                    invoke_runtime_command_wrapper,
+                    st.session_state.selected_harness_arn,
+                    st.session_state.harness_session_id,
+                    st.session_state.harness_user_id
+                )
+
+            show_custom_environment_dialog()
+
     st.divider()
     if st.button("🔄 New Session", use_container_width=True, type="secondary"):
         # End current session if exists
@@ -960,7 +1070,7 @@ else:
                             })
                             current_tool_input = ""
                             # Show initial status
-                            status_area.caption(f"🔧 Calling **{tool_name}** ...")
+                            status_area.markdown(f":blue[Calling **{tool_name}** ...]")
 
                     # Handle contentBlockDelta events
                     elif 'contentBlockDelta' in event:
@@ -986,13 +1096,13 @@ else:
                                     input_str = json.dumps(input_preview, indent=None)
                                     if len(input_str) > 100:
                                         input_str = input_str[:100] + "..."
-                                    status_area.caption(f"🔧 Calling **{tool_uses[-1]['name']}** {input_str}")
+                                    status_area.markdown(f":blue[Calling **{tool_uses[-1]['name']}** {input_str}]")
                                 except:
                                     # Not valid JSON yet, show what we have
                                     preview = current_tool_input[:100]
                                     if len(current_tool_input) > 100:
                                         preview += "..."
-                                    status_area.caption(f"🔧 Calling **{tool_uses[-1]['name']}** {preview}")
+                                    status_area.markdown(f":blue[Calling **{tool_uses[-1]['name']}** {preview}]")
 
                     # Handle contentBlockStop for tool use
                     elif 'contentBlockStop' in event:
