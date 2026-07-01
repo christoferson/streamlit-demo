@@ -11,6 +11,22 @@ AWS_REGION = cmn_settings.AWS_REGION
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# Model configuration map — add new models here only
+HARNESS_MODEL_CONFIGS = {
+    "global.anthropic.claude-sonnet-4-6": {
+        "temperature_supported": True,
+        "temperature_default": 0.1,
+    },
+    "global.anthropic.claude-sonnet-5": {
+        "temperature_supported": False,
+    },
+    "global.anthropic.claude-opus-4-8": {
+        "temperature_supported": False,
+    },
+}
+HARNESS_MODEL_IDS = list(HARNESS_MODEL_CONFIGS.keys())
+HARNESS_MODEL_DEFAULT = HARNESS_MODEL_IDS[0]
+
 st.set_page_config(
     page_title="Bedrock Agent Harness",
     page_icon="🤖",
@@ -77,12 +93,21 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
             if memory_arn and 'memory/' in memory_arn:
                 memory_id = memory_arn.split('memory/')[-1]
 
+        # Extract model ID from harness config
+        model_id = None
+        model_config = harness_details.get('model', {})
+        if model_config:
+            bedrock_cfg = model_config.get('bedrockModelConfig', {})
+            if bedrock_cfg:
+                model_id = bedrock_cfg.get('modelId')
+
         return {
             'harnessId': harness_details.get('harnessId', 'N/A'),
             'harnessName': harness_details.get('harnessName', 'N/A'),
             'status': harness_details.get('status', 'N/A'),
             'memoryId': memory_id,
             'memoryArn': memory_arn or 'N/A',
+            'modelId': model_id,
             'maxIterations': harness_details.get('maxIterations', 'N/A'),
             'timeoutSeconds': harness_details.get('timeoutSeconds', 'N/A'),
             'createdAt': harness_details.get('createdAt', 'N/A'),
@@ -121,14 +146,21 @@ def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, inclu
         return None
 
 
-def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages):
+def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages, model_id=None, temperature=None):
     """Invoke harness with streaming response"""
-    return bedrock_agentcore.invoke_harness(
-        harnessArn=harness_arn,
-        runtimeSessionId=session_id,
-        actorId=actor_id,
-        messages=messages
-    )
+    params = {
+        'harnessArn': harness_arn,
+        'runtimeSessionId': session_id,
+        'actorId': actor_id,
+        'messages': messages,
+    }
+    if model_id:
+        bedrock_model_config = {'modelId': model_id}
+        model_cfg = HARNESS_MODEL_CONFIGS.get(model_id, {})
+        if temperature is not None and model_cfg.get("temperature_supported", False):
+            bedrock_model_config['temperature'] = temperature
+        params['model'] = {'bedrockModelConfig': bedrock_model_config}
+    return bedrock_agentcore.invoke_harness(**params)
 
 
 def invoke_runtime_command(bedrock_agentcore, harness_arn, session_id, command):
@@ -838,6 +870,8 @@ if "latest_tool_use" not in st.session_state:
     st.session_state.latest_tool_use = []
 if "latest_usage_stats" not in st.session_state:
     st.session_state.latest_usage_stats = None
+if "harness_model_id" not in st.session_state:
+    st.session_state.harness_model_id = HARNESS_MODEL_DEFAULT
 
 # Sidebar configuration
 with st.sidebar:
@@ -897,6 +931,9 @@ with st.sidebar:
                             logger.info(f"Memory ID set in session state: {st.session_state.harness_memory_id}")
                         else:
                             logger.warning("Memory ID is 'Not configured'")
+                        if details.get('modelId'):
+                            st.session_state.harness_model_id = details['modelId']
+                            logger.info(f"Model ID set in session state: {st.session_state.harness_model_id}")
                     else:
                         logger.error("Details is None")
 
@@ -908,6 +945,28 @@ with st.sidebar:
 
     else:
         st.warning("No harnesses found in your account")
+
+    # Inference parameters
+    st.markdown("##### Inference Parameters")
+    with st.container(border=True):
+        selected_model = st.selectbox(
+            "Model",
+            options=HARNESS_MODEL_IDS,
+            index=HARNESS_MODEL_IDS.index(st.session_state.harness_model_id) if st.session_state.harness_model_id in HARNESS_MODEL_IDS else 0,
+            key="harness_model_selectbox"
+        )
+        st.session_state.harness_model_id = selected_model
+        model_cfg = HARNESS_MODEL_CONFIGS[selected_model]
+        if model_cfg.get("temperature_supported", False):
+            override_temp = st.checkbox("Override Temperature", value=False, key="harness_override_temperature")
+            if override_temp:
+                temp_default = model_cfg.get("temperature_default", 0.1)
+                st.slider("Temperature", min_value=0.0, max_value=1.0, value=temp_default, step=0.05, key="harness_temperature")
+            else:
+                st.session_state["harness_temperature"] = None
+        else:
+            st.session_state["harness_temperature"] = None
+            st.markdown(":orange[Temperature not supported for this model]")
 
     # Debug: Show current memory ID state
     logger.info(f"Current memory ID state: {st.session_state.get('harness_memory_id', 'Not set')}")
@@ -1050,7 +1109,9 @@ else:
                         st.session_state.selected_harness_arn,
                         st.session_state.harness_session_id,
                         st.session_state.harness_user_id,
-                        messages
+                        messages,
+                        model_id=st.session_state.harness_model_id,
+                        temperature=st.session_state.get("harness_temperature"),
                     )
 
                 event_stream = response.get('stream', [])
