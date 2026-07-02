@@ -109,6 +109,12 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
                 model_top_p = bedrock_cfg.get('topP')
                 model_api_format = bedrock_cfg.get('apiFormat')
 
+        # Extract system prompt
+        system_prompt_blocks = harness_details.get('systemPrompt', [])
+        system_prompt_text = '\n\n'.join(
+            block.get('text', '') for block in system_prompt_blocks if block.get('text')
+        ) or None
+
         return {
             'harnessId': harness_details.get('harnessId', 'N/A'),
             'harnessName': harness_details.get('harnessName', 'N/A'),
@@ -120,6 +126,7 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
             'modelMaxTokens': model_max_tokens,
             'modelTopP': model_top_p,
             'modelApiFormat': model_api_format,
+            'systemPrompt': system_prompt_text,
             'maxIterations': harness_details.get('maxIterations', 'N/A'),
             'timeoutSeconds': harness_details.get('timeoutSeconds', 'N/A'),
             'createdAt': harness_details.get('createdAt', 'N/A'),
@@ -492,6 +499,14 @@ def render_harness_details_dialog(harness_details):
                 st.markdown(f":blue[{' | '.join(parts)}]")
             else:
                 st.markdown(":blue[Inference params: harness defaults]")
+
+        system_prompt = harness_details.get('systemPrompt')
+        if system_prompt:
+            st.markdown("**System Prompt:**")
+            with st.container(border=True):
+                st.markdown(system_prompt)
+        else:
+            st.markdown(":blue[System Prompt: not configured]")
 
         if harness_details.get('description') != 'No description':
             st.markdown("**Description:**")
