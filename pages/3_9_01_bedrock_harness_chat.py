@@ -132,6 +132,32 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
         return None
 
 
+def list_sessions(bedrock_agentcore, memory_id, actor_id, max_results=20, next_token=None, has_events_only=False):
+    """List sessions for a given memory and actor"""
+    try:
+        params = {
+            'memoryId': memory_id,
+            'actorId': actor_id,
+            'maxResults': max_results,
+        }
+        if next_token:
+            params['nextToken'] = next_token
+        if has_events_only:
+            params['filter'] = {'eventFilter': 'HAS_EVENTS'}
+
+        response = bedrock_agentcore.list_sessions(**params)
+        logger.info(f"list_sessions response keys: {list(response.keys())}")
+        sessions = response.get('sessionSummaries', [])
+        return {
+            'sessions': sessions,
+            'nextToken': response.get('nextToken'),
+            'count': len(sessions)
+        }
+    except (ClientError, Exception) as e:
+        logger.error(f"Error listing sessions: {e}")
+        return None
+
+
 def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, include_payloads=True, max_results=50, next_token=None):
     """List memory events for the given memory ID"""
     try:
@@ -858,6 +884,56 @@ Use it to prepare the environment, inspect the VM, run scripts, or act on agent 
                 st.info("Command produced no output.")
 
 
+def render_sessions_dialog(list_sessions_fn, memory_id, actor_id, current_session_id):
+    """Render sessions list dialog"""
+    st.subheader("Sessions")
+
+    with st.container(border=True):
+        st.markdown(f":violet[**Memory ID:** `{memory_id}`]")
+        st.markdown(f":violet[**Actor ID:** `{actor_id}`]")
+
+    has_events_only = st.checkbox("Only sessions with events", value=False)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Load Sessions", type="primary", use_container_width=True):
+            with st.spinner("Loading sessions..."):
+                result = list_sessions_fn(has_events_only=has_events_only)
+            logger.info(f"list_sessions result: {result}")
+            if result is not None:
+                st.session_state.sessions_accumulated = result['sessions']
+                st.session_state.sessions_next_token = result.get('nextToken')
+                st.session_state.sessions_loaded = True
+            else:
+                st.error("Failed to load sessions. Check logs for details.")
+
+    with col2:
+        if st.session_state.sessions_next_token:
+            if st.button("Load Next", type="secondary", use_container_width=True):
+                with st.spinner("Loading more..."):
+                    result = list_sessions_fn(
+                        next_token=st.session_state.sessions_next_token,
+                        has_events_only=has_events_only
+                    )
+                if result is not None:
+                    st.session_state.sessions_accumulated.extend(result['sessions'])
+                    st.session_state.sessions_next_token = result.get('nextToken')
+
+    sessions = st.session_state.sessions_accumulated
+    if sessions:
+        sorted_sessions = sorted(sessions, key=lambda s: s.get('createdAt') or '', reverse=True)
+        st.markdown(f":blue[**{len(sorted_sessions)} session(s)**]")
+        for session in sorted_sessions:
+            session_id = session.get('sessionId', 'N/A')
+            created_at_raw = session.get('createdAt')
+            created_at = created_at_raw.strftime('%Y-%m-%d %H:%M:%S') if created_at_raw else 'N/A'
+            is_current = session_id == current_session_id
+            color = "violet" if is_current else "blue"
+            st.markdown(f":{color}[**`{session_id}`** | {created_at}]")
+    elif st.session_state.get("sessions_loaded"):
+        st.info("No sessions found for this actor and memory.")
+
+
 def render_session_info_panel(session_id, actor_id, memory_id):
     """Render session information panel in sidebar"""
     #st.divider()
@@ -901,6 +977,12 @@ if "latest_usage_stats" not in st.session_state:
     st.session_state.latest_usage_stats = None
 if "harness_model_id" not in st.session_state:
     st.session_state.harness_model_id = HARNESS_MODEL_DEFAULT
+if "sessions_accumulated" not in st.session_state:
+    st.session_state.sessions_accumulated = []
+if "sessions_next_token" not in st.session_state:
+    st.session_state.sessions_next_token = None
+if "sessions_loaded" not in st.session_state:
+    st.session_state.sessions_loaded = False
 
 # Sidebar configuration
 with st.sidebar:
@@ -1045,6 +1127,26 @@ with st.sidebar:
                 )
 
             show_long_term_memory_dialog()
+
+        if st.button("🗂️ View Sessions", use_container_width=True, type="secondary"):
+            @st.dialog("Sessions", width="large")
+            def show_sessions_dialog():
+                def list_sessions_wrapper(**kwargs):
+                    return list_sessions(
+                        bedrock_agentcore,
+                        st.session_state.harness_memory_id,
+                        st.session_state.harness_user_id,
+                        **kwargs
+                    )
+
+                render_sessions_dialog(
+                    list_sessions_wrapper,
+                    st.session_state.harness_memory_id,
+                    st.session_state.harness_user_id,
+                    st.session_state.harness_session_id
+                )
+
+            show_sessions_dialog()
 
     # Display latest usage stats
     if st.session_state.latest_usage_stats:
