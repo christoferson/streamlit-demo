@@ -93,13 +93,21 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
             if memory_arn and 'memory/' in memory_arn:
                 memory_id = memory_arn.split('memory/')[-1]
 
-        # Extract model ID from harness config
+        # Extract model config from harness
         model_id = None
+        model_temperature = None
+        model_max_tokens = None
+        model_top_p = None
+        model_api_format = None
         model_config = harness_details.get('model', {})
         if model_config:
             bedrock_cfg = model_config.get('bedrockModelConfig', {})
             if bedrock_cfg:
                 model_id = bedrock_cfg.get('modelId')
+                model_temperature = bedrock_cfg.get('temperature')
+                model_max_tokens = bedrock_cfg.get('maxTokens')
+                model_top_p = bedrock_cfg.get('topP')
+                model_api_format = bedrock_cfg.get('apiFormat')
 
         return {
             'harnessId': harness_details.get('harnessId', 'N/A'),
@@ -108,6 +116,10 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
             'memoryId': memory_id,
             'memoryArn': memory_arn or 'N/A',
             'modelId': model_id,
+            'modelTemperature': model_temperature,
+            'modelMaxTokens': model_max_tokens,
+            'modelTopP': model_top_p,
+            'modelApiFormat': model_api_format,
             'maxIterations': harness_details.get('maxIterations', 'N/A'),
             'timeoutSeconds': harness_details.get('timeoutSeconds', 'N/A'),
             'createdAt': harness_details.get('createdAt', 'N/A'),
@@ -437,6 +449,23 @@ def render_harness_details_dialog(harness_details):
 
         st.markdown("**Memory Configuration:**")
         st.markdown(f":blue[Memory ID: `{harness_details['memoryId']}`]")
+
+        st.markdown("**Default Model & Inference:**")
+        with st.container(border=True):
+            st.markdown(f":blue[Model ID: `{harness_details['modelId'] or 'Not configured'}`]")
+            parts = []
+            if harness_details['modelTemperature'] is not None:
+                parts.append(f"Temperature: {harness_details['modelTemperature']}")
+            if harness_details['modelMaxTokens'] is not None:
+                parts.append(f"Max Tokens: {harness_details['modelMaxTokens']}")
+            if harness_details['modelTopP'] is not None:
+                parts.append(f"Top P: {harness_details['modelTopP']}")
+            if harness_details['modelApiFormat'] is not None:
+                parts.append(f"API Format: {harness_details['modelApiFormat']}")
+            if parts:
+                st.markdown(f":blue[{' | '.join(parts)}]")
+            else:
+                st.markdown(":blue[Inference params: harness defaults]")
 
         if harness_details.get('description') != 'No description':
             st.markdown("**Description:**")
