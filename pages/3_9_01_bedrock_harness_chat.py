@@ -191,7 +191,7 @@ def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, inclu
         return None
 
 
-def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages, model_id=None, temperature=None):
+def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages, model_id=None, temperature=None, system_prompt=None):
     """Invoke harness with streaming response"""
     params = {
         'harnessArn': harness_arn,
@@ -205,6 +205,8 @@ def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, 
         if temperature is not None and model_cfg.get("temperature_supported", False):
             bedrock_model_config['temperature'] = temperature
         params['model'] = {'bedrockModelConfig': bedrock_model_config}
+    if system_prompt:
+        params['systemPrompt'] = [{'text': system_prompt}]
     return bedrock_agentcore.invoke_harness(**params)
 
 
@@ -992,6 +994,12 @@ if "latest_usage_stats" not in st.session_state:
     st.session_state.latest_usage_stats = None
 if "harness_model_id" not in st.session_state:
     st.session_state.harness_model_id = HARNESS_MODEL_DEFAULT
+if "harness_override_system_prompt" not in st.session_state:
+    st.session_state.harness_override_system_prompt = False
+if "harness_system_prompt" not in st.session_state:
+    st.session_state.harness_system_prompt = ""
+if "harness_configured_system_prompt" not in st.session_state:
+    st.session_state.harness_configured_system_prompt = ""
 if "sessions_accumulated" not in st.session_state:
     st.session_state.sessions_accumulated = []
 if "sessions_next_token" not in st.session_state:
@@ -1060,6 +1068,8 @@ with st.sidebar:
                         if details.get('modelId'):
                             st.session_state.harness_model_id = details['modelId']
                             logger.info(f"Model ID set in session state: {st.session_state.harness_model_id}")
+                        if details.get('systemPrompt'):
+                            st.session_state.harness_configured_system_prompt = details['systemPrompt']
                     else:
                         logger.error("Details is None")
 
@@ -1093,6 +1103,38 @@ with st.sidebar:
         else:
             st.session_state["harness_temperature"] = None
             st.markdown(":orange[Temperature not supported for this model]")
+
+    st.markdown("##### System Prompt")
+    st.markdown("""<style>
+    button[data-testid="harness_reset_system_prompt"] {
+        background: none; border: none; color: #4da6ff;
+        padding: 0; font-size: 0.8rem; cursor: pointer; text-decoration: underline;
+    }
+    </style>""", unsafe_allow_html=True)
+    with st.container(border=True):
+        configured = st.session_state.harness_configured_system_prompt
+        cb_col, btn_col = st.columns([4, 1])
+        override_sp = cb_col.checkbox("Override System Prompt", value=st.session_state.harness_override_system_prompt, key="harness_override_system_prompt_cb")
+        st.session_state.harness_override_system_prompt = override_sp
+        if override_sp:
+            if configured:
+                if btn_col.button("↩ reset", key="harness_reset_system_prompt", type="tertiary"):
+                    st.session_state["harness_system_prompt_input"] = configured
+            if "harness_system_prompt_input" not in st.session_state:
+                st.session_state["harness_system_prompt_input"] = configured or ""
+            elif not st.session_state["harness_system_prompt_input"] and configured:
+                st.session_state["harness_system_prompt_input"] = configured
+            st.text_area(
+                "System Prompt",
+                height=150,
+                key="harness_system_prompt_input",
+                label_visibility="collapsed",
+                placeholder="Enter system prompt override...",
+            )
+            st.session_state.harness_system_prompt = st.session_state["harness_system_prompt_input"]
+        else:
+            st.session_state.harness_system_prompt = ""
+            st.markdown(":blue[Using harness default system prompt]")
 
     # Debug: Show current memory ID state
     logger.info(f"Current memory ID state: {st.session_state.get('harness_memory_id', 'Not set')}")
@@ -1258,6 +1300,7 @@ else:
                         messages,
                         model_id=st.session_state.harness_model_id,
                         temperature=st.session_state.get("harness_temperature"),
+                        system_prompt=st.session_state.harness_system_prompt or None,
                     )
 
                 event_stream = response.get('stream', [])
