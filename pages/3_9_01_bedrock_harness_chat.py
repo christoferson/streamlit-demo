@@ -39,7 +39,7 @@ st.set_page_config(
     }
 )
 
-st.markdown("## 🤖 :blue[Bedrock Agent Harness Chat]")
+st.markdown("##### :blue[Bedrock Agent Harness Chat]")
 
 
 # ============================================================================
@@ -905,7 +905,7 @@ Use it to prepare the environment, inspect the VM, run scripts, or act on agent 
                 st.info("Command produced no output.")
 
 
-def render_sessions_dialog(list_sessions_fn, memory_id, actor_id, current_session_id):
+def render_sessions_dialog(list_sessions_fn, list_events_fn, memory_id, actor_id, current_session_id):
     """Render sessions list dialog"""
     st.subheader("Sessions")
 
@@ -925,6 +925,8 @@ def render_sessions_dialog(list_sessions_fn, memory_id, actor_id, current_sessio
                 st.session_state.sessions_accumulated = result['sessions']
                 st.session_state.sessions_next_token = result.get('nextToken')
                 st.session_state.sessions_loaded = True
+                st.session_state.session_preview_id = None
+                st.session_state.session_preview_events = []
             else:
                 st.error("Failed to load sessions. Check logs for details.")
 
@@ -949,10 +951,60 @@ def render_sessions_dialog(list_sessions_fn, memory_id, actor_id, current_sessio
             created_at_raw = session.get('createdAt')
             created_at = created_at_raw.strftime('%Y-%m-%d %H:%M:%S') if created_at_raw else 'N/A'
             is_current = session_id == current_session_id
+            is_previewing = session_id == st.session_state.session_preview_id
             color = "violet" if is_current else "blue"
-            st.markdown(f":{color}[**`{session_id}`** | {created_at}]")
+            row_col, btn_col = st.columns([6, 1])
+            row_col.markdown(f":{color}[**`{session_id}`** | {created_at}]")
+            btn_label = "preview"
+            if btn_col.button(btn_label, key=f"preview_{session_id}", help="Load events for this session"):
+                with st.spinner("Loading events..."):
+                    result = list_events_fn(session_id=session_id)
+                if result is not None:
+                    st.session_state.session_preview_id = session_id
+                    st.session_state.session_preview_events = result.get('events', [])
+                else:
+                    st.error("Failed to load events.")
+
     elif st.session_state.get("sessions_loaded"):
         st.info("No sessions found for this actor and memory.")
+
+    # Preview panel
+    if st.session_state.session_preview_id:
+        st.divider()
+        preview_id = st.session_state.session_preview_id
+        events = st.session_state.session_preview_events
+        st.markdown(f"**Preview:** :violet[`{preview_id}`] — {len(events)} event(s)")
+
+        sorted_events = sorted(events, key=lambda e: e.get('eventTimestamp') or '', reverse=False)
+        conv_events = []
+        for event in sorted_events:
+            info = parse_event_payload(event)
+            if info['role'] in ('USER', 'ASSISTANT') and info.get('parsed_data'):
+                conv_events.append(info['parsed_data'])
+
+        if conv_events:
+            with st.container(border=True):
+                for item in conv_events:
+                    role = item['role']
+                    text = item['text'] or ''
+                    snippet = text[:120] + ('...' if len(text) > 120 else '')
+                    icon = "👤" if role == 'USER' else "🤖"
+                    st.markdown(f"{icon} **{role}**: {snippet}")
+        else:
+            st.info("No conversational events found for this session.")
+
+        if st.button("▶ Resume this session", type="primary", key="resume_session_btn"):
+            # Rebuild harness_messages from events
+            rebuilt = []
+            for item in conv_events:
+                role_lower = item['role'].lower()
+                if role_lower in ('user', 'assistant'):
+                    rebuilt.append({"role": role_lower, "content": item['text'] or ''})
+            st.session_state.harness_messages = rebuilt
+            st.session_state.harness_session_id = preview_id
+            st.session_state.session_preview_id = None
+            st.session_state.session_preview_events = []
+            st.rerun()
 
 
 def render_session_info_panel(session_id, actor_id, memory_id):
@@ -1012,6 +1064,10 @@ if "sessions_next_token" not in st.session_state:
     st.session_state.sessions_next_token = None
 if "sessions_loaded" not in st.session_state:
     st.session_state.sessions_loaded = False
+if "session_preview_id" not in st.session_state:
+    st.session_state.session_preview_id = None
+if "session_preview_events" not in st.session_state:
+    st.session_state.session_preview_events = []
 
 # Sidebar configuration
 with st.sidebar:
@@ -1211,8 +1267,17 @@ with st.sidebar:
                         **kwargs
                     )
 
+                def list_events_wrapper(session_id):
+                    return list_memory_events(
+                        bedrock_agentcore,
+                        st.session_state.harness_memory_id,
+                        session_id,
+                        st.session_state.harness_user_id,
+                    )
+
                 render_sessions_dialog(
                     list_sessions_wrapper,
+                    list_events_wrapper,
                     st.session_state.harness_memory_id,
                     st.session_state.harness_user_id,
                     st.session_state.harness_session_id
