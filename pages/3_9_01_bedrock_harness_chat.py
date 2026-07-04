@@ -128,6 +128,7 @@ def get_harness_details(bedrock_agentcore_control, harness_id):
             'modelApiFormat': model_api_format,
             'systemPrompt': system_prompt_text,
             'maxIterations': harness_details.get('maxIterations', 'N/A'),
+            'maxTokens': harness_details.get('maxTokens', 'N/A'),
             'timeoutSeconds': harness_details.get('timeoutSeconds', 'N/A'),
             'createdAt': harness_details.get('createdAt', 'N/A'),
             'updatedAt': harness_details.get('updatedAt', 'N/A'),
@@ -191,7 +192,7 @@ def list_memory_events(bedrock_agentcore, memory_id, session_id, actor_id, inclu
         return None
 
 
-def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages, model_id=None, temperature=None, system_prompt=None):
+def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, messages, model_id=None, temperature=None, system_prompt=None, max_tokens=None):
     """Invoke harness with streaming response"""
     params = {
         'harnessArn': harness_arn,
@@ -204,6 +205,8 @@ def invoke_harness_stream(bedrock_agentcore, harness_arn, session_id, actor_id, 
         model_cfg = HARNESS_MODEL_CONFIGS.get(model_id, {})
         if temperature is not None and model_cfg.get("temperature_supported", False):
             bedrock_model_config['temperature'] = temperature
+        if max_tokens is not None:
+            bedrock_model_config['maxTokens'] = max_tokens
         params['model'] = {'bedrockModelConfig': bedrock_model_config}
     if system_prompt:
         params['systemPrompt'] = [{'text': system_prompt}]
@@ -480,6 +483,7 @@ def render_harness_details_dialog(harness_details):
         with col2:
             st.markdown("**Configuration:**")
             st.markdown(f":blue[Max Iterations: {harness_details['maxIterations']}]")
+            st.markdown(f":blue[Max Tokens: {harness_details['maxTokens']}]")
             st.markdown(f":blue[Timeout: {harness_details['timeoutSeconds']}s]")
 
         st.markdown("**Memory Configuration:**")
@@ -1000,6 +1004,8 @@ if "harness_system_prompt" not in st.session_state:
     st.session_state.harness_system_prompt = ""
 if "harness_configured_system_prompt" not in st.session_state:
     st.session_state.harness_configured_system_prompt = ""
+if "harness_configured_max_tokens" not in st.session_state:
+    st.session_state.harness_configured_max_tokens = None
 if "sessions_accumulated" not in st.session_state:
     st.session_state.sessions_accumulated = []
 if "sessions_next_token" not in st.session_state:
@@ -1070,6 +1076,8 @@ with st.sidebar:
                             logger.info(f"Model ID set in session state: {st.session_state.harness_model_id}")
                         if details.get('systemPrompt'):
                             st.session_state.harness_configured_system_prompt = details['systemPrompt']
+                        if details.get('maxTokens') not in (None, 'N/A'):
+                            st.session_state.harness_configured_max_tokens = details['maxTokens']
                     else:
                         logger.error("Details is None")
 
@@ -1103,6 +1111,13 @@ with st.sidebar:
         else:
             st.session_state["harness_temperature"] = None
             st.markdown(":orange[Temperature not supported for this model]")
+
+        mt_default = st.session_state.harness_configured_max_tokens or 4096
+        override_mt = st.checkbox("Override Max Tokens", value=False, key="harness_override_max_tokens")
+        if override_mt:
+            st.number_input("Max Tokens", min_value=1, max_value=64000, value=mt_default, step=256, key="harness_max_tokens")
+        else:
+            st.session_state["harness_max_tokens"] = None
 
     st.markdown("##### System Prompt")
     st.markdown("""<style>
@@ -1300,6 +1315,7 @@ else:
                         messages,
                         model_id=st.session_state.harness_model_id,
                         temperature=st.session_state.get("harness_temperature"),
+                        max_tokens=st.session_state.get("harness_max_tokens"),
                         system_prompt=st.session_state.harness_system_prompt or None,
                     )
 
