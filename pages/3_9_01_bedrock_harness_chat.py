@@ -1073,6 +1073,12 @@ if "session_preview_events" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Configuration")
 
+    h_col, refresh_col = st.columns([4, 1])
+    h_col.markdown("**Harnesses**")
+    if refresh_col.button("↻", help="Refresh harness list", key="refresh_harnesses"):
+        list_harnesses_cached.clear()
+        st.rerun()
+
     with st.spinner("Loading harnesses..."):
         available_harnesses = list_harnesses_cached()
 
