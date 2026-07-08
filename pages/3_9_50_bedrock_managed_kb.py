@@ -71,6 +71,36 @@ def get_knowledge_base(client, kb_id):
         return None
 
 
+def list_data_sources(client, kb_id):
+    try:
+        response = client.list_data_sources(knowledgeBaseId=kb_id)
+        logger.info(f"list_data_sources: {len(response.get('dataSourceSummaries', []))} source(s)")
+        return response.get('dataSourceSummaries', [])
+    except (ClientError, Exception) as e:
+        logger.error(f"Error listing data sources: {e}")
+        return None
+
+
+def list_knowledge_base_documents(client, kb_id, data_source_id, max_results=50, next_token=None):
+    try:
+        params = {
+            'knowledgeBaseId': kb_id,
+            'dataSourceId': data_source_id,
+            'maxResults': max_results,
+        }
+        if next_token:
+            params['nextToken'] = next_token
+        response = client.list_knowledge_base_documents(**params)
+        logger.info(f"list_knowledge_base_documents: {len(response.get('documentDetails', []))} doc(s)")
+        return {
+            'documents': response.get('documentDetails', []),
+            'nextToken': response.get('nextToken'),
+        }
+    except (ClientError, Exception) as e:
+        logger.error(f"Error listing KB documents: {e}")
+        return None
+
+
 # ============================================================================
 # Render Helpers
 # ============================================================================
@@ -180,6 +210,84 @@ def render_kb_details_dialog(detail):
         st.json(detail)
 
 
+def render_kb_documents_dialog(kb_id, kb_name):
+    st.subheader("Documents")
+    st.markdown(f":violet[KB: **{kb_name}**]")
+
+    with st.spinner("Loading data sources..."):
+        data_sources = list_data_sources(bedrock_agent, kb_id)
+
+    if data_sources is None:
+        st.error("Failed to load data sources.")
+        return
+    if not data_sources:
+        st.info("No data sources found for this knowledge base.")
+        return
+
+    ds_options = {
+        f"{ds.get('name', ds.get('dataSourceId', ''))} ({ds.get('dataSourceId', '')})": ds.get('dataSourceId', '')
+        for ds in data_sources
+    }
+    selected_ds_display = st.selectbox("Data Source", options=list(ds_options.keys()))
+    selected_ds_id = ds_options[selected_ds_display]
+
+    if st.button("🔄 Load Documents", type="primary", use_container_width=True):
+        with st.spinner("Loading documents..."):
+            result = list_knowledge_base_documents(bedrock_agent, kb_id, selected_ds_id)
+        if result is None:
+            st.error("Failed to load documents. Check logs.")
+            return
+        st.session_state["kb_docs_result"] = result
+
+    result = st.session_state.get("kb_docs_result")
+    if result is not None:
+        docs = result['documents']
+        st.markdown(f":blue[**{len(docs)} document(s)**]")
+        for doc in docs:
+            status = doc.get('status', 'N/A')
+            status_color = (
+                "green" if status == "INDEXED"
+                else "orange" if status in ("PENDING", "STARTING", "IN_PROGRESS", "PARTIALLY_INDEXED", "METADATA_PARTIALLY_INDEXED")
+                else "red"
+            )
+            identifier = doc.get('identifier', {})
+            doc_label = (
+                identifier.get('s3', {}).get('uri')
+                or identifier.get('custom', {}).get('id')
+                or 'N/A'
+            )
+            updated_at = doc.get('updatedAt', '')
+            if hasattr(updated_at, 'strftime'):
+                updated_at = updated_at.strftime('%Y-%m-%d %H:%M:%S')
+
+            meta_parts = [f"<span style='color:var(--text-color);opacity:0.5'>{updated_at}</span>" if updated_at else ""]
+            if doc.get('statusReason'):
+                meta_parts.append(f"<span style='color:orange'>{doc['statusReason']}</span>")
+            meta_str = " &nbsp;·&nbsp; ".join(p for p in meta_parts if p)
+            st.markdown(
+                f"<div style='font-size:0.85rem;padding:2px 0'>"
+                f"<b>{doc_label}</b> &nbsp; "
+                f"<span style='color:{'green' if status_color=='green' else 'orange' if status_color=='orange' else 'red'}'>{status}</span>"
+                f"{'&nbsp;&nbsp;<small>' + meta_str + '</small>' if meta_str else ''}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        if result.get('nextToken'):
+            if st.button("Load More", type="secondary"):
+                with st.spinner("Loading more..."):
+                    more = list_knowledge_base_documents(
+                        bedrock_agent, kb_id, selected_ds_id,
+                        next_token=result['nextToken']
+                    )
+                if more:
+                    st.session_state["kb_docs_result"] = {
+                        'documents': docs + more['documents'],
+                        'nextToken': more.get('nextToken'),
+                    }
+                    st.rerun()
+
+
 # ============================================================================
 # Cached wrappers
 # ============================================================================
@@ -269,6 +377,12 @@ with st.sidebar:
                     show_kb_details_dialog()
                 else:
                     st.error("Failed to load knowledge base details.")
+
+            if st.button("📄 Documents", use_container_width=True, type="secondary", key=f"docs_{current_kb_id}"):
+                @st.dialog(f"Documents: {selected_kb['name']}", width="large")
+                def show_kb_documents_dialog():
+                    render_kb_documents_dialog(current_kb_id, selected_kb['name'])
+                show_kb_documents_dialog()
 
     else:
         st.warning("No knowledge bases found in your account")
