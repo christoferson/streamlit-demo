@@ -464,6 +464,20 @@ with st.sidebar:
                 st.session_state["rag_temperature"] = None
                 st.markdown(":orange[Temperature not supported for this model]")
 
+        st.markdown("##### Retrieval")
+        with st.container(border=True):
+            override_count = st.checkbox("Override result count", value=False, key="rag_override_count")
+            if override_count:
+                st.number_input(
+                    "Max chunks to retrieve (1–100)",
+                    min_value=1, max_value=100, value=3, step=1,
+                    key="rag_result_count",
+                    help="Number of results for Retrieve/Retrieve & Generate (numberOfResults) "
+                         "and Agentic Retrieve (maxNumberOfResults). Default is the API's own default.",
+                )
+            else:
+                st.session_state["rag_result_count"] = None
+
     else:
         st.warning("No knowledge bases found in your account")
 
@@ -472,8 +486,11 @@ with st.sidebar:
 # Main Area — Retrieve and Generate
 # ============================================================================
 
-def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate_response=True):
+def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate_response=True, max_results=None):
     try:
+        kb_retriever = {'knowledgeBaseId': kb_id}
+        if max_results is not None:
+            kb_retriever['retrievalOverrides'] = {'maxNumberOfResults': max_results}
         response = runtime_client.agentic_retrieve_stream(
             agenticRetrieveConfiguration={
                 'foundationModelType': 'CUSTOM',
@@ -485,7 +502,7 @@ def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate
                 },
             },
             messages=messages,
-            retrievers=[{'configuration': {'knowledgeBase': {'knowledgeBaseId': kb_id}}}],
+            retrievers=[{'configuration': {'knowledgeBase': kb_retriever}}],
             generateResponse=generate_response,
         )
         return response.get('stream')
@@ -494,18 +511,15 @@ def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate
         return None
 
 
-def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=10):
+def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=None):
     try:
         # MANAGED KBs require managedSearchConfiguration; others use vectorSearchConfiguration.
-        if kb_type == "MANAGED":
-            search_cfg = {"managedSearchConfiguration": {"numberOfResults": top_k}}
-        else:
-            search_cfg = {"vectorSearchConfiguration": {"numberOfResults": top_k}}
-        response = runtime_client.retrieve(
-            knowledgeBaseId=kb_id,
-            retrievalQuery={"text": query},
-            retrievalConfiguration=search_cfg,
-        )
+        search_key = "managedSearchConfiguration" if kb_type == "MANAGED" else "vectorSearchConfiguration"
+        inner = {"numberOfResults": top_k} if top_k is not None else {}
+        params = {"knowledgeBaseId": kb_id, "retrievalQuery": {"text": query}}
+        if inner:
+            params["retrievalConfiguration"] = {search_key: inner}
+        response = runtime_client.retrieve(**params)
         logger.info(f"retrieve response keys: {list(response.keys())}")
         return response.get("retrievalResults", [])
     except (ClientError, Exception) as e:
@@ -513,12 +527,16 @@ def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=10):
         return None
 
 
-def retrieve_and_generate(runtime_client, kb_id, model_arn, query, session_id=None, temperature=None):
+def retrieve_and_generate(runtime_client, kb_id, model_arn, query, session_id=None, temperature=None,
+                          kb_type=None, max_results=None):
     kb_cfg = {"knowledgeBaseId": kb_id, "modelArn": model_arn}
     if temperature is not None:
         kb_cfg["generationConfiguration"] = {
             "inferenceConfig": {"textInferenceConfig": {"temperature": temperature}}
         }
+    if max_results is not None:
+        search_key = "managedSearchConfiguration" if kb_type == "MANAGED" else "vectorSearchConfiguration"
+        kb_cfg["retrievalConfiguration"] = {search_key: {"numberOfResults": max_results}}
     params = {
         "input": {"text": query},
         "retrieveAndGenerateConfiguration": {
@@ -546,6 +564,7 @@ else:
         st.session_state["rag_model_id"] = rag_model_id
     rag_region = st.session_state.get("rag_region", AWS_REGION)
     rag_temperature = st.session_state.get("rag_temperature")
+    rag_result_count = st.session_state.get("rag_result_count")
     model_arn = RAG_MODEL_CONFIGS[rag_model_id]["model_arn"]
     logger.info(f"RAG model_id={rag_model_id} model_arn={model_arn}")
 
@@ -627,7 +646,7 @@ else:
             with st.spinner("Retrieving and generating..."):
                 response = retrieve_and_generate(
                     runtime_client, st.session_state.selected_kb_id, model_arn, prompt,
-                    temperature=rag_temperature,
+                    temperature=rag_temperature, kb_type=kb_type, max_results=rag_result_count,
                 )
             if response:
                 citations = response.get("citations", [])
@@ -651,7 +670,7 @@ else:
 
         elif rag_mode == "Retrieve":
             with st.spinner("Retrieving..."):
-                results = retrieve_only(runtime_client, st.session_state.selected_kb_id, prompt, kb_type=kb_type)
+                results = retrieve_only(runtime_client, st.session_state.selected_kb_id, prompt, kb_type=kb_type, top_k=rag_result_count)
             if results is None:
                 st.session_state.last_result = {
                     "mode": rag_mode, "prompt": prompt, "error": "Retrieval failed. Check logs for details.",
@@ -673,7 +692,7 @@ else:
 
             stream = agentic_retrieve_stream(
                 runtime_client, st.session_state.selected_kb_id, agentic_messages, model_arn,
-                generate_response=True,
+                generate_response=True, max_results=rag_result_count,
             )
             if stream is None:
                 st.session_state.last_result = {
