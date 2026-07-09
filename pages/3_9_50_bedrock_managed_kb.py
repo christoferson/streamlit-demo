@@ -332,6 +332,10 @@ if "selected_kb_type" not in st.session_state:
     st.session_state.selected_kb_type = None
 if "selected_kb_ds_count" not in st.session_state:
     st.session_state.selected_kb_ds_count = None
+if "last_result" not in st.session_state:
+    # Holds the most recent query outcome so it survives reruns (e.g. toggling chunk format).
+    # Shape: {"mode", "prompt", "answer", "refs": [...], "results": [...], "error"}
+    st.session_state.last_result = None
 
 RAG_MODES = ["Retrieve & Generate", "Retrieve", "Agentic Retrieve"]
 
@@ -418,6 +422,7 @@ with st.sidebar:
                     st.session_state.selected_kb_id = current_kb_id
                     st.session_state.selected_kb_type = kb_type
                     st.session_state.selected_kb_ds_count = len(data_sources) if data_sources is not None else 0
+                    st.session_state.last_result = None
                     logger.info(f"KB selected: {current_kb_id} type={kb_type} data_sources={st.session_state.selected_kb_ds_count}")
                     st.rerun()
 
@@ -566,120 +571,152 @@ else:
             "documents to query. Add and sync a data source, then try again."
         )
     else:
-        allowed_modes = supported_modes_for_kb_type(kb_type)
-        rag_mode = st.pills("Mode", allowed_modes, default=allowed_modes[0], key="rag_mode", label_visibility="collapsed")
-        if rag_mode is None:
-            rag_mode = allowed_modes[0]
+        mode_col, fmt_col = st.columns([3, 2])
+        with mode_col:
+            allowed_modes = supported_modes_for_kb_type(kb_type)
+            rag_mode = st.pills("Mode", allowed_modes, default=allowed_modes[0], key="rag_mode", label_visibility="collapsed")
+            if rag_mode is None:
+                rag_mode = allowed_modes[0]
+        with fmt_col:
+            chunk_format = st.segmented_control(
+                "Chunk display", ["Markdown", "Plain text"], default="Markdown",
+                key="chunk_format", label_visibility="collapsed",
+            ) or "Markdown"
 
         runtime_client = boto3.client('bedrock-agent-runtime', region_name=rag_region)
 
         prompt = st.chat_input("Ask a question...")
 
-    if ds_count and prompt:
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    def render_chunk(text):
+        # Chunk content is raw document text; rendering as markdown can mangle it.
+        if chunk_format == "Plain text":
+            st.text(text)
+        else:
+            st.markdown(text)
 
+    def render_last_result(res):
+        """Render a stored query result. Survives reruns (e.g. toggling chunk format)."""
+        if not res:
+            return
+        st.markdown(f"#### :violet[**Q:** {res['prompt']}]")
+        if res.get("error"):
+            st.error(res["error"])
+            return
+        if res.get("answer"):
+            st.markdown(res["answer"])
+        # Retrieve mode: scored chunks — one expander per result
+        results = res.get("results") or []
+        if results:
+            st.markdown(f"**{len(results)} result(s) retrieved:**")
+            for i, r in enumerate(results, 1):
+                score = r.get("score", 0)
+                color = "green" if score >= 0.8 else "orange" if score >= 0.5 else "red"
+                with st.expander(f":{color}[{i}. Score: {score:.3f}] &nbsp; {r.get('source', '')}", expanded=i == 1):
+                    render_chunk(r.get("content", ""))
+        # Citations for RAG and Agentic — one expander per citation (uniform with Retrieve)
+        refs = res.get("refs") or []
+        if refs:
+            st.markdown(f"**{len(refs)} citation(s):**")
+            for i, ref in enumerate(refs, 1):
+                with st.expander(f":blue[{i}. {ref.get('source', 'source')}]", expanded=i == 1):
+                    render_chunk(ref.get("snippet", ""))
+
+    # Run a new query only when a prompt is submitted; store the outcome in session.
+    if ds_count and prompt:
         if rag_mode == "Retrieve & Generate":
-            with st.chat_message("assistant"):
-                with st.spinner("Retrieving and generating..."):
-                    response = retrieve_and_generate(
-                        runtime_client,
-                        st.session_state.selected_kb_id,
-                        model_arn,
-                        prompt,
-                        temperature=rag_temperature,
-                    )
-                if response:
-                    answer = response.get("output", {}).get("text", "No response received.")
-                    citations = response.get("citations", [])
-                    st.markdown(answer)
-                    refs = [ref for c in citations for ref in c.get("retrievedReferences", [])]
-                    if refs:
-                        with st.expander(f"📎 {len(refs)} citation(s)", expanded=False):
-                            for i, ref in enumerate(refs, 1):
-                                content = ref.get("content", {}).get("text", "")
-                                uri = ref.get("location", {}).get("s3Location", {}).get("uri", "")
-                                snippet = content[:200] + ("..." if len(content) > 200 else "")
-                                st.markdown(f":blue[**{i}.** {uri}]")
-                                st.markdown(f"<small>{snippet}</small>", unsafe_allow_html=True)
-                else:
-                    st.error("Failed to get a response. Check logs for details.")
+            with st.spinner("Retrieving and generating..."):
+                response = retrieve_and_generate(
+                    runtime_client, st.session_state.selected_kb_id, model_arn, prompt,
+                    temperature=rag_temperature,
+                )
+            if response:
+                citations = response.get("citations", [])
+                refs = []
+                for c in citations:
+                    for ref in c.get("retrievedReferences", []):
+                        content = ref.get("content", {}).get("text", "")
+                        refs.append({
+                            "source": ref.get("location", {}).get("s3Location", {}).get("uri", ""),
+                            "snippet": content[:200] + ("..." if len(content) > 200 else ""),
+                        })
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt,
+                    "answer": response.get("output", {}).get("text", "No response received."),
+                    "refs": refs, "results": [], "error": None,
+                }
+            else:
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt, "error": "Failed to get a response. Check logs for details.",
+                }
 
         elif rag_mode == "Retrieve":
             with st.spinner("Retrieving..."):
                 results = retrieve_only(runtime_client, st.session_state.selected_kb_id, prompt, kb_type=kb_type)
             if results is None:
-                st.error("Retrieval failed. Check logs for details.")
-            elif not results:
-                st.info("No results found.")
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt, "error": "Retrieval failed. Check logs for details.",
+                }
             else:
-                with st.chat_message("assistant"):
-                    st.markdown(f"**{len(results)} result(s) retrieved:**")
-                    for i, result in enumerate(results, 1):
-                        content = result.get("content", {}).get("text", "")
-                        score = result.get("score", 0)
-                        uri = result.get("location", {}).get("s3Location", {}).get("uri", "")
-                        score_color = "green" if score >= 0.8 else "orange" if score >= 0.5 else "red"
-                        with st.expander(f":{score_color}[{i}. Score: {score:.3f}] &nbsp; {uri}", expanded=i == 1):
-                            st.markdown(content)
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt, "answer": None, "refs": [], "error": None,
+                    "results": [{
+                        "content": r.get("content", {}).get("text", ""),
+                        "score": r.get("score", 0),
+                        "source": r.get("location", {}).get("s3Location", {}).get("uri", ""),
+                    } for r in results],
+                }
 
-        else:  # Agentic Retrieve
+        else:  # Agentic Retrieve — stream live, then persist the final result
             agentic_messages = [{"role": "user", "content": {"text": prompt}}]
+            trace_area = st.empty()
+            answer_area = st.empty()
 
-            with st.chat_message("assistant"):
-                trace_area = st.empty()
-                answer_area = st.empty()
-                results_area = st.container()
+            stream = agentic_retrieve_stream(
+                runtime_client, st.session_state.selected_kb_id, agentic_messages, model_arn,
+                generate_response=True,
+            )
+            if stream is None:
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt, "error": "Agentic retrieval failed. Check logs.",
+                }
+            else:
+                full_answer = ""
+                all_results = []
+                err = None
+                try:
+                    for event in stream:
+                        if "responseEvent" in event:
+                            full_answer += event["responseEvent"].get("text", "")
+                            answer_area.markdown(full_answer + "▌")
+                        elif "traceEvent" in event:
+                            attrs = event["traceEvent"].get("attributes", {})
+                            step, status, msg = attrs.get("step", ""), attrs.get("status", ""), attrs.get("message", "")
+                            if step and status:
+                                trace_area.markdown(f":blue[*{step} — {status}* {msg}]")
+                        elif "result" in event:
+                            all_results = event["result"].get("results", [])
+                            if not full_answer:
+                                full_answer = event["result"].get("generatedResponse", {}).get("answer", "")
+                except Exception as e:
+                    logger.error(f"Error reading agentic stream: {e}")
+                    err = f"Stream error: {e}"
+                trace_area.empty()
+                answer_area.empty()
+                refs = []
+                for r in all_results:
+                    content = r.get("content", {}).get("text", "")
+                    md = r.get("metadata", {})
+                    refs.append({
+                        "source": (md.get("_document_title") or md.get("_source_uri")
+                                   or r.get("location", {}).get("s3Location", {}).get("uri", "") or "source"),
+                        "snippet": content[:200] + ("..." if len(content) > 200 else ""),
+                    })
+                st.session_state.last_result = {
+                    "mode": rag_mode, "prompt": prompt,
+                    "answer": full_answer or "_No answer generated._",
+                    "refs": refs, "results": [], "error": err,
+                }
 
-                stream = agentic_retrieve_stream(
-                    runtime_client,
-                    st.session_state.selected_kb_id,
-                    agentic_messages,
-                    model_arn,
-                    generate_response=True,
-                )
-                if stream is None:
-                    st.error("Agentic retrieval failed. Check logs.")
-                else:
-                    full_answer = ""
-                    all_results = []
-                    try:
-                        for event in stream:
-                            if "responseEvent" in event:
-                                full_answer += event["responseEvent"].get("text", "")
-                                answer_area.markdown(full_answer + "▌")
-                            elif "traceEvent" in event:
-                                attrs = event["traceEvent"].get("attributes", {})
-                                step = attrs.get("step", "")
-                                status = attrs.get("status", "")
-                                msg = attrs.get("message", "")
-                                if step and status:
-                                    trace_area.markdown(f":blue[*{step} — {status}* {msg}]")
-                            elif "result" in event:
-                                all_results = event["result"].get("results", [])
-                                if not full_answer:
-                                    gen = event["result"].get("generatedResponse", {})
-                                    full_answer = gen.get("answer", "")
-                    except Exception as e:
-                        logger.error(f"Error reading agentic stream: {e}")
-                        st.error(f"Stream error: {e}")
-
-                    trace_area.empty()
-                    if full_answer:
-                        answer_area.markdown(full_answer)
-                    if all_results:
-                        with results_area:
-                            with st.expander(f"📎 {len(all_results)} retrieved chunk(s)", expanded=False):
-                                for i, result in enumerate(all_results, 1):
-                                    content = result.get("content", {}).get("text", "")
-                                    md = result.get("metadata", {})
-                                    # Agentic/managed results carry the source in metadata, not location.
-                                    source = (
-                                        md.get("_document_title")
-                                        or md.get("_source_uri")
-                                        or result.get("location", {}).get("s3Location", {}).get("uri", "")
-                                        or "source"
-                                    )
-                                    snippet = content[:200] + ("..." if len(content) > 200 else "")
-                                    st.markdown(f":blue[**{i}.** {source}]")
-                                    st.markdown(f"<small>{snippet}</small>", unsafe_allow_html=True)
+    # Always render the last stored result (persists across toggles / reruns).
+    if ds_count:
+        render_last_result(st.session_state.last_result)
