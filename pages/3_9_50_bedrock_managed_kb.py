@@ -478,6 +478,20 @@ with st.sidebar:
             else:
                 st.session_state["rag_result_count"] = None
 
+        st.markdown("##### Metadata Filter")
+        with st.container(border=True):
+            filter_enabled = st.checkbox("Enable metadata filter", value=False, key="rag_filter_enabled")
+            if filter_enabled:
+                st.caption("Up to 3 conditions, combined with AND (equals). Blank keys are ignored.")
+                for i in range(3):
+                    kc, vc = st.columns(2)
+                    with kc:
+                        st.text_input(f"Key {i + 1}", key=f"rag_filter_key_{i}", label_visibility="collapsed",
+                                      placeholder=f"key {i + 1}")
+                    with vc:
+                        st.text_input(f"Value {i + 1}", key=f"rag_filter_value_{i}", label_visibility="collapsed",
+                                      placeholder=f"value {i + 1}")
+
     else:
         st.warning("No knowledge bases found in your account")
 
@@ -485,6 +499,28 @@ with st.sidebar:
 # ============================================================================
 # Main Area — Retrieve and Generate
 # ============================================================================
+
+def build_metadata_filter():
+    """Build a retrieval metadata filter from the sidebar inputs.
+
+    Returns a Bedrock retrieval filter dict, or None if disabled / no non-blank keys.
+    Uses `equals` per condition; multiple conditions are AND-combined via `andAll`.
+    """
+    if not st.session_state.get("rag_filter_enabled"):
+        return None
+    conditions = []
+    for i in range(3):
+        key = (st.session_state.get(f"rag_filter_key_{i}") or "").strip()
+        if not key:
+            continue
+        value = (st.session_state.get(f"rag_filter_value_{i}") or "").strip()
+        conditions.append({"equals": {"key": key, "value": value}})
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"andAll": conditions}
+
 
 def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate_response=True, max_results=None):
     try:
@@ -511,11 +547,13 @@ def agentic_retrieve_stream(runtime_client, kb_id, messages, model_arn, generate
         return None
 
 
-def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=None):
+def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=None, metadata_filter=None):
     try:
         # MANAGED KBs require managedSearchConfiguration; others use vectorSearchConfiguration.
         search_key = "managedSearchConfiguration" if kb_type == "MANAGED" else "vectorSearchConfiguration"
         inner = {"numberOfResults": top_k} if top_k is not None else {}
+        if metadata_filter:
+            inner["filter"] = metadata_filter
         params = {"knowledgeBaseId": kb_id, "retrievalQuery": {"text": query}}
         if inner:
             params["retrievalConfiguration"] = {search_key: inner}
@@ -528,15 +566,20 @@ def retrieve_only(runtime_client, kb_id, query, kb_type=None, top_k=None):
 
 
 def retrieve_and_generate(runtime_client, kb_id, model_arn, query, session_id=None, temperature=None,
-                          kb_type=None, max_results=None):
+                          kb_type=None, max_results=None, metadata_filter=None):
     kb_cfg = {"knowledgeBaseId": kb_id, "modelArn": model_arn}
     if temperature is not None:
         kb_cfg["generationConfiguration"] = {
             "inferenceConfig": {"textInferenceConfig": {"temperature": temperature}}
         }
-    if max_results is not None:
+    if max_results is not None or metadata_filter:
         search_key = "managedSearchConfiguration" if kb_type == "MANAGED" else "vectorSearchConfiguration"
-        kb_cfg["retrievalConfiguration"] = {search_key: {"numberOfResults": max_results}}
+        inner = {}
+        if max_results is not None:
+            inner["numberOfResults"] = max_results
+        if metadata_filter:
+            inner["filter"] = metadata_filter
+        kb_cfg["retrievalConfiguration"] = {search_key: inner}
     params = {
         "input": {"text": query},
         "retrieveAndGenerateConfiguration": {
@@ -565,6 +608,7 @@ else:
     rag_region = st.session_state.get("rag_region", AWS_REGION)
     rag_temperature = st.session_state.get("rag_temperature")
     rag_result_count = st.session_state.get("rag_result_count")
+    metadata_filter = build_metadata_filter()
     model_arn = RAG_MODEL_CONFIGS[rag_model_id]["model_arn"]
     logger.info(f"RAG model_id={rag_model_id} model_arn={model_arn}")
 
@@ -601,6 +645,10 @@ else:
                 "Chunk display", ["Markdown", "Plain text"], default="Markdown",
                 key="chunk_format", label_visibility="collapsed",
             ) or "Markdown"
+
+        # Agentic Retrieve has no filter field in its API, so any metadata filter is ignored.
+        if rag_mode == "Agentic Retrieve" and metadata_filter:
+            st.markdown(":red[Metadata filter is not supported for Agentic Retrieve and will be ignored.]")
 
         runtime_client = boto3.client('bedrock-agent-runtime', region_name=rag_region)
 
@@ -647,6 +695,7 @@ else:
                 response = retrieve_and_generate(
                     runtime_client, st.session_state.selected_kb_id, model_arn, prompt,
                     temperature=rag_temperature, kb_type=kb_type, max_results=rag_result_count,
+                    metadata_filter=metadata_filter,
                 )
             if response:
                 citations = response.get("citations", [])
@@ -670,7 +719,7 @@ else:
 
         elif rag_mode == "Retrieve":
             with st.spinner("Retrieving..."):
-                results = retrieve_only(runtime_client, st.session_state.selected_kb_id, prompt, kb_type=kb_type, top_k=rag_result_count)
+                results = retrieve_only(runtime_client, st.session_state.selected_kb_id, prompt, kb_type=kb_type, top_k=rag_result_count, metadata_filter=metadata_filter)
             if results is None:
                 st.session_state.last_result = {
                     "mode": rag_mode, "prompt": prompt, "error": "Retrieval failed. Check logs for details.",
