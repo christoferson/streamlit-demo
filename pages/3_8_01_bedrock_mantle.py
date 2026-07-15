@@ -20,6 +20,7 @@ from cmn.tools.tool import (
     AwsDocsBedrockConverseTool,
     WikipediaBedrockConverseTool,
     UrlContentBedrockConverseTool,
+    WebSearchBedrockConverseTool,
     AcronymBedrockConverseTool,
     SalesBedrockConverseTool,
     SalesKpiBedrockConverseTool,
@@ -369,14 +370,24 @@ def get_renderer_registry():
 
 
 @st.cache_resource
-def get_tool_registry():
-    # Return None for now - we'll add tools later
-    return None
-    # Uncomment when ready to add tools:
-    # return ToolRegistry([
+def get_tool_registry(enable_web_search: bool):
+    """
+    Build the tool registry based on sidebar options.
+    Returns None when no tools are enabled (basic chat mode).
+    """
+    tools = []
+
+    if enable_web_search:
+        tools.append(WebSearchBedrockConverseTool())
+        tools.append(UrlContentBedrockConverseTool())
+
+    if not tools:
+        return None
+
+    return ToolRegistry(tools)
+    # Other available tools:
     #     CalculatorBedrockConverseTool(),
     #     AcronymBedrockConverseTool(),
-    #     UrlContentBedrockConverseTool(),
     #     WikipediaBedrockConverseTool(),
     #     AwsDocsBedrockConverseTool(),
     #     DateTimeBedrockConverseTool(),
@@ -388,11 +399,22 @@ def get_tool_registry():
     #     SalesAnomalyBedrockConverseTool(),
     #     PptxBedrockConverseTool(),
     #     PdfBedrockConverseTool(),
-    # ])
 
+
+with st.sidebar:
+    opt_web_search = st.checkbox(
+        "Enable Web Search",
+        value=True,
+        key="bedrock_mantle_web_search",
+        help=(
+            "Adds web_search and url_content_loader tools. "
+            "Search runs client-side (DuckDuckGo) — Bedrock does not "
+            "support Anthropic's server-side web search tool."
+        ),
+    )
 
 mantle_client = get_mantle_client()
-tool_registry = get_tool_registry()
+tool_registry = get_tool_registry(opt_web_search)
 renderer_registry = get_renderer_registry()
 
 
@@ -405,13 +427,44 @@ def build_default_system_prompt(registry: Optional[ToolRegistry]) -> str:
 
     if registry and hasattr(registry, 'build_tool_summary'):
         tool_summary = registry.build_tool_summary()
+        search_guidance = None
+        if "web_search" in registry.tool_names:
+            search_guidance = (
+                "When the answer depends on current or time-sensitive information "
+                "(recent events, prices, versions, news), use web_search before "
+                "answering rather than answering from memory. "
+                "For news, use search_type='news' with recency='day' or 'week'. "
+                "Check the Published date on each result against today's date "
+                "and discard stale items — do not present old articles as "
+                "current news. "
+                "When the user asks for the latest news, ALWAYS run a fresh "
+                "web_search — never recap news from earlier in this conversation, "
+                "as it may already be outdated. "
+                "Use url_content_loader to read a specific result in full."
+            )
         return "\n\n".join(filter(None, [
-            "You are a BI analyst assistant.",
+            base_prompt,
             tool_summary,
+            search_guidance,
             "Call tools ONE AT A TIME. Wait for each result before calling the next.",
         ]))
 
     return base_prompt
+
+
+def build_runtime_system_prompt(user_system_msg: str) -> str:
+    """
+    Final system prompt sent to the API. Appends the current date at request
+    time so it stays correct regardless of the (session-state-cached) sidebar
+    text and across long-running server processes.
+    """
+    from datetime import datetime
+    today = datetime.now().strftime("%A, %B %d, %Y")
+    date_note = (
+        f"Today's date is {today}. Your training data has a cutoff in the "
+        "past — treat anything you recall from memory as potentially outdated."
+    )
+    return f"{user_system_msg}\n\n{date_note}"
 
 
 OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
@@ -490,7 +543,16 @@ if len(st.session_state.bedrock_mantle_invocation_stats) != len(st.session_state
 if "bedrock_mantle_uploader_key" not in st.session_state:
     st.session_state.bedrock_mantle_uploader_key = 0
 
-st.markdown(f"{len(st.session_state.bedrock_mantle_messages)}/{MAX_MESSAGES}")
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.markdown(f"{len(st.session_state.bedrock_mantle_messages)}/{MAX_MESSAGES}")
+    if st.button(
+        ":material/delete_history:",
+        key="bedrock_mantle_clear_history",
+        help="Clear conversation history",
+    ):
+        st.session_state.bedrock_mantle_messages = []
+        st.session_state.bedrock_mantle_invocation_stats = []
+        st.rerun()
 
 
 ################################################################################
@@ -586,7 +648,7 @@ if prompt:
             model_id=opt_model_id,
             max_tokens=opt_max_tokens,
             temperature=0.0,
-            system_prompt=opt_system_msg,
+            system_prompt=build_runtime_system_prompt(opt_system_msg),
         )
 
         with st.spinner("Processing...", show_time=True, width="content"):

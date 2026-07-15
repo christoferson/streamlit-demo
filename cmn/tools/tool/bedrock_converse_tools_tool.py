@@ -58,6 +58,21 @@ class ToolRegistry:
     def tool_names(self) -> list[str]:
         return list(self._tools.keys())
 
+    def get_anthropic_tools(self) -> list[dict]:
+        """
+        Returns tool definitions converted to Anthropic Messages API format
+        (name / description / input_schema) for use with the Mantle client.
+        """
+        tools = []
+        for tool in self._tools.values():
+            spec = tool.definition["toolSpec"]
+            tools.append({
+                "name":         spec["name"],
+                "description":  spec.get("description", ""),
+                "input_schema": spec["inputSchema"]["json"],
+            })
+        return tools
+
     def build_tool_summary(self) -> str | None:
         """
         Loop through all tools, collect non-null summaries,
