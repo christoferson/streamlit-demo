@@ -24,6 +24,16 @@ AWS_REGION = cmn_settings.AWS_REGION
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 client = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
+runtime_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+
+# RetrieveAndGenerate EXTERNAL_SOURCES rejects images ("Unsupported file
+# format"), so image attachments are routed to the Converse API instead.
+_IMAGE_FORMATS = {
+    "image/png":  "png",
+    "image/jpeg": "jpeg",
+    "image/gif":  "gif",
+    "image/webp": "webp",
+}
 
 
 st.set_page_config(
@@ -70,7 +80,8 @@ st.html(
 )
 
 opt_model_id_list = [
-    "anthropic.claude-3-sonnet-20240229-v1:0"
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    #"anthropic.claude-3-sonnet-20240229-v1:0"
 ]
 
 opt_top_k = 250
@@ -102,39 +113,97 @@ if "menu_filequery_session_id" in st.session_state:
     menu_filequery_session_id = st.session_state["menu_filequery_session_id"]
     menu_filequery_uploaded_file_name = st.session_state["menu_filequery_uploaded_file_name"]
     st.caption(f":blue[Session:] {menu_filequery_session_id} | :blue[File:] {menu_filequery_uploaded_file_name}")
-elif "menu_filequery_uploaded_file_name" in st.session_state:    
+elif "menu_filequery_uploaded_file_name" in st.session_state:
     menu_filequery_uploaded_file_name = st.session_state["menu_filequery_uploaded_file_name"]
     st.caption(f":blue[Session:] new | :blue[File:] {menu_filequery_uploaded_file_name}")
 
-#### 
-uploaded_file = st.file_uploader(
-    "Maximum of 20000 Tokens",
-    type=["PDF", "MD", "TXT", "DOCX", "HTML", "CSV", "XLS", "XLSX"],
-    accept_multiple_files=False,
+####
+# File attachment via chat_input (accept_file). The Bedrock EXTERNAL_SOURCES
+# call needs the file bytes on EVERY question, but chat_input only delivers
+# the file on the submission it was attached to — so the current file is
+# persisted in session state and reused for follow-up questions.
+
+submission = st.chat_input(
+    "Ask a question — attach a file (max 20000 tokens)",
+    accept_file=True,
+    file_type=["pdf", "md", "txt", "docx", "html", "csv", "xls", "xlsx",
+               "png", "jpg", "jpeg", "gif", "webp"],
 )
 
-if uploaded_file:
-    uploaded_file_bytes = uploaded_file.getvalue()
-    uploaded_file_name = uploaded_file.name
-    uploaded_file_type = uploaded_file.type
-    # Reset the session key when the file changed
-    if "menu_filequery_session_id" in st.session_state:
-        del st.session_state["menu_filequery_session_id"]
-    st.session_state["menu_filequery_uploaded_file_name"] = uploaded_file_name
+if submission:
+    if submission.files:
+        attached = submission.files[0]
+        # Reset the KB session when the file changed
+        if "menu_filequery_session_id" in st.session_state:
+            del st.session_state["menu_filequery_session_id"]
+        st.session_state["menu_filequery_uploaded_file_name"] = attached.name
+        st.session_state["menu_filequery_uploaded_file_type"] = attached.type
+        st.session_state["menu_filequery_uploaded_file_bytes"] = attached.getvalue()
 
-#### 
+if submission and not submission.text:
+    # File attached without a question — acknowledge and wait for the question
+    st.info(
+        f"File **{st.session_state.get('menu_filequery_uploaded_file_name', '')}** "
+        "attached. Ask a question about it."
+    )
 
-if prompt := st.chat_input(
-    "Ask question about the file." if uploaded_file else "Choose and upload a file first",
-    disabled=(not uploaded_file),
+if submission and submission.text and "menu_filequery_uploaded_file_bytes" not in st.session_state:
+    st.warning("Attach a file first — use the 📎 button in the message box.")
+
+if (
+    submission
+    and submission.text
+    and "menu_filequery_uploaded_file_bytes" in st.session_state
 ):
+    prompt = submission.text
+    uploaded_file_name  = st.session_state["menu_filequery_uploaded_file_name"]
+    uploaded_file_type  = st.session_state["menu_filequery_uploaded_file_type"]
+    uploaded_file_bytes = st.session_state["menu_filequery_uploaded_file_bytes"]
+
     st.session_state.menu_filequery_messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    
+    if uploaded_file_type in _IMAGE_FORMATS:
+        # Image path: RetrieveAndGenerate rejects images, so query the
+        # multimodal model directly via the Converse API. Stateless — the
+        # image is re-sent with each question, no KB session involved.
+        with st.chat_message("assistant"):
+            try:
+                response = runtime_client.converse(
+                    modelId=opt_model_id,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "image": {
+                                    "format": _IMAGE_FORMATS[uploaded_file_type],
+                                    "source": {"bytes": uploaded_file_bytes},
+                                }
+                            },
+                            {"text": prompt},
+                        ],
+                    }],
+                    # Claude 4.5 rejects temperature + topP together on Converse
+                    inferenceConfig={
+                        "temperature": opt_temperature,
+                        "maxTokens": opt_max_tokens,
+                    },
+                )
+                answer = response["output"]["message"]["content"][0]["text"]
+                st.markdown(answer)
+                st.caption(f"Image: {uploaded_file_name}")
+                st.session_state.menu_filequery_messages.append(
+                    {"role": "assistant", "content": answer}
+                )
+            except ClientError as err:
+                message = err.response["Error"]["Message"]
+                logger.error("A client error occurred: %s", message)
+                st.markdown(f":red[{message}]")
+        st.stop()
+
     with st.chat_message("assistant"):
-        
+
         try:
 
             inference_config = {
