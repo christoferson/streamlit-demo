@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from anthropic import AnthropicBedrockMantle
 from anthropic.types import Message, ContentBlock, TextBlock, ToolUseBlock
 
+from openai import OpenAI
+
 from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
 from cmn.view import CONVERSE_TOOL_GUIDE
 from cmn.view.processor.file_uploader_chat import render_file_uploader
@@ -312,6 +314,178 @@ class MantleConversationManager:
 
 
 ################################################################################
+# SECTION: OpenAI (Mantle) Conversation Manager
+################################################################################
+
+class OpenAIMantleConversationManager:
+    """
+    Orchestrates multi-turn conversations for OpenAI models served on the
+    Bedrock Mantle /openai/v1 endpoint. GPT-5.5 on Mantle requires the
+    Responses API (chat completions is rejected with a 400).
+    Handles tool-use loops with streaming support — same callback contract
+    as MantleConversationManager.
+    """
+
+    def __init__(
+        self,
+        openai_client: OpenAI,
+        tool_registry: Optional[ToolRegistry],
+        model_id: str,
+        max_tokens: int,
+        temperature: float,
+        system_prompt: str,
+    ):
+        self.client = openai_client
+        self.registry = tool_registry
+        self.model_id = model_id
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.system_prompt = system_prompt
+
+    def run(
+        self,
+        message_history: list,
+        on_text_delta: Optional[Callable[[str], None]] = None,
+        on_message_complete: Optional[Callable[[dict, int], None]] = None,
+        on_tool_invoked: Optional[Callable[[str, dict, Any], None]] = None,
+    ) -> tuple[str, dict]:
+        """
+        Run conversation with tool loop support.
+        Returns: (final_text, usage_dict)
+        """
+        input_items = self._convert_messages(message_history)
+        accumulated_text = ""
+        total_usage = {'input_tokens': 0, 'output_tokens': 0}
+
+        while True:
+            import time
+            start_time = time.time()
+
+            api_params = {
+                "model": self.model_id,
+                "max_output_tokens": self.max_tokens,
+                "instructions": self.system_prompt,
+                "input": input_items,
+                "stream": True,
+            }
+
+            tools = self._build_tools()
+            if tools:
+                api_params["tools"] = tools
+
+            stream = self.client.responses.create(**api_params)
+
+            function_calls = []
+            final_response = None
+
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    accumulated_text += event.delta
+                    if on_text_delta:
+                        on_text_delta(event.delta)
+                elif event.type == "response.completed":
+                    final_response = event.response
+
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            if final_response is not None:
+                usage = final_response.usage
+                if usage:
+                    total_usage['input_tokens'] += usage.input_tokens or 0
+                    total_usage['output_tokens'] += usage.output_tokens or 0
+                function_calls = [
+                    item for item in final_response.output
+                    if item.type == "function_call"
+                ]
+
+            if on_message_complete:
+                on_message_complete(total_usage, latency_ms)
+
+            if not function_calls or not self.registry:
+                return accumulated_text, total_usage
+
+            # Echo the model's output items, then append one
+            # function_call_output per call
+            for item in final_response.output:
+                input_items.append(item)
+
+            for fc in function_calls:
+                tool_name = fc.name
+                try:
+                    tool_input = json.loads(fc.arguments) if fc.arguments else {}
+                except json.JSONDecodeError:
+                    tool_input = {}
+
+                try:
+                    result = self.registry.invoke(tool_name, tool_input)
+
+                    if on_tool_invoked:
+                        on_tool_invoked(tool_name, tool_input, result)
+
+                    output = str(result)
+                except Exception as e:
+                    logger.error(f"Tool {tool_name} failed: {e}")
+                    output = f"Error: {str(e)}"
+
+                input_items.append({
+                    "type": "function_call_output",
+                    "call_id": fc.call_id,
+                    "output": output,
+                })
+
+    def _build_tools(self) -> list:
+        """Responses API uses a flat function-tool format."""
+        if not (self.registry and hasattr(self.registry, 'get_openai_tools')):
+            return []
+        return [
+            {
+                "type": "function",
+                "name":        t["function"]["name"],
+                "description": t["function"]["description"],
+                "parameters":  t["function"]["parameters"],
+            }
+            for t in self.registry.get_openai_tools()
+        ]
+
+    def _convert_messages(self, message_history: list) -> list:
+        """Convert internal message format to Responses API input items."""
+        converted = []
+        for msg in message_history:
+            role = msg["role"]
+            content = msg["content"]
+
+            if len(content) == 1 and "text" in content[0]:
+                converted.append({"role": role, "content": content[0]["text"]})
+            else:
+                text_type = "output_text" if role == "assistant" else "input_text"
+                openai_content = []
+                for item in content:
+                    if "text" in item:
+                        openai_content.append({
+                            "type": text_type,
+                            "text": item["text"],
+                        })
+                    elif "image" in item:
+                        img_data = item["image"]
+                        b64 = base64.b64encode(
+                            img_data['source']['bytes']
+                        ).decode('utf-8')
+                        openai_content.append({
+                            "type": "input_image",
+                            "image_url": f"data:image/{img_data['format']};base64,{b64}",
+                        })
+                    elif "document" in item:
+                        doc_data = item["document"]
+                        openai_content.append({
+                            "type": text_type,
+                            "text": f"[Document: {doc_data.get('name', 'unknown')}]",
+                        })
+                converted.append({"role": role, "content": openai_content})
+
+        return converted
+
+
+################################################################################
 # SECTION: File / Media Utilities
 ################################################################################
 
@@ -354,6 +528,29 @@ def build_user_message(
 @st.cache_resource
 def get_mantle_client():
     return AnthropicBedrockMantle(aws_region=AWS_REGION)
+
+
+@st.cache_resource(ttl=3300)  # refresh before the 1h bearer token expires
+def get_openai_mantle_client():
+    """
+    OpenAI models on Bedrock Mantle are served via the OpenAI-compatible
+    endpoint (/openai/v1). The OpenAI SDK cannot SigV4-sign requests, so a
+    short-lived bearer token is derived from the IAM credential chain via
+    aws-bedrock-token-generator. The cache TTL (55 min) rotates the token
+    before its 1h expiry.
+    """
+    from datetime import timedelta
+    from aws_bedrock_token_generator import provide_token
+
+    token = provide_token(region=AWS_REGION, expiry=timedelta(hours=1))
+    return OpenAI(
+        base_url=f"https://bedrock-mantle.{AWS_REGION}.api.aws/openai/v1",
+        api_key=token,
+    )
+
+
+def is_openai_model(model_id: str) -> bool:
+    return model_id.startswith("openai.")
 
 
 @st.cache_resource
@@ -452,19 +649,33 @@ def build_default_system_prompt(registry: Optional[ToolRegistry]) -> str:
     return base_prompt
 
 
-def build_runtime_system_prompt(user_system_msg: str) -> str:
+def build_runtime_system_prompt(user_system_msg: str, web_search_enabled: bool = False) -> str:
     """
-    Final system prompt sent to the API. Appends the current date at request
-    time so it stays correct regardless of the (session-state-cached) sidebar
-    text and across long-running server processes.
+    Final system prompt sent to the API. Appends the current date (and, when
+    web search is on, citation rules) at request time so they stay correct
+    regardless of the (session-state-cached) sidebar text and across
+    long-running server processes.
     """
     from datetime import datetime
     today = datetime.now().strftime("%A, %B %d, %Y")
-    date_note = (
-        f"Today's date is {today}. Your training data has a cutoff in the "
-        "past — treat anything you recall from memory as potentially outdated."
-    )
-    return f"{user_system_msg}\n\n{date_note}"
+    parts = [
+        user_system_msg,
+        (
+            f"Today's date is {today}. Your training data has a cutoff in the "
+            "past — treat anything you recall from memory as potentially outdated."
+        ),
+    ]
+    if web_search_enabled:
+        parts.append(
+            "CITATION RULES for web search results:\n"
+            "- Every news item or fact taken from a search result MUST include "
+            "its publication date and a markdown link to the source, e.g.: "
+            "**Headline** (2026-07-15) — [reuters.com](https://www.reuters.com/...)\n"
+            "- If a result has no publication date, say 'date not stated' "
+            "rather than omitting the date or guessing it.\n"
+            "- Never present a claim from search results without its source link."
+        )
+    return "\n\n".join(parts)
 
 
 OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
@@ -477,6 +688,7 @@ OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
 opt_model_id_list = [
     #"global.anthropic.claude-opus-4-7",
     "anthropic.claude-opus-4-7",
+    "openai.gpt-5.5",
     #"global.anthropic.claude-sonnet-4-20250514-v1:0",
     #"anthropic.claude-sonnet-4-20250514-v1:0",
     #"anthropic.claude-opus-4-6",
@@ -642,14 +854,24 @@ if prompt:
             if renderer_registry:
                 renderer_registry.render(tool_name, tool_args, tool_result, result_container)
 
-        manager = MantleConversationManager(
-            mantle_client=mantle_client,
-            tool_registry=tool_registry,
-            model_id=opt_model_id,
-            max_tokens=opt_max_tokens,
-            temperature=0.0,
-            system_prompt=build_runtime_system_prompt(opt_system_msg),
-        )
+        if is_openai_model(opt_model_id):
+            manager = OpenAIMantleConversationManager(
+                openai_client=get_openai_mantle_client(),
+                tool_registry=tool_registry,
+                model_id=opt_model_id,
+                max_tokens=opt_max_tokens,
+                temperature=0.0,
+                system_prompt=build_runtime_system_prompt(opt_system_msg, web_search_enabled=opt_web_search),
+            )
+        else:
+            manager = MantleConversationManager(
+                mantle_client=mantle_client,
+                tool_registry=tool_registry,
+                model_id=opt_model_id,
+                max_tokens=opt_max_tokens,
+                temperature=0.0,
+                system_prompt=build_runtime_system_prompt(opt_system_msg, web_search_enabled=opt_web_search),
+            )
 
         with st.spinner("Processing...", show_time=True, width="content"):
             try:
