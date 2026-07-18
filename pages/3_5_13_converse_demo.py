@@ -102,6 +102,27 @@ def validate_conversation_structure(conversation):
             if not isinstance(content_item, dict) or "text" not in content_item:
                 raise ValueError("Invalid content item: expected 'text' key")
 
+def strip_binary_content(messages):
+    """
+    Replace image/document byte payloads with text placeholders so the
+    conversation is JSON-serializable for download. Attachment bytes are
+    session-only and not restored on upload.
+    """
+    stripped = []
+    for msg in messages:
+        content = []
+        for item in msg["content"]:
+            if "image" in item:
+                content.append({"text": "[image attachment omitted]"})
+            elif "document" in item:
+                doc_name = item["document"].get("name", "unknown")
+                content.append({"text": f"[document attachment omitted: {doc_name}]"})
+            else:
+                content.append(item)
+        stripped.append({"role": msg["role"], "content": content})
+    return stripped
+
+
 def get_conversation_download():
     """Download conversation with security signature"""
     if not st.session_state.menu_converse_messages:
@@ -109,14 +130,15 @@ def get_conversation_download():
 
     security = cmn_security.ConversationSecurity()
     secure_package = security.secure_conversation(
-        trim_conversation_history(st.session_state.menu_converse_messages)
+        strip_binary_content(
+            trim_conversation_history(st.session_state.menu_converse_messages)
+        )
     )
     return BytesIO(json.dumps(secure_package, indent=2).encode())
 
 def clear_conversation():
     """Clear conversation state"""
     st.session_state.menu_converse_messages = []
-    st.session_state.menu_converse_uploader_key = 0
 
 def upload_conversation(uploaded_file):
     """Upload and verify conversation integrity"""
@@ -137,7 +159,6 @@ def upload_conversation(uploaded_file):
 
         # Update session state
         st.session_state.menu_converse_messages = conversation_package["messages"]
-        st.session_state.menu_converse_uploader_key = 0
 
         st.success("Conversation uploaded and verified successfully!")
         return True
@@ -245,8 +266,40 @@ mime_mapping_image = {
 mime_mapping_document = {
     "text/plain": "txt",
     "application/vnd.ms-excel": "csv",
+    "text/csv": "csv",
     "application/pdf": "pdf",
+    "text/markdown": "md",
 }
+
+
+def build_attachment_blocks(files):
+    """
+    Convert chat_input attachments into Converse content blocks.
+    Returns (blocks, unsupported_names). Attachments stay in the message
+    they arrived with, so the full history replay keeps them visible to
+    the model on every subsequent turn.
+    """
+    blocks = []
+    unsupported = []
+    for f in files:
+        if f.type in mime_mapping_image:
+            blocks.append({
+                "image": {
+                    "format": mime_mapping_image[f.type],
+                    "source": {"bytes": f.getvalue()},
+                }
+            })
+        elif f.type in mime_mapping_document:
+            blocks.append({
+                "document": {
+                    "format": mime_mapping_document[f.type],
+                    "name": f.name.replace(".", "_").replace(" ", "_"),
+                    "source": {"bytes": f.getvalue()},
+                }
+            })
+        else:
+            unsupported.append(f"{f.name} ({f.type})")
+    return blocks, unsupported
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
@@ -461,17 +514,16 @@ with main_col:
         with st.chat_message(msg["role"]):
             content = contents[0]
             content_text = content["text"]
-            document_name = None
             if "user" == msg["role"]:
-                if len(contents) > 1:
-                    content_1 = contents[1]
-                    if "document" in content_1:
-                        content_1_document = content_1["document"]
-                        document_name = content_1_document["name"]
-                if document_name:
-                    st.write(f"{content_text} \n\n:green[Document: {document_name}]")
-                else:
-                    st.write(f"{content_text}")
+                st.write(f"{content_text}")
+                # Render any attachments carried in this message
+                for extra in contents[1:]:
+                    if "document" in extra:
+                        st.caption(f":green[Document: {extra['document']['name']}]")
+                    elif "image" in extra:
+                        img_bytes = extra["image"]["source"].get("bytes")
+                        if img_bytes:
+                            st.image(img_bytes, width=200)
 
                 del_idx = idx - 2
                 if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
@@ -498,67 +550,13 @@ with main_col:
                     st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
 
 
-    if "menu_converse_uploader_key" not in st.session_state:
-        st.session_state.menu_converse_uploader_key = 0
-
-    #st.write(f"""{opt_fm.isFeatureSupported("document_chat")}   {opt_fm.isFeatureSupported("vision")}""")
-
-    uploaded_file_type_list = []
+    # File attachments now come through st.chat_input (accept_file="multiple").
+    # Build the accepted-type list from the model's capabilities.
+    chat_input_file_types = []
     if opt_fm.isFeatureSupported("document_chat"):
-        uploaded_file_type_list.extend(["txt", "csv", "pdf", "md"])
+        chat_input_file_types.extend(["txt", "csv", "pdf", "md"])
     if opt_fm.isFeatureSupported("vision"):
-        uploaded_file_type_list.extend(["png", "jpg", "jpeg"])
-
-    if uploaded_file_type_list:
-        # #'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
-        uploaded_file = st.file_uploader(
-                "Attach Image",
-                type=uploaded_file_type_list,
-                accept_multiple_files=False,
-                label_visibility="collapsed",
-                key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
-            )
-    else:
-        uploaded_file = None
-
-    uploaded_file_key = None
-    uploaded_file_name = None
-    uploaded_file_bytes = None
-    uploaded_file_type = None
-    uploaded_file_base64 = None
-    if uploaded_file:
-        if uploaded_file.type in mime_mapping_image: #This field is only supported by Anthropic Claude 3 models.
-            uploaded_file_bytes = uploaded_file.read()
-
-            image:Image = Image.open(uploaded_file)
-            uploaded_file_name = uploaded_file.name
-            uploaded_file_type = uploaded_file.type
-            uploaded_file_base64 = image_to_base64(image, mime_mapping[uploaded_file_type])
-            st.image(image, caption='upload images', use_container_width=True)
-        elif uploaded_file.type in mime_mapping_document:
-            uploaded_file_key = uploaded_file.name.replace(".", "_").replace(" ", "_")
-            uploaded_file_name = uploaded_file.name
-            uploaded_file_type = uploaded_file.type
-            bedrock_file_type = mime_mapping_document[uploaded_file_type]
-            print(f"-------{bedrock_file_type}")
-            if "csv" == bedrock_file_type:
-                uploaded_file_bytes = base64.b64encode(uploaded_file.read())
-                uploaded_file.seek(0)
-                try:
-                    uploaded_file_df = pd.read_csv(uploaded_file, encoding = "utf-8")
-                    st.write(uploaded_file_df)
-                except Exception as err:
-                    st.chat_message("system").write(type(err).__name__)
-            elif "pdf" == bedrock_file_type:
-                uploaded_file_bytes = uploaded_file.read()
-                uploaded_file.seek(0)
-                st.markdown(uploaded_file_name.replace(".", "_"))
-            elif "txt" == bedrock_file_type:
-                uploaded_file_bytes = base64.b64encode(uploaded_file.read())
-            else:
-                st.markdown(uploaded_file_key)
-        else:
-            print(f"******{uploaded_file.type}") #text/plain
+        chat_input_file_types.extend(["png", "jpg", "jpeg", "gif", "webp"])
 
 # Chat input at the bottom of viewport
 with st.bottom:
@@ -587,7 +585,12 @@ with st.bottom:
         # )
         st.space(size="small")
 
-    chat_input_prompt = st.chat_input(accept_audio=True, accept_file=True, file_type=["csv", "txt", "pdf"], max_upload_size=2 * 1024, placeholder="Type your message here...")
+    chat_input_prompt = st.chat_input(
+        accept_audio=True,
+        accept_file="multiple" if chat_input_file_types else False,
+        file_type=chat_input_file_types or None,
+        placeholder="Type your message here — attach files with 📎...",
+    )
 
 with main_col:
     if chat_input_prompt and chat_input_prompt.text:
@@ -602,38 +605,23 @@ with main_col:
 
         message_history = st.session_state.menu_converse_messages.copy()
         message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
-        if uploaded_file_name:
-            content = message_user_latest['content']
-            if uploaded_file_type in mime_mapping_image:
-                content.append(
-                    {
-                        "image": {
-                            "format": mime_mapping_image[uploaded_file_type],
-                            "source": {
-                                "bytes": uploaded_file_bytes, # If the image dimension is not supported we will get validation error
-                            }
-                        },
-                    }
-                )
-            elif uploaded_file.type in mime_mapping_document:
-                #uploaded_file_name_clean = str(uuid.uuid4()) #uploaded_file_name.replace(".", "_").replace(" ", "_")
-                uploaded_file_name_clean = uploaded_file_key
-                content.append(
-                    {
-                        "document": {
-                            "format": mime_mapping_document[uploaded_file_type],
-                            "name": uploaded_file_name_clean, #uploaded_file_key
-                            "source": {
-                                "bytes": uploaded_file_bytes,
-                            }
-                        },
-                    }
-                )
-            else:
-                st.write(f"Not supported file type: {uploaded_file.type}")
+
+        attached_names = []
+        if chat_input_prompt.files:
+            attachment_blocks, unsupported = build_attachment_blocks(chat_input_prompt.files)
+            message_user_latest["content"].extend(attachment_blocks)
+            attached_names = [f.name for f in chat_input_prompt.files]
+            if unsupported:
+                st.warning(f"Unsupported file type(s) skipped: {', '.join(unsupported)}")
+
         message_history.append(message_user_latest)
-        #print(f"******{message_user_latest}")
-        st.chat_message("user").write(prompt)
+        with st.chat_message("user"):
+            st.write(prompt)
+            for f in chat_input_prompt.files or []:
+                if f.type in mime_mapping_image:
+                    st.image(f.getvalue(), caption=f.name, width=300)
+                elif f.type in mime_mapping_document:
+                    st.caption(f":green[Document: {f.name}]")
 
         system_prompts = [{"text" : opt_system_msg}]
 
@@ -708,7 +696,9 @@ with main_col:
                             pass
 
                         if 'contentBlockDelta' in event:
-                            text = event['contentBlockDelta']['delta']['text']
+                            # .get(): newer models can emit non-text deltas
+                            # (e.g. reasoning blocks) which have no 'text' key
+                            text = event['contentBlockDelta']['delta'].get('text', '')
                             result_text += f"{text}"
                             result_area.write(result_text)
 
@@ -781,9 +771,6 @@ with main_col:
                 if menu_converse_messages_len > MAX_MESSAGES:
                     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
                 #print(f"menu_converse_messages_len={menu_converse_messages_len}")
-
-                if uploaded_file_name:
-                    st.session_state.menu_converse_uploader_key += 1
 
                 #print(json.dumps(message_user_latest, indent=2))
                 #print(message_user_latest)
