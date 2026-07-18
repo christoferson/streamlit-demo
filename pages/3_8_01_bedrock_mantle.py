@@ -2,50 +2,22 @@ import streamlit as st
 import json
 import logging
 import cmn_settings
-from PIL import Image
-import io
 import base64
-import pandas as pd
 from typing import Optional, Callable, Any
 from dataclasses import dataclass, field
 
 from anthropic import AnthropicBedrockMantle
-from anthropic.types import Message, ContentBlock, TextBlock, ToolUseBlock
 
 from openai import OpenAI
 
 from cmn.view.mime_constants import mime_mapping_image, mime_mapping_document
 from cmn.view import CONVERSE_TOOL_GUIDE
-from cmn.view.processor.file_uploader_chat import render_file_uploader
 
 from cmn.tools.tool import (
-    AwsDocsBedrockConverseTool,
-    WikipediaBedrockConverseTool,
     UrlContentBedrockConverseTool,
     WebSearchBedrockConverseTool,
-    AcronymBedrockConverseTool,
-    SalesBedrockConverseTool,
-    SalesKpiBedrockConverseTool,
-    SalesForecastBedrockConverseTool,
-    SalesAnomalyBedrockConverseTool,
-    DateTimeBedrockConverseTool,
-    CalculatorBedrockConverseTool,
-    ChartBedrockConverseTool,
-    ProductBedrockConverseTool,
-    PdfBedrockConverseTool,
-    PptxBedrockConverseTool,
 )
 
-from cmn.tools.renderer import (
-    RendererRegistry,
-    ChartToolRenderer,
-    ProductToolRenderer,
-    SalesKpiToolRenderer,
-    SalesAnomalyToolRenderer,
-    SalesForecastToolRenderer,
-    PptxToolRenderer,
-    PdfToolRenderer,
-)
 from cmn.tools.tool import ToolRegistry
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -489,32 +461,27 @@ class OpenAIMantleConversationManager:
 # SECTION: File / Media Utilities
 ################################################################################
 
-def build_user_message(
-    prompt: str,
-    uploaded_file=None,
-    uploaded_file_bytes=None,
-    uploaded_file_type: str = None,
-    uploaded_file_key: str = None,
-) -> dict:
+def build_user_message(prompt: str, files=None) -> dict:
     """
-    Construct the user content list, optionally attaching an image or document.
+    Construct the user content list from the chat_input submission,
+    attaching any images/documents in the message they arrived with.
     """
     content = [{"text": prompt}]
 
-    if uploaded_file and uploaded_file_bytes and uploaded_file_type:
-        if uploaded_file_type in mime_mapping_image:
+    for f in files or []:
+        if f.type in mime_mapping_image:
             content.append({
                 "image": {
-                    "format": mime_mapping_image[uploaded_file_type],
-                    "source": {"bytes": uploaded_file_bytes},
+                    "format": mime_mapping_image[f.type],
+                    "source": {"bytes": f.getvalue()},
                 }
             })
-        elif uploaded_file_type in mime_mapping_document:
+        elif f.type in mime_mapping_document:
             content.append({
                 "document": {
-                    "format": mime_mapping_document[uploaded_file_type],
-                    "name":   uploaded_file_key or "uploaded_document",
-                    "source": {"bytes": uploaded_file_bytes},
+                    "format": mime_mapping_document[f.type],
+                    "name":   f.name.replace(".", "_").replace(" ", "_"),
+                    "source": {"bytes": f.getvalue()},
                 }
             })
 
@@ -551,19 +518,6 @@ def get_openai_mantle_client():
 
 def is_openai_model(model_id: str) -> bool:
     return model_id.startswith("openai.")
-
-
-@st.cache_resource
-def get_renderer_registry():
-    return RendererRegistry([
-        ChartToolRenderer(),
-        ProductToolRenderer(),
-        SalesKpiToolRenderer(),
-        SalesAnomalyToolRenderer(),
-        SalesForecastToolRenderer(),
-        PptxToolRenderer(),
-        PdfToolRenderer(),
-    ])
 
 
 @st.cache_resource
@@ -612,7 +566,6 @@ with st.sidebar:
 
 mantle_client = get_mantle_client()
 tool_registry = get_tool_registry(opt_web_search)
-renderer_registry = get_renderer_registry()
 
 
 ################################################################################
@@ -755,9 +708,6 @@ if "bedrock_mantle_invocation_stats" not in st.session_state:
 if len(st.session_state.bedrock_mantle_invocation_stats) != len(st.session_state.bedrock_mantle_messages):
     st.session_state.bedrock_mantle_invocation_stats = [None] * len(st.session_state.bedrock_mantle_messages)
 
-if "bedrock_mantle_uploader_key" not in st.session_state:
-    st.session_state.bedrock_mantle_uploader_key = 0
-
 with st.container(horizontal=True, vertical_alignment="center"):
     st.markdown(f"{len(st.session_state.bedrock_mantle_messages)}/{MAX_MESSAGES}")
     if st.button(
@@ -779,17 +729,16 @@ for idx, msg in enumerate(st.session_state.bedrock_mantle_messages):
         contents = msg["content"]
         text = contents[0].get("text", "")
 
-        if msg["role"] == "user" and len(contents) > 1:
-            extra = contents[1]
-            if "document" in extra:
-                doc_name = extra["document"].get("name", "")
-                st.markdown(f"{text}\n\n:green[Document: {doc_name}]")
-            elif "image" in extra:
-                st.markdown(f"{text}\n\n:green[Image attached]")
-            else:
-                st.markdown(text)
-        else:
-            st.markdown(text)
+        st.markdown(text)
+        if msg["role"] == "user":
+            for extra in contents[1:]:
+                if "document" in extra:
+                    doc_name = extra["document"].get("name", "")
+                    st.caption(f":green[Document: {doc_name}]")
+                elif "image" in extra:
+                    img_bytes = extra["image"]["source"].get("bytes")
+                    if img_bytes:
+                        st.image(img_bytes, width=200)
 
         if opt_show_metrics and msg["role"] == "assistant":
             stat = st.session_state.bedrock_mantle_invocation_stats[idx]
@@ -798,34 +747,32 @@ for idx, msg in enumerate(st.session_state.bedrock_mantle_messages):
 
 
 ################################################################################
-# SECTION: File Uploader Widget
-################################################################################
-
-uploaded_file, file_bytes, file_key, file_type, file_preview = render_file_uploader(
-    st.session_state.bedrock_mantle_uploader_key
-)
-
-
-################################################################################
 # SECTION: Chat Input + Conversation Execution
 ################################################################################
 
-prompt = st.chat_input(key="bedrock_mantle_chat_input")
+submission = st.chat_input(
+    "Type your message — attach files with 📎...",
+    key="bedrock_mantle_chat_input",
+    accept_file="multiple",
+    file_type=["png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "pdf", "md"],
+)
 
-if prompt:
-    # Build user message
-    user_message = build_user_message(
-        prompt=prompt,
-        uploaded_file=uploaded_file,
-        uploaded_file_bytes=file_bytes,
-        uploaded_file_type=file_type,
-        uploaded_file_key=file_key,
-    )
+if submission and submission.text:
+    prompt = submission.text
+
+    # Build user message with any attachments
+    user_message = build_user_message(prompt, files=submission.files)
 
     message_history = st.session_state.bedrock_mantle_messages.copy()
     message_history.append(user_message)
 
-    st.chat_message("user").write(prompt)
+    with st.chat_message("user"):
+        st.write(prompt)
+        for f in submission.files or []:
+            if f.type in mime_mapping_image:
+                st.image(f.getvalue(), caption=f.name, width=300)
+            else:
+                st.caption(f":green[Document: {f.name}]")
 
     # Per-turn accumulators
     accumulated = {"text": ""}
@@ -833,7 +780,6 @@ if prompt:
 
     with st.chat_message("assistant"):
         result_area = st.empty()
-        result_container = st.container(border=False)
 
         # Callbacks
         def on_text_delta(chunk: str):
@@ -854,8 +800,6 @@ if prompt:
                 f"**Result:** `{tool_result}`\n\n"
             )
             result_area.markdown(accumulated["text"])
-            if renderer_registry:
-                renderer_registry.render(tool_name, tool_args, tool_result, result_container)
 
         if is_openai_model(opt_model_id):
             manager = OpenAIMantleConversationManager(
@@ -876,9 +820,11 @@ if prompt:
                 system_prompt=build_runtime_system_prompt(opt_system_msg, web_search_enabled=opt_web_search),
             )
 
+        # Return values unused — text/usage are collected via the callbacks
+        # into `accumulated` and `turn_stat`
         with st.spinner("Processing...", show_time=True, width="content"):
             try:
-                final_text, final_usage = manager.run(
+                manager.run(
                     message_history,
                     on_text_delta=on_text_delta,
                     on_message_complete=on_message_complete,
@@ -910,8 +856,3 @@ if prompt:
         excess = len(msgs) - MAX_MESSAGES
         del msgs[0:excess]
         del stats[0:excess]
-
-    # Reset uploader after successful submission
-    if uploaded_file:
-        st.session_state.bedrock_mantle_uploader_key += 1
-        st.rerun()
