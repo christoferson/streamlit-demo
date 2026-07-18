@@ -43,7 +43,7 @@ polly = boto3.client("polly", region_name=AWS_REGION)
 st.set_page_config(
     page_title="Converse",
     page_icon="🧊",
-    layout="centered", # "centered" or "wide"
+    layout="wide", # "centered" or "wide" — wide: page hosts chat + info panel side by side
     initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
     menu_items={
         'Get Help': None,
@@ -760,7 +760,30 @@ with main_col:
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
 # Right sidebar content
-with right_sidebar_col:
+# Pin the Info Panel so it stays visible while the conversation scrolls.
+# The COLUMN must be made sticky (not the inner container): columns stretch
+# to the row height, so align-self:flex-start shrinks it to content height
+# and leaves the rest of the row for it to slide along. :has() targets the
+# column that contains our keyed marker container.
+st.html(
+    """
+<style>
+[data-testid="stColumn"]:has(.st-key-info_panel_sticky) {
+    position: sticky;
+    top: 3.75rem; /* clear the Streamlit header */
+    align-self: flex-start;
+    height: fit-content;
+    /* Keep the panel within the visible area: viewport minus the header
+       (3.75rem top offset) and the st.bottom block (command panel + chat
+       input). Scroll the panel's own content if taller. */
+    max-height: calc(100vh - 3.75rem - 10rem - 10vh);
+    overflow-y: auto;
+}
+</style>
+"""
+)
+
+with right_sidebar_col, st.container(key="info_panel_sticky"):
     st.markdown("### Info Panel")
 
     with st.container(border=True):
