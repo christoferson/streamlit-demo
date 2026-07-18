@@ -7,10 +7,6 @@ import json
 import logging
 from io import BytesIO
 
-from PIL import Image
-import io
-import base64
-import pandas as pd
 from cmn.bedrock_models import FoundationModel
 from datetime import datetime
 
@@ -63,11 +59,6 @@ st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 
 # Create main layout with right sidebar
 main_col, right_sidebar_col = st.columns([3, 1])
-
-def image_to_base64(image,mime_type:str):
-    buffer = io.BytesIO()
-    image.save(buffer, format=mime_type)
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 def trim_conversation_history(messages):
     """Ensure conversation doesn't exceed maximum length"""
@@ -228,8 +219,6 @@ def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
 def delete_message_pair(index):
     if index < len(st.session_state.menu_converse_messages):
         del st.session_state.menu_converse_messages[index:index+2]
-    if f"feedback_{index+1}" in st.session_state.menu_converse_messages_feedback:
-        del st.session_state.menu_converse_messages_feedback[f"feedback_{index+1}"]
 
 def get_download_data():
     """Get conversation download data, returns None if no data"""
@@ -380,10 +369,6 @@ If any part of the query is unclear, don't hesitate to ask for clarification to 
 if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
 
-# Add this to store feedback
-if "menu_converse_messages_feedback" not in st.session_state:
-    st.session_state["menu_converse_messages_feedback"] = {}
-    
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = opt_model_id_list_default_idx, key="model_id")
 
@@ -504,9 +489,6 @@ with main_col:
                 - 💡 クリアボタンを使用して新しい会話を開始できます
                 """)
 
-    #:markdown/forum:
-    st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-
     idx = 1
     for msg in st.session_state.menu_converse_messages:
         idx = idx + 1
@@ -531,23 +513,7 @@ with main_col:
                     st.rerun()
 
             if "assistant" == msg["role"]:
-                #assistant_cmd_panel_col1, assistant_cmd_panel_col2, assistant_cmd_panel_col3 = st.columns([0.07,0.23,0.7], gap="small")
-                #with assistant_cmd_panel_col2:
-                #st.button(key=f"copy_button_{idx}", label='📄', type='primary', on_click=copy_button_clicked, args=[content])
                 st.markdown(f"{content_text}")
-
-                # Add feedback mechanism using st.feedback
-                feedback_key = f"feedback_{idx}"
-                feedback = st.feedback(
-                    options="stars",
-                    key=feedback_key,
-                    on_change=lambda: st.session_state.menu_converse_messages_feedback.update({idx: st.session_state[feedback_key]})
-                )
-
-                # Display existing feedback if available
-                if idx in st.session_state["menu_converse_messages_feedback"]:
-                    previous_feedback = st.session_state["menu_converse_messages_feedback"][idx]
-                    st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
 
 
     # File attachments now come through st.chat_input (accept_file="multiple").
@@ -561,6 +527,10 @@ with main_col:
 # Chat input at the bottom of viewport
 with st.bottom:
     with st.container(horizontal=True, width="stretch", horizontal_alignment="right", vertical_alignment="center", border=False, height="content", gap="xxsmall", autoscroll=False):
+        st.markdown(
+            f":violet[**{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]",
+            help="Messages in conversation history",
+        )
         if st.button(":material/delete_history:", type="tertiary", help="Clear Conversation"):
             on_button_clear_clicked()
 
@@ -770,11 +740,10 @@ with main_col:
                 menu_converse_messages_len = len(menu_converse_messages)
                 if menu_converse_messages_len > MAX_MESSAGES:
                     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-                #print(f"menu_converse_messages_len={menu_converse_messages_len}")
 
-                #print(json.dumps(message_user_latest, indent=2))
-                #print(message_user_latest)
-                #st.rerun()
+                # Rerun so bottom-panel counters and sidebar stats reflect
+                # the exchange that was just appended
+                st.rerun()
 
             except ClientError as err:
                 message = err.response["Error"]["Message"]
@@ -789,9 +758,6 @@ with main_col:
 #if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
-
-with main_col:
-    st.markdown(f":violet[**Entry: {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]")
 
 # Right sidebar content
 with right_sidebar_col:
@@ -814,16 +780,6 @@ with right_sidebar_col:
         st.caption(f"{opt_temperature:.1f}")
         st.markdown("**Max Tokens**")
         st.caption(f"{opt_max_tokens}")
-
-    with st.container(border=True):
-        st.markdown("**Feedback Summary**")
-        if st.session_state.menu_converse_messages_feedback:
-            feedback_count = len(st.session_state.menu_converse_messages_feedback)
-            avg_rating = sum(st.session_state.menu_converse_messages_feedback.values()) / feedback_count + 1
-            st.metric("Responses Rated", feedback_count)
-            st.metric("Avg Rating", f"{avg_rating:.1f}")
-        else:
-            st.caption("No feedback yet")
 
     with st.container(border=True):
         st.markdown("**Quick Info**")
