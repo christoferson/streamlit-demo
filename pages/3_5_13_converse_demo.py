@@ -497,7 +497,18 @@ with main_col:
             content = contents[0]
             content_text = content["text"]
             if "user" == msg["role"]:
-                st.write(f"{content_text}")
+                del_idx = idx - 2
+                with st.container(horizontal=True, vertical_alignment="top", border=False):
+                    st.write(f"{content_text}")
+                    st.space("stretch")
+                    if st.button(
+                        ":material/delete:",
+                        key=f"delete_button_{del_idx}",
+                        type="tertiary",
+                        help="Delete this exchange",
+                    ):
+                        delete_message_pair(del_idx)
+                        st.rerun()
                 # Render any attachments carried in this message
                 for extra in contents[1:]:
                     if "document" in extra:
@@ -506,11 +517,6 @@ with main_col:
                         img_bytes = extra["image"]["source"].get("bytes")
                         if img_bytes:
                             st.image(img_bytes, width=200)
-
-                del_idx = idx - 2
-                if st.button(f"Delete ({del_idx})", key=f"delete_button_{del_idx}"):
-                    delete_message_pair(del_idx)
-                    st.rerun()
 
             if "assistant" == msg["role"]:
                 st.markdown(f"{content_text}")
