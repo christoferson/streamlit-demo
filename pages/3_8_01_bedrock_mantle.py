@@ -708,18 +708,6 @@ if "bedrock_mantle_invocation_stats" not in st.session_state:
 if len(st.session_state.bedrock_mantle_invocation_stats) != len(st.session_state.bedrock_mantle_messages):
     st.session_state.bedrock_mantle_invocation_stats = [None] * len(st.session_state.bedrock_mantle_messages)
 
-with st.container(horizontal=True, vertical_alignment="center"):
-    st.markdown(f"{len(st.session_state.bedrock_mantle_messages)}/{MAX_MESSAGES}")
-    if st.button(
-        ":material/delete_history:",
-        key="bedrock_mantle_clear_history",
-        help="Clear conversation history",
-    ):
-        st.session_state.bedrock_mantle_messages = []
-        st.session_state.bedrock_mantle_invocation_stats = []
-        st.rerun()
-
-
 ################################################################################
 # SECTION: Render Message History
 ################################################################################
@@ -747,15 +735,37 @@ for idx, msg in enumerate(st.session_state.bedrock_mantle_messages):
 
 
 ################################################################################
-# SECTION: Chat Input + Conversation Execution
+# SECTION: Command Panel + Chat Input (pinned to viewport bottom)
 ################################################################################
 
-submission = st.chat_input(
-    "Type your message — attach files with 📎...",
-    key="bedrock_mantle_chat_input",
-    accept_file="multiple",
-    file_type=["png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "pdf", "md"],
-)
+with st.bottom:
+    with st.container(
+        horizontal=True,
+        horizontal_alignment="right",
+        vertical_alignment="center",
+        border=False,
+        gap="xxsmall",
+    ):
+        st.markdown(
+            f":violet[**{len(st.session_state.bedrock_mantle_messages)}/{MAX_MESSAGES}**]",
+            help="Messages in conversation history",
+        )
+        if st.button(
+            ":material/delete_history:",
+            type="tertiary",
+            key="bedrock_mantle_clear_history",
+            help="Clear conversation history",
+        ):
+            st.session_state.bedrock_mantle_messages = []
+            st.session_state.bedrock_mantle_invocation_stats = []
+            st.rerun()
+
+    submission = st.chat_input(
+        f"Ask {opt_model_id}",
+        key="bedrock_mantle_chat_input",
+        accept_file="multiple",
+        file_type=["png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "pdf", "md"],
+    )
 
 if submission and submission.text:
     prompt = submission.text
