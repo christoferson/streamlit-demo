@@ -289,13 +289,21 @@ class MantleConversationManager:
 # SECTION: OpenAI (Mantle) Conversation Manager
 ################################################################################
 
+_RESPONSE_TERMINAL_EVENTS = frozenset({
+    "response.completed",
+    "response.incomplete",   # hit max_output_tokens / content filter
+    "response.failed",
+})
+
+
 class OpenAIMantleConversationManager:
     """
     Orchestrates multi-turn conversations for OpenAI models served on the
     Bedrock Mantle /openai/v1 endpoint. GPT-5.5 on Mantle requires the
     Responses API (chat completions is rejected with a 400).
     Handles tool-use loops with streaming support — same callback contract
-    as MantleConversationManager.
+    as MantleConversationManager, plus two extra callbacks for Bedrock's
+    server-side web_search tool (retrieval steps and url citations).
     """
 
     def __init__(
@@ -306,6 +314,8 @@ class OpenAIMantleConversationManager:
         max_tokens: int,
         temperature: float,
         system_prompt: str,
+        native_web_search: bool = False,
+        external_web_access: bool = False,
     ):
         self.client = openai_client
         self.registry = tool_registry
@@ -313,6 +323,8 @@ class OpenAIMantleConversationManager:
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.system_prompt = system_prompt
+        self.native_web_search = native_web_search
+        self.external_web_access = external_web_access
 
     def run(
         self,
@@ -320,6 +332,8 @@ class OpenAIMantleConversationManager:
         on_text_delta: Optional[Callable[[str], None]] = None,
         on_message_complete: Optional[Callable[[dict, int], None]] = None,
         on_tool_invoked: Optional[Callable[[str, dict, Any], None]] = None,
+        on_builtin_search: Optional[Callable[[str, dict], None]] = None,
+        on_citations: Optional[Callable[[list], None]] = None,
     ) -> tuple[str, dict]:
         """
         Run conversation with tool loop support.
@@ -355,7 +369,11 @@ class OpenAIMantleConversationManager:
                     accumulated_text += event.delta
                     if on_text_delta:
                         on_text_delta(event.delta)
-                elif event.type == "response.completed":
+                elif event.type in _RESPONSE_TERMINAL_EVENTS:
+                    # A run that hits max_output_tokens ends in
+                    # response.incomplete, not response.completed — take the
+                    # response off whichever terminal event arrives, or usage,
+                    # citations and tool calls are all silently lost.
                     final_response = event.response
 
             latency_ms = int((time.time() - start_time) * 1000)
@@ -369,6 +387,8 @@ class OpenAIMantleConversationManager:
                     item for item in final_response.output
                     if item.type == "function_call"
                 ]
+                self._report_builtin_search(final_response, on_builtin_search)
+                self._report_citations(final_response, on_citations)
 
             if on_message_complete:
                 on_message_complete(total_usage, latency_ms)
@@ -406,18 +426,95 @@ class OpenAIMantleConversationManager:
                 })
 
     def _build_tools(self) -> list:
-        """Responses API uses a flat function-tool format."""
-        if not (self.registry and hasattr(self.registry, 'get_openai_tools')):
-            return []
-        return [
-            {
-                "type": "function",
-                "name":        t["function"]["name"],
-                "description": t["function"]["description"],
-                "parameters":  t["function"]["parameters"],
-            }
-            for t in self.registry.get_openai_tools()
-        ]
+        """
+        Responses API uses a flat function-tool format. Bedrock's built-in
+        web_search is a server-side tool — it carries no schema and is not
+        dispatched through the registry; Bedrock runs the retrieval itself
+        and returns the answer with url citations.
+        """
+        tools = []
+
+        if self.native_web_search:
+            tools.append({
+                "type": "web_search",
+                # Live-web retrieval additionally requires the
+                # bedrock-websearch:ExternalWebAccess IAM permission; the
+                # Amazon-operated index needs only InvokeSearch.
+                "external_web_access": self.external_web_access,
+            })
+
+        if self.registry and hasattr(self.registry, 'get_openai_tools'):
+            tools.extend(
+                {
+                    "type": "function",
+                    "name":        t["function"]["name"],
+                    "description": t["function"]["description"],
+                    "parameters":  t["function"]["parameters"],
+                }
+                for t in self.registry.get_openai_tools()
+            )
+
+        return tools
+
+    @staticmethod
+    def _report_builtin_search(response, on_builtin_search) -> None:
+        """
+        Surface each server-side retrieval step. Bedrock emits one
+        web_search_call item per step: action.type 'search' carries the
+        queries it formulated, 'open_page' the URL it read in full, and
+        'find_in_page' a pattern it looked for inside a loaded page.
+        """
+        if not on_builtin_search:
+            return
+
+        for item in response.output:
+            if getattr(item, "type", None) != "web_search_call":
+                continue
+            action = getattr(item, "action", None)
+            action_type = getattr(action, "type", "search")
+            detail = {}
+            if action_type == "search":
+                # Bedrock returns 'queries'; the OpenAI SDK's own search
+                # action model uses singular 'query' — accept either.
+                queries = list(getattr(action, "queries", None) or [])
+                if not queries:
+                    single = getattr(action, "query", None)
+                    if single:
+                        queries = [single]
+                detail["queries"] = queries
+            elif action_type == "open_page":
+                detail["url"] = getattr(action, "url", "")
+            elif action_type == "find_in_page":
+                detail["url"]     = getattr(action, "url", "")
+                detail["pattern"] = getattr(action, "pattern", "")
+            on_builtin_search(action_type, detail)
+
+    @staticmethod
+    def _report_citations(response, on_citations) -> None:
+        """
+        Collect url_citation annotations attached to the output text.
+        Each has title/url plus start_index/end_index offsets into the text.
+        """
+        if not on_citations:
+            return
+
+        citations = []
+        for item in response.output:
+            if getattr(item, "type", None) != "message":
+                continue
+            for content in getattr(item, "content", None) or []:
+                if getattr(content, "type", None) != "output_text":
+                    continue
+                for ann in getattr(content, "annotations", None) or []:
+                    if getattr(ann, "type", None) != "url_citation":
+                        continue
+                    citations.append({
+                        "title": getattr(ann, "title", "") or "",
+                        "url":   getattr(ann, "url", "") or "",
+                    })
+
+        if citations:
+            on_citations(citations)
 
     def _convert_messages(self, message_history: list) -> list:
         """Convert internal message format to Responses API input items."""
@@ -520,6 +617,31 @@ def is_openai_model(model_id: str) -> bool:
     return model_id.startswith("openai.")
 
 
+################################################################################
+# SECTION: Web Search Mode
+################################################################################
+
+# Bedrock's built-in web_search is a server-side tool on the Mantle Responses
+# API, so it is only available to the openai.* models. Anthropic models keep
+# using the client-side DuckDuckGo tool loop.
+WEB_SEARCH_OFF      = "Off"
+WEB_SEARCH_CLIENT   = "Client-side (DuckDuckGo)"
+WEB_SEARCH_BEDROCK  = "Bedrock built-in (server-side)"
+
+WEB_SEARCH_MODES = [WEB_SEARCH_OFF, WEB_SEARCH_CLIENT, WEB_SEARCH_BEDROCK]
+
+WEB_SEARCH_HELP = (
+    "**Off** — no search tools.\n\n"
+    "**Client-side** — adds the `web_search` and `url_content_loader` tools, "
+    "run locally via DuckDuckGo through the normal tool-use loop. Works with "
+    "every model here.\n\n"
+    "**Bedrock built-in** — Bedrock performs retrieval server-side against "
+    "Amazon's web index and returns the answer with url citations. "
+    "OpenAI models only (Responses API); requires the "
+    "`bedrock-websearch:InvokeSearch` IAM permission."
+)
+
+
 @st.cache_resource
 def get_tool_registry(enable_web_search: bool):
     """
@@ -552,28 +674,90 @@ def get_tool_registry(enable_web_search: bool):
     #     PdfBedrockConverseTool(),
 
 
+opt_model_id_list = [
+    #"global.anthropic.claude-opus-4-7",
+    "anthropic.claude-opus-4-7",
+    "openai.gpt-5.5",
+    "openai.gpt-5.6-sol",
+    "openai.gpt-5.6-terra",
+    "openai.gpt-5.6-luna",
+    #"global.anthropic.claude-sonnet-4-20250514-v1:0",
+    #"anthropic.claude-sonnet-4-20250514-v1:0",
+    #"anthropic.claude-opus-4-6",
+    #"anthropic.claude-sonnet-4-6",
+    #"anthropic.claude-sonnet-4-5",
+    #"anthropic.claude-mythos-preview",
+]
+
 with st.sidebar:
-    opt_web_search = st.checkbox(
-        "Enable Web Search",
-        value=True,
-        key="bedrock_mantle_web_search",
-        help=(
-            "Adds web_search and url_content_loader tools. "
-            "Search runs client-side (DuckDuckGo) — Bedrock does not "
-            "support Anthropic's server-side web search tool."
-        ),
+    opt_model_id = st.selectbox(
+        "Model ID",
+        opt_model_id_list,
+        index=0,
+        key="bedrock_mantle_model_id"
     )
 
+    opt_web_search_mode = st.radio(
+        "Web Search",
+        WEB_SEARCH_MODES,
+        index=1,
+        key="bedrock_mantle_web_search_mode",
+        help=WEB_SEARCH_HELP,
+    )
+
+    # Falling back keeps the request valid rather than erroring at call time.
+    if opt_web_search_mode == WEB_SEARCH_BEDROCK and not is_openai_model(opt_model_id):
+        st.warning(
+            f"Bedrock built-in web search is not available for "
+            f"`{opt_model_id}` — using client-side DuckDuckGo instead.",
+            icon=":material/info:",
+        )
+        opt_web_search_mode = WEB_SEARCH_CLIENT
+
+    opt_external_web_access = False
+    if opt_web_search_mode == WEB_SEARCH_BEDROCK:
+        opt_external_web_access = st.checkbox(
+            "Allow live web access",
+            value=False,
+            key="bedrock_mantle_external_web_access",
+            help=(
+                "Off: retrieve from Amazon's pre-indexed corpus only. "
+                "On: allow Bedrock to fetch live pages — requires the "
+                "`bedrock-websearch:ExternalWebAccess` IAM permission and "
+                "fails with AccessDeniedException without it."
+            ),
+        )
+
+opt_native_web_search = opt_web_search_mode == WEB_SEARCH_BEDROCK
+opt_client_web_search = opt_web_search_mode == WEB_SEARCH_CLIENT
+# Kept for the citation-rules block in the runtime system prompt, which
+# applies to either search mode.
+opt_web_search = opt_web_search_mode != WEB_SEARCH_OFF
+
 mantle_client = get_mantle_client()
-tool_registry = get_tool_registry(opt_web_search)
+tool_registry = get_tool_registry(opt_client_web_search)
 
 
 ################################################################################
 # SECTION: System Prompt
 ################################################################################
 
-def build_default_system_prompt(registry: Optional[ToolRegistry]) -> str:
+def build_default_system_prompt(
+    registry: Optional[ToolRegistry],
+    native_web_search: bool = False,
+) -> str:
     base_prompt = "You are a helpful AI assistant."
+
+    if native_web_search:
+        # No tool summary — Bedrock runs retrieval server-side and the model
+        # is not told about a callable search tool.
+        return "\n\n".join([
+            base_prompt,
+            #"You have built-in web search. When the answer depends on current "
+            #"or time-sensitive information (recent events, prices, versions, "
+            #"news), search before answering rather than answering from memory. "
+            #"Cite the sources you used.",
+        ])
 
     if registry and hasattr(registry, 'build_tool_summary'):
         tool_summary = registry.build_tool_summary()
@@ -602,7 +786,11 @@ def build_default_system_prompt(registry: Optional[ToolRegistry]) -> str:
     return base_prompt
 
 
-def build_runtime_system_prompt(user_system_msg: str, web_search_enabled: bool = False) -> str:
+def build_runtime_system_prompt(
+    user_system_msg: str,
+    web_search_enabled: bool = False,
+    native_web_search: bool = False,
+) -> str:
     """
     Final system prompt sent to the API. Appends the current date (and, when
     web search is on, citation rules) at request time so they stay correct
@@ -618,7 +806,15 @@ def build_runtime_system_prompt(user_system_msg: str, web_search_enabled: bool =
             "past — treat anything you recall from memory as potentially outdated."
         ),
     ]
-    if web_search_enabled:
+    if native_web_search:
+        # Bedrock returns url_citation annotations separately; asking for
+        # inline links keeps the answer text self-contained too.
+        parts.append(
+            "CITATION RULES: state the publication date of any time-sensitive "
+            "claim, and link the source inline as markdown. Never present a "
+            "claim from a search result without its source."
+        )
+    elif web_search_enabled:
         parts.append(
             "CITATION RULES for web search results:\n"
             "- Every news item or fact taken from a search result MUST include "
@@ -631,35 +827,45 @@ def build_runtime_system_prompt(user_system_msg: str, web_search_enabled: bool =
     return "\n\n".join(parts)
 
 
-OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
+OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(
+    tool_registry,
+    native_web_search=opt_native_web_search,
+)
+
+
+def sync_system_msg_default(new_default: str) -> None:
+    """
+    The System Message text area is keyed, so once Streamlit has stored a value
+    it ignores the `value` argument on later reruns — toggling Web Search would
+    leave the AVAILABLE TOOLS / search guidance text describing tools the model
+    no longer has (or omitting ones it now does).
+
+    Re-seed the widget whenever the computed default changes, but only if the
+    user has not edited it — a hand-written prompt is never overwritten.
+    """
+    key      = "bedrock_mantle_system_msg"
+    prev_key = "bedrock_mantle_system_msg_default"
+    prev     = st.session_state.get(prev_key)
+
+    if prev == new_default:
+        return
+
+    st.session_state[prev_key] = new_default
+    if key not in st.session_state or st.session_state[key] == prev:
+        st.session_state[key] = new_default
+
+
+sync_system_msg_default(OPT_SYSTEM_MSG_DEFAULT)
 
 
 ################################################################################
 # SECTION: Streamlit Sidebar / Options
 ################################################################################
 
-opt_model_id_list = [
-    #"global.anthropic.claude-opus-4-7",
-    "anthropic.claude-opus-4-7",
-    "openai.gpt-5.5",
-    "openai.gpt-5.6-sol",
-    "openai.gpt-5.6-terra",
-    "openai.gpt-5.6-luna",
-    #"global.anthropic.claude-sonnet-4-20250514-v1:0",
-    #"anthropic.claude-sonnet-4-20250514-v1:0",
-    #"anthropic.claude-opus-4-6",
-    #"anthropic.claude-sonnet-4-6",
-    #"anthropic.claude-sonnet-4-5",
-    #"anthropic.claude-mythos-preview",
-]
+# Model ID and Web Search live in the "Web Search Mode" section above — the
+# search options depend on which model is selected.
 
 with st.sidebar:
-    opt_model_id = st.selectbox(
-        "Model ID", 
-        opt_model_id_list, 
-        index=0, 
-        key="bedrock_mantle_model_id"
-    )
     # opt_temperature = st.slider(
     #     "Temperature", 
     #     0.0, 1.0, 0.1, 0.1, 
@@ -670,9 +876,10 @@ with st.sidebar:
         0, 32000, 4096, 1, 
         key="bedrock_mantle_max_tokens"
     )
+    # Value comes from session state, seeded/refreshed by
+    # sync_system_msg_default() — do not pass `value` here.
     opt_system_msg = st.text_area(
-        "System Message", 
-        OPT_SYSTEM_MSG_DEFAULT, 
+        "System Message",
         key="bedrock_mantle_system_msg"
     )
     opt_show_metrics = st.checkbox(
@@ -684,6 +891,8 @@ with st.sidebar:
     if tool_registry:
         with st.expander("Tools"):
             st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
+    elif opt_native_web_search:
+        st.info("Server-side web search — no client-side tools")
     else:
         st.info("Tools disabled - basic chat mode")
 
@@ -811,6 +1020,38 @@ if submission and submission.text:
             )
             result_area.markdown(accumulated["text"])
 
+        # Server-side search steps and citations arrive with the completed
+        # response, so they are appended after the streamed text rather than
+        # interleaved. Collected here, rendered once the run finishes.
+        search_steps = []
+        citations = []
+
+        def on_builtin_search(action_type: str, detail: dict):
+            """Fired per Bedrock server-side retrieval step."""
+            turn_stat.record_tool(f"web_search:{action_type}")
+            if action_type == "search":
+                for q in detail.get("queries", []):
+                    search_steps.append(f"searched `{q}`")
+            elif action_type == "open_page":
+                search_steps.append(f"read <{detail.get('url', '')}>")
+            elif action_type == "find_in_page":
+                search_steps.append(
+                    f"found `{detail.get('pattern', '')}` in "
+                    f"<{detail.get('url', '')}>"
+                )
+
+        def on_citations(new_citations: list):
+            """
+            Fired with the url_citation annotations on the answer. The same
+            URL is commonly cited for several spans of text, so dedupe as we
+            go — including within a single batch.
+            """
+            seen = {c["url"] for c in citations}
+            for c in new_citations:
+                if c["url"] and c["url"] not in seen:
+                    seen.add(c["url"])
+                    citations.append(c)
+
         if is_openai_model(opt_model_id):
             manager = OpenAIMantleConversationManager(
                 openai_client=get_openai_mantle_client(),
@@ -818,7 +1059,13 @@ if submission and submission.text:
                 model_id=opt_model_id,
                 max_tokens=opt_max_tokens,
                 temperature=0.0,
-                system_prompt=build_runtime_system_prompt(opt_system_msg, web_search_enabled=opt_web_search),
+                system_prompt=build_runtime_system_prompt(
+                    opt_system_msg,
+                    web_search_enabled=opt_web_search,
+                    native_web_search=opt_native_web_search,
+                ),
+                native_web_search=opt_native_web_search,
+                external_web_access=opt_external_web_access,
             )
         else:
             manager = MantleConversationManager(
@@ -827,23 +1074,44 @@ if submission and submission.text:
                 model_id=opt_model_id,
                 max_tokens=opt_max_tokens,
                 temperature=0.0,
-                system_prompt=build_runtime_system_prompt(opt_system_msg, web_search_enabled=opt_web_search),
+                system_prompt=build_runtime_system_prompt(
+                    opt_system_msg,
+                    web_search_enabled=opt_web_search,
+                ),
             )
 
         # Return values unused — text/usage are collected via the callbacks
         # into `accumulated` and `turn_stat`
         with st.spinner("Processing...", show_time=True, width="content"):
             try:
-                manager.run(
-                    message_history,
-                    on_text_delta=on_text_delta,
-                    on_message_complete=on_message_complete,
-                    on_tool_invoked=on_tool_invoked,
-                )
+                run_kwargs = {
+                    "on_text_delta":       on_text_delta,
+                    "on_message_complete": on_message_complete,
+                    "on_tool_invoked":     on_tool_invoked,
+                }
+                if isinstance(manager, OpenAIMantleConversationManager):
+                    run_kwargs["on_builtin_search"] = on_builtin_search
+                    run_kwargs["on_citations"]      = on_citations
+
+                manager.run(message_history, **run_kwargs)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
                 logger.exception("Error in conversation manager")
                 st.stop()
+
+        # Append the server-side retrieval trace + sources so they persist in
+        # the message history the same way client-side tool traces do.
+        if search_steps:
+            accumulated["text"] += (
+                "\n\n:blue[🌐 **Bedrock web search**]  \n"
+                + "  \n".join(f"- {s}" for s in search_steps)
+            )
+        if citations:
+            accumulated["text"] += "\n\n**Sources**  \n" + "  \n".join(
+                f"- [{c['title'] or c['url']}]({c['url']})" for c in citations
+            )
+        if search_steps or citations:
+            result_area.markdown(accumulated["text"])
 
         # Show live metrics
         if opt_show_metrics:
