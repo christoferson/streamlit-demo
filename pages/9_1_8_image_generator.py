@@ -136,28 +136,36 @@ variation_prompts_init = [
     "Intricate embroidery details, rich jewel tones, luxurious feel for special occasions, light blue and pink accents" 
 ]
 
+# Refreshed against live invoke_model calls. The previous entries all fail now:
+#   amazon.titan-image-generator-v1 / v2:0 ... "This model version has reached
+#                                              the end of its life."
+#   stability.stable-diffusion-xl-v1 ......... same (EOL)
+#   stability.stable-image-core-v1:0 ......... "model identifier is invalid"
+#   stability.sd3-large-v1:0 ................. same (superseded by sd3-5-large)
+#   stability.stable-image-ultra-v1:0 ........ same (superseded by v1:1)
+# Bedrock currently has no ACTIVE Amazon text-to-image model (nova-canvas-v1:0
+# is LEGACY and denies access), so the Titan and SDXL branches below have no
+# selectable models — the three survivors all use the Stable Image path.
+# These are served only in us-west-2, which bedrock_runtime_oregon targets.
 opt_model_id_list = [
-    "amazon.titan-image-generator-v1",
-    "amazon.titan-image-generator-v2:0",   
-    "stability.stable-diffusion-xl-v1",
-    "stability.stable-image-core-v1:0",
-    "stability.sd3-large-v1:0",
-    "stability.stable-image-ultra-v1:0",
+    "stability.stable-image-ultra-v1:1",
+    "stability.stable-image-core-v1:1",
+    "stability.sd3-5-large-v1:0",
 ]
 
 opt_model_id_list_sdxl = [
-    "stability.stable-diffusion-xl-v1"
+    # stability.stable-diffusion-xl-v1 was EOL'd with no v2 replacement.
 ]
 
 opt_model_id_list_sd3 = [
-    "stability.stable-image-core-v1:0",
-    "stability.sd3-large-v1:0",
-    "stability.stable-image-ultra-v1:0",
+    "stability.stable-image-ultra-v1:1",
+    "stability.stable-image-core-v1:1",
+    "stability.sd3-5-large-v1:0",
 ]
 
 opt_model_id_list_amz = [
-    "amazon.titan-image-generator-v1",
-    "amazon.titan-image-generator-v2:0",
+    # amazon.titan-image-generator-v1 / v2:0 are EOL; nova-canvas-v1:0 is
+    # LEGACY (access denied). No ACTIVE Amazon replacement is available.
 ]
 
 opt_style_preset_list = [
@@ -201,7 +209,7 @@ opt_steps_help = """
 Generation step determines how many times the image is sampled. More steps can result in a more accurate result.
 """
 
-opt_model_id = "stability.stable-diffusion-xl-v1"
+opt_model_id = opt_model_id_list[0]
 opt_negative_prompt = opt_negative_prompt_list
 opt_negative_prompt_csv_init = "ugly, tiling, out of frame, disfigured, deformed, bad anatomy, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, blurry, draft, grainy"
 
