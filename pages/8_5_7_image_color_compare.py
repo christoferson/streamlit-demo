@@ -341,7 +341,7 @@ with col2:
         uploaded_file_base64 = image_to_base64(uploaded_file_image, mime_mapping[uploaded_file_type])
         st.image(
             uploaded_file_image,
-            use_column_width=True,
+            width="stretch",
         )
 
     if uploaded_file_bytes and uploaded_file_bytes != None:
@@ -431,7 +431,7 @@ with col3:
         uploaded_file_2_base64 = image_to_base64(image_2, mime_mapping[uploaded_file_2_type])
         st.image(
             image_2,
-            use_column_width=True
+            width="stretch"
         )
 
 
