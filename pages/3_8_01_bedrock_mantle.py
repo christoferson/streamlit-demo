@@ -3,6 +3,7 @@ import json
 import logging
 import cmn_settings
 import base64
+from abc import ABC, abstractmethod
 from typing import Optional, Callable, Any
 from dataclasses import dataclass, field
 
@@ -63,30 +64,98 @@ class InvocationStat:
 
 
 ################################################################################
-# SECTION: Mantle Conversation Manager
+# SECTION: Abstract Conversation Manager
 ################################################################################
 
-class MantleConversationManager:
+class AbstractMantleConversationManager(ABC):
     """
-    Orchestrates multi-turn conversations using Anthropic Bedrock Mantle.
-    Handles tool-use loops with streaming support.
+    Contract shared by the Bedrock Mantle conversation managers.
+
+    Bedrock Mantle serves two model families over two different APIs — the
+    Anthropic Messages API and the OpenAI Responses API. Each needs its own
+    request shape, stream parsing and tool-result envelope, so `run()` is
+    implemented per provider. This base exists to make the parts the page
+    depends on explicit: the constructor fields and the callback signature.
+
+    Subclasses accept the full callback set even when they cannot fire all of
+    it, so the page can pass one set of callbacks without branching on type.
+    Declare `supports_builtin_web_search` to advertise which do.
+
+    Implementations are deliberately UI-agnostic — progress is reported
+    through callbacks so business logic holds no Streamlit dependency.
     """
+
+    # True when the provider performs retrieval server-side and the manager
+    # will fire on_builtin_search / on_citations.
+    supports_builtin_web_search: bool = False
 
     def __init__(
         self,
-        mantle_client: AnthropicBedrockMantle,
+        client: Any,
         tool_registry: Optional[ToolRegistry],
         model_id: str,
         max_tokens: int,
         temperature: float,
         system_prompt: str,
     ):
-        self.client = mantle_client
+        self.client = client
         self.registry = tool_registry
         self.model_id = model_id
         self.max_tokens = max_tokens
+        # NOTE: temperature is currently accepted but not sent by either
+        # implementation — see the commented-out api_params entry below.
         self.temperature = temperature
         self.system_prompt = system_prompt
+
+    @abstractmethod
+    def run(
+        self,
+        message_history: list,
+        on_text_delta: Optional[Callable[[str], None]] = None,
+        on_message_complete: Optional[Callable[[dict, int], None]] = None,
+        on_tool_invoked: Optional[Callable[[str, dict, Any], None]] = None,
+        on_builtin_search: Optional[Callable[[str, dict], None]] = None,
+        on_citations: Optional[Callable[[list], None]] = None,
+    ) -> tuple[str, dict]:
+        """
+        Run a full conversation turn, looping until the model stops calling
+        tools. Returns (final_text, usage_dict), though callers typically
+        collect output through the callbacks instead so partial results
+        survive an error mid-turn.
+
+        Callbacks (all optional):
+          on_text_delta(chunk)                  per streamed text chunk
+          on_message_complete(usage, latency_ms) after each LLM round-trip
+          on_tool_invoked(name, args, result)   after each client-side tool
+          on_builtin_search(action_type, detail) per server-side retrieval
+                                                step; action_type is
+                                                'search' | 'open_page' |
+                                                'find_in_page'
+          on_citations([{title, url}, ...])     url citations on the answer
+
+        The last two fire only when supports_builtin_web_search is True;
+        other implementations accept and ignore them.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _convert_messages(self, message_history: list) -> list:
+        """Convert the app's internal message format to the provider's."""
+        raise NotImplementedError
+
+
+################################################################################
+# SECTION: Mantle Conversation Manager
+################################################################################
+
+class MantleConversationManager(AbstractMantleConversationManager):
+    """
+    Orchestrates multi-turn conversations using Anthropic Bedrock Mantle.
+    Handles tool-use loops with streaming support.
+
+    Search runs client-side through the tool registry, so
+    on_builtin_search / on_citations are accepted but never fired.
+    """
 
     def run(
         self,
@@ -94,10 +163,15 @@ class MantleConversationManager:
         on_text_delta: Optional[Callable[[str], None]] = None,
         on_message_complete: Optional[Callable[[dict, int], None]] = None,
         on_tool_invoked: Optional[Callable[[str, dict, Any], None]] = None,
+        on_builtin_search: Optional[Callable[[str, dict], None]] = None,
+        on_citations: Optional[Callable[[list], None]] = None,
     ) -> tuple[str, dict]:
         """
         Run conversation with tool loop support.
         Returns: (final_text, usage_dict)
+
+        on_builtin_search / on_citations are ignored — the Messages API has
+        no server-side search tool on Bedrock.
         """
         messages = self._convert_messages(message_history)
         accumulated_text = ""
@@ -296,19 +370,21 @@ _RESPONSE_TERMINAL_EVENTS = frozenset({
 })
 
 
-class OpenAIMantleConversationManager:
+class OpenAIMantleConversationManager(AbstractMantleConversationManager):
     """
     Orchestrates multi-turn conversations for OpenAI models served on the
     Bedrock Mantle /openai/v1 endpoint. GPT-5.5 on Mantle requires the
     Responses API (chat completions is rejected with a 400).
-    Handles tool-use loops with streaming support — same callback contract
-    as MantleConversationManager, plus two extra callbacks for Bedrock's
-    server-side web_search tool (retrieval steps and url citations).
+    Handles tool-use loops with streaming support, and fires the
+    on_builtin_search / on_citations callbacks for Bedrock's server-side
+    web_search tool.
     """
+
+    supports_builtin_web_search = True
 
     def __init__(
         self,
-        openai_client: OpenAI,
+        client: OpenAI,
         tool_registry: Optional[ToolRegistry],
         model_id: str,
         max_tokens: int,
@@ -317,12 +393,10 @@ class OpenAIMantleConversationManager:
         native_web_search: bool = False,
         external_web_access: bool = False,
     ):
-        self.client = openai_client
-        self.registry = tool_registry
-        self.model_id = model_id
-        self.max_tokens = max_tokens
-        self.temperature = temperature
-        self.system_prompt = system_prompt
+        super().__init__(
+            client, tool_registry, model_id,
+            max_tokens, temperature, system_prompt,
+        )
         self.native_web_search = native_web_search
         self.external_web_access = external_web_access
 
@@ -1071,7 +1145,7 @@ if submission and submission.text:
 
         if is_openai_model(opt_model_id):
             manager = OpenAIMantleConversationManager(
-                openai_client=get_openai_mantle_client(),
+                client=get_openai_mantle_client(),
                 tool_registry=tool_registry,
                 model_id=opt_model_id,
                 max_tokens=opt_max_tokens,
@@ -1086,7 +1160,7 @@ if submission and submission.text:
             )
         else:
             manager = MantleConversationManager(
-                mantle_client=mantle_client,
+                client=mantle_client,
                 tool_registry=tool_registry,
                 model_id=opt_model_id,
                 max_tokens=opt_max_tokens,
@@ -1098,19 +1172,20 @@ if submission and submission.text:
             )
 
         # Return values unused — text/usage are collected via the callbacks
-        # into `accumulated` and `turn_stat`
+        # into `accumulated` and `turn_stat`.
+        # Every manager accepts the full callback set (see
+        # AbstractMantleConversationManager), so no per-provider branching
+        # is needed here — implementations ignore what they cannot fire.
         with st.spinner("Processing...", show_time=True, width="content"):
             try:
-                run_kwargs = {
-                    "on_text_delta":       on_text_delta,
-                    "on_message_complete": on_message_complete,
-                    "on_tool_invoked":     on_tool_invoked,
-                }
-                if isinstance(manager, OpenAIMantleConversationManager):
-                    run_kwargs["on_builtin_search"] = on_builtin_search
-                    run_kwargs["on_citations"]      = on_citations
-
-                manager.run(message_history, **run_kwargs)
+                manager.run(
+                    message_history,
+                    on_text_delta=on_text_delta,
+                    on_message_complete=on_message_complete,
+                    on_tool_invoked=on_tool_invoked,
+                    on_builtin_search=on_builtin_search,
+                    on_citations=on_citations,
+                )
             except Exception as e:
                 st.error(f"Error: {str(e)}")
                 logger.exception("Error in conversation manager")
