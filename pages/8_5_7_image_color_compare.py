@@ -297,20 +297,59 @@ mime_mapping = {
     }
 
 opt_model_id_list = [
-    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0"
+    "global.anthropic.claude-opus-5",
+    "global.anthropic.claude-sonnet-5",
+    "global.anthropic.claude-fable-5",
+    "global.anthropic.claude-opus-4-8",
+    "global.anthropic.claude-opus-4-7",
+    "global.anthropic.claude-opus-4-6-v1",
+    "global.anthropic.claude-opus-4-5-20251101-v1:0",
+    "global.anthropic.claude-sonnet-4-6",
+    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 ]
+
+# Newer Claude models reject sampling params on invoke_model:
+#   - Opus 5 / Sonnet 5 / Fable 5 / Opus 4.8 / 4.7 accept none of the three
+#   - the rest accept temperature and top_k, but not temperature + top_p
+# Sliders are hidden accordingly and the params left out of the request.
+_NO_SAMPLING_PARAMS = (
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+)
 
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    opt_supports_sampling = not any(m in opt_model_id for m in _NO_SAMPLING_PARAMS)
+    if opt_supports_sampling:
+        opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+        opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    else:
+        opt_temperature = None
+        opt_top_k = None
     opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+
+
+def build_request(message_history):
+    """Anthropic invoke_model body, omitting params the model rejects."""
+    request = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": opt_max_tokens,
+        "system": opt_system_msg,
+        "messages": message_history,
+    }
+    if opt_supports_sampling:
+        # top_p is left out: these models reject temperature + top_p together.
+        request["temperature"] = opt_temperature
+        request["top_k"] = opt_top_k
+    return request
+
 
 st.title("💬 Image Color Compare")
 
@@ -550,15 +589,7 @@ if compare_btn:
     message_history = []
     message_history.append({"role": "user", "content": content})
 
-    request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "temperature": opt_temperature,
-        "top_p": opt_top_p,
-        "top_k": opt_top_k,
-        "max_tokens": opt_max_tokens,
-        "system": opt_system_msg,
-        "messages": message_history #st.session_state.messages
-    }
+    request = build_request(message_history)
 
     try:
         response = bedrock_runtime.invoke_model_with_response_stream(
@@ -650,15 +681,7 @@ if compare_with_meta_btn:
     message_history = []
     message_history.append({"role": "user", "content": content})
 
-    request = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "temperature": opt_temperature,
-        "top_p": opt_top_p,
-        "top_k": opt_top_k,
-        "max_tokens": opt_max_tokens,
-        "system": opt_system_msg,
-        "messages": message_history #st.session_state.messages
-    }
+    request = build_request(message_history)
 
     try:
         response = bedrock_runtime.invoke_model_with_response_stream(

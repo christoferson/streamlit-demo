@@ -58,8 +58,14 @@ class WebSearchBedrockConverseTool(AbstractBedrockConverseTool):
                             "query": {
                                 "type":        "string",
                                 "description": (
-                                    "The web search query. "
-                                    "Example: AWS Bedrock pricing 2026"
+                                    "The web search query. Use SHORT keyword "
+                                    "queries of 2-5 words — long, specific "
+                                    "phrases return zero results. Do NOT "
+                                    "include dates in the query; use the "
+                                    "'recency' parameter instead. "
+                                    "Good: 'Japan economy news'. "
+                                    "Bad: 'Japan BOJ fiscal policy draft "
+                                    "July 15 2026'."
                                 ),
                             },
                             "search_type": {
@@ -114,14 +120,23 @@ class WebSearchBedrockConverseTool(AbstractBedrockConverseTool):
         )
 
         try:
-            ddgs = DDGS()
-            if search_type == "news":
-                results = ddgs.news(query, timelimit=timelimit, max_results=max_results)
-            else:
-                results = ddgs.text(query, timelimit=timelimit, max_results=max_results)
+            results = self._search(query, search_type, timelimit, max_results)
+
+            # Over-specific queries often return nothing — retry once with
+            # the first few keywords so the model gets results instead of
+            # an error it tends to respond to with an even longer query.
+            if not results and len(query.split()) > 5:
+                short_query = " ".join(query.split()[:4])
+                logger.info("WebSearchTool: retrying with short query=%s", short_query)
+                results = self._search(short_query, search_type, timelimit, max_results)
+                if results:
+                    query = short_query
 
             if not results:
-                return f"No web search results found for: {query}"
+                return (
+                    f"No web search results found for: {query}. "
+                    "Try a shorter query with 2-5 keywords and no dates."
+                )
 
             today = datetime.now().strftime("%Y-%m-%d")
             formatted = []
@@ -147,3 +162,15 @@ class WebSearchBedrockConverseTool(AbstractBedrockConverseTool):
         except Exception as e:
             logger.error("WebSearchTool: search failed query=%s error=%s", query, e)
             return f"Error performing web search: {str(e)}"
+
+    def _search(self, query, search_type, timelimit, max_results):
+        try:
+            ddgs = DDGS()
+            if search_type == "news":
+                return ddgs.news(query, timelimit=timelimit, max_results=max_results)
+            return ddgs.text(query, timelimit=timelimit, max_results=max_results)
+        except Exception as e:
+            # ddgs raises on zero results in some versions — treat as empty
+            if "no results" in str(e).lower():
+                return []
+            raise

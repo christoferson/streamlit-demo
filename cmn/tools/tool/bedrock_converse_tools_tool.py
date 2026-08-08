@@ -73,6 +73,24 @@ class ToolRegistry:
             })
         return tools
 
+    def get_openai_tools(self) -> list[dict]:
+        """
+        Returns tool definitions converted to OpenAI function-calling format
+        for use with the Mantle /openai/v1 endpoint.
+        """
+        tools = []
+        for tool in self._tools.values():
+            spec = tool.definition["toolSpec"]
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name":        spec["name"],
+                    "description": spec.get("description", ""),
+                    "parameters":  spec["inputSchema"]["json"],
+                },
+            })
+        return tools
+
     def build_tool_summary(self) -> str | None:
         """
         Loop through all tools, collect non-null summaries,
