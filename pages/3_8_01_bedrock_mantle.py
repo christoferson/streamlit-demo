@@ -689,11 +689,22 @@ opt_model_id_list = [
     #"anthropic.claude-mythos-preview",
 ]
 
+OPENAI_MODEL_IDS = [m for m in opt_model_id_list if is_openai_model(m)]
+
+DEFAULT_MODEL_ID = "openai.gpt-5.6-luna"
+
+# Looked up rather than hardcoded so commenting models in/out above cannot
+# silently shift the default to a different entry.
+DEFAULT_MODEL_INDEX = (
+    opt_model_id_list.index(DEFAULT_MODEL_ID)
+    if DEFAULT_MODEL_ID in opt_model_id_list else 0
+)
+
 with st.sidebar:
     opt_model_id = st.selectbox(
         "Model ID",
         opt_model_id_list,
-        index=0,
+        index=DEFAULT_MODEL_INDEX,
         key="bedrock_mantle_model_id"
     )
 
@@ -708,9 +719,15 @@ with st.sidebar:
     # Falling back keeps the request valid rather than erroring at call time.
     if opt_web_search_mode == WEB_SEARCH_BEDROCK and not is_openai_model(opt_model_id):
         st.warning(
-            f"Bedrock built-in web search is not available for "
-            f"`{opt_model_id}` — using client-side DuckDuckGo instead.",
-            icon=":material/info:",
+            f"**Using {WEB_SEARCH_CLIENT} instead.**\n\n"
+            f"`{opt_model_id}` is an Anthropic model, which Bedrock serves "
+            f"through the Messages API. Built-in web search is a server-side "
+            f"tool on the Responses API, so only the `openai.*` models can "
+            f"use it.\n\n"
+            f"To use it, switch **Model ID** to one of: "
+            + ", ".join(f"`{m}`" for m in OPENAI_MODEL_IDS)
+            + ".",
+            icon=":material/travel_explore:",
         )
         opt_web_search_mode = WEB_SEARCH_CLIENT
 
