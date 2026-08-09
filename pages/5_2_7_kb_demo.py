@@ -48,16 +48,16 @@ opt_model_id_list = [
     "anthropic.claude-3-haiku-20240307-v1:0"
 ]
 
-opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options(["hr-titan", "legal-titan", "concur-titan"])
+opt_bedrock_kb_list = app_bedrock_lib.list_knowledge_bases_with_options([cmn_settings.KB_FILTER_HR, cmn_settings.KB_FILTER_LEGAL, cmn_settings.KB_FILTER_GA])
 print(opt_bedrock_kb_list)
 
 def knowledge_base_format_func(text):
-    if "hr-titan" in text:
-        return "HR"
-    elif "legal-titan" in text:
-        return "Legal"
-    elif "concur-titan" in text:
-        return "Concur"
+    if cmn_settings.KB_FILTER_HR in text:
+        return cmn_settings.KB_LABEL_HR
+    elif cmn_settings.KB_FILTER_LEGAL in text:
+        return cmn_settings.KB_LABEL_LEGAL
+    elif cmn_settings.KB_FILTER_GA in text:
+        return cmn_settings.KB_LABEL_GA
     else:
         return text
 
@@ -319,12 +319,12 @@ for msg in st.session_state.messages:
 
 #########################################
 document_category = "ALL"
-if "hr-titan" in opt_kb_id:
-    document_category = st.selectbox(":blue[**Category (Human Resources)**]", ("FAQ", "Attendance", "Trips", "Wage", "Employment"))
-elif "legal-titan" in opt_kb_id:
-    document_category = st.selectbox(":blue[**Category (Legal)**]", ("FAQ", "Contact"))
-elif "concur-titan" in opt_kb_id: #GA
-    document_category = st.selectbox(":blue[**Category (General Affairs)**]", ("FAQ", "Concur"))
+if cmn_settings.KB_FILTER_HR in opt_kb_id:
+    document_category = st.selectbox(f":blue[**Category ({cmn_settings.KB_LABEL_HR})**]", ("FAQ", "Attendance", "Trips", "Wage", "Employment"))
+elif cmn_settings.KB_FILTER_LEGAL in opt_kb_id:
+    document_category = st.selectbox(f":blue[**Category ({cmn_settings.KB_LABEL_LEGAL})**]", ("FAQ", "Contact"))
+elif cmn_settings.KB_FILTER_GA in opt_kb_id:
+    document_category = st.selectbox(f":blue[**Category ({cmn_settings.KB_LABEL_GA})**]", ("FAQ", "Expense"))
 #########################################
 
 #st.chat_message("system").write(f"Category: {document_category}")

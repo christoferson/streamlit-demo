@@ -31,3 +31,12 @@ CMN_KB_VECTOR_INDEX_NAME = os.getenv("CMN_KB_VECTOR_INDEX_NAME", "your-vector-in
 CMN_KB_KB_METADATA_TABLE = os.getenv("CMN_KB_KB_METADATA_TABLE", "your-kb-metadata-table")
 CMN_KB_DOC_METADATA_TABLE = os.getenv("CMN_KB_DOC_METADATA_TABLE", "your-doc-metadata-table")
 CMN_KB_MODEL_ARN = os.getenv("CMN_KB_MODEL_ARN", "arn:aws:bedrock:xxx::foundation-model/xxx")
+
+# Knowledge Base Domain Filters
+# Substrings matched against Bedrock knowledge base names, plus their display labels.
+KB_FILTER_HR = os.getenv("KB_FILTER_HR", "your-hr-kb")
+KB_FILTER_LEGAL = os.getenv("KB_FILTER_LEGAL", "your-legal-kb")
+KB_FILTER_GA = os.getenv("KB_FILTER_GA", "your-ga-kb")
+KB_LABEL_HR = os.getenv("KB_LABEL_HR", "HR")
+KB_LABEL_LEGAL = os.getenv("KB_LABEL_LEGAL", "Legal")
+KB_LABEL_GA = os.getenv("KB_LABEL_GA", "General Affairs")
