@@ -342,6 +342,9 @@ opt_model_id_list = [
     "qwen.qwen3-vl-235b-a22b",
     "openai.gpt-oss-safeguard-20b", #KeyError: 'text'
     "openai.gpt-oss-safeguard-120b", #KeyError: 'text'
+    "global.openai.gpt-5.6-luna",
+    "global.openai.gpt-5.6-sol",
+    "global.openai.gpt-5.6-terra",
     "google.gemma-3-4b-it",
     "google.gemma-3-12b-it",
     "google.gemma-3-27b-it",

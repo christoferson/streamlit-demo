@@ -50,6 +50,38 @@ class FoundationModel:
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
                 }
+            elif self.model_id in ["us.anthropic.claude-sonnet-5", "global.anthropic.claude-sonnet-5"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
+                "TopP": InferenceParameter("top_p", 0, 1, 1, False),
+                "TopK": InferenceParameter("top_k", 0, 250, 500, False)
+                }
+            # Opus 5 and Fable 5 reject temperature / top_p / top_k outright:
+            # "`temperature` may only be set to 1" — verified via converse().
+            elif self.model_id in ["global.anthropic.claude-opus-5",
+                                   "us.anthropic.claude-opus-5",
+                                   "global.anthropic.claude-fable-5",
+                                   "us.anthropic.claude-fable-5"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
+                "TopP": InferenceParameter("top_p", 0, 1, 1, False),
+                "TopK": InferenceParameter("top_k", 0, 250, 500, False)
+                }
+            # Sonnet 4.6 / Opus 4.5 / Haiku 4.5 reject temperature and top_p
+            # in the same request ("`temperature` and `top_p` cannot both be
+            # specified"), so top_p is disabled and temperature kept — same
+            # treatment as Sonnet 4.5 above. top_k is fine alongside it.
+            elif self.model_id in ["global.anthropic.claude-sonnet-4-6",
+                                   "global.anthropic.claude-opus-4-5-20251101-v1:0",
+                                   "global.anthropic.claude-haiku-4-5-20251001-v1:0"]:
+                return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
+                "Temperature": InferenceParameter("temperature", 0, 1, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1, False),
+                "TopK": InferenceParameter("top_k", 0, 250, 500)
+                }
             elif self.model_id in ["global.anthropic.claude-sonnet-4-5-20250929-v1:0"]:
                 return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
@@ -133,6 +165,13 @@ class FoundationModel:
                 "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
             }
         elif self.provider == "OpenAI":
+            if self.model_id in ["global.openai.gpt-5.6-luna", "global.openai.gpt-5.6-sol", "global.openai.gpt-5.6-terra"]:
+                return {
+                    "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
+                    "Temperature": InferenceParameter("temperature", 0, 0.9, 5, False),
+                    "TopP": InferenceParameter("p", 0, 0.75, 1, False),
+                    "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                }
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
@@ -145,6 +184,16 @@ class FoundationModel:
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
                 "TopP": InferenceParameter("p", 0, 0.75, 1),
                 "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+            }
+        elif self.provider == "Writer":
+            # Palmyra X5 rejects the capitalised "TopK" that the generic
+            # fallback branch emits ("Request contains unrecognized fields");
+            # both X4 and X5 accept lowercase "top_k".
+            return {
+                "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
+                "Temperature": InferenceParameter("temperature", 0, 0.5, 1),
+                "TopP": InferenceParameter("top_p", 0, 1, 1),
+                "TopK": InferenceParameter("top_k", 0, 250, 500)
             }
         elif self.provider == "NVIDIA":
             return {
@@ -168,6 +217,15 @@ class FoundationModel:
 # Dictionary to store FoundationModel instances
 foundation_models = {
     
+    "global.anthropic.claude-opus-5": FoundationModel("Anthropic", "global.anthropic.claude-opus-5", True, True, True, True, True, True, True, True),
+    "us.anthropic.claude-opus-5": FoundationModel("Anthropic", "us.anthropic.claude-opus-5", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-fable-5": FoundationModel("Anthropic", "global.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
+    "us.anthropic.claude-fable-5": FoundationModel("Anthropic", "us.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-sonnet-4-6": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-6", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-opus-4-5-20251101-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-opus-4-5-20251101-v1:0", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-haiku-4-5-20251001-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-haiku-4-5-20251001-v1:0", True, True, True, True, True, True, True, True),
+    "us.anthropic.claude-sonnet-5": FoundationModel("Anthropic", "us.anthropic.claude-sonnet-5", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-sonnet-5": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-5-20250929-v1:0", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-4-20250514-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-20250514-v1:0", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-opus-4-6-v1": FoundationModel("Anthropic", "global.anthropic.claude-opus-4-6-v1", True, True, True, True, True, True, True, True),
@@ -213,12 +271,29 @@ foundation_models = {
     "qwen.qwen3-vl-235b-a22b": FoundationModel("Qwen", "us.qwen.qwen3-vl-235b-a22b", True, True, True, True, True, True, True, True),
     "openai.gpt-oss-safeguard-20b": FoundationModel("OpenAI", "openai.gpt-oss-safeguard-20b", True, True, True, True, False, True, False, True),
     "openai.gpt-oss-safeguard-120b": FoundationModel("OpenAI", "openai.gpt-oss-safeguard-120b", True, True, True, True, False, True, False, True),
+    "global.openai.gpt-5.6-luna": FoundationModel("OpenAI", "global.openai.gpt-5.6-luna", True, True, True, True, False, True, False, True),
+    "global.openai.gpt-5.6-sol": FoundationModel("OpenAI", "global.openai.gpt-5.6-sol", True, True, True, True, False, True, False, True),
+    "global.openai.gpt-5.6-terra": FoundationModel("OpenAI", "global.openai.gpt-5.6-terra", True, True, True, True, False, True, False, True),
     "google.gemma-3-4b-it": FoundationModel("Google", "google.gemma-3-4b-it", True, True, True, True, False, True, False, True),
     "google.gemma-3-12b-it": FoundationModel("Google", "google.gemma-3-12b-it", True, True, True, True, False, True, False, True),
     "google.gemma-3-27b-it": FoundationModel("Google", "google.gemma-3-27b-it", True, True, True, True, False, True, False, True),
     "nvidia.nemotron-nano-9b-v2": FoundationModel("NVIDIA", "nvidia.nemotron-nano-9b-v2", True, True, True, True, False, True, False, True),
     "nvidia.nemotron-nano-12b-v2": FoundationModel("NVIDIA", "nvidia.nemotron-nano-12b-v2", True, True, True, True, False, True, False, True),
     "us.amazon.nova-2-lite-v1:0": FoundationModel("Amazon", "us.amazon.nova-2-lite-v1:0", True, True, True, True, False, False, False, True),
+    "amazon.nova-lite-v1:0": FoundationModel("Amazon", "amazon.nova-lite-v1:0", True, True, True, True, True, True, True, True),
+    "amazon.nova-micro-v1:0": FoundationModel("Amazon", "amazon.nova-micro-v1:0", True, True, True, True, False, True, True, True),
+    "us.meta.llama3-3-70b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-3-70b-instruct-v1:0", True, True, True, True, False, True, False, True),
+    "us.meta.llama3-1-70b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-1-70b-instruct-v1:0", True, True, True, True, False, True, False, True),
+    "us.meta.llama3-1-8b-instruct-v1:0": FoundationModel("Meta", "us.meta.llama3-1-8b-instruct-v1:0", True, True, True, True, False, True, False, True),
+    "mistral.mistral-large-3-675b-instruct": FoundationModel("Mistral", "mistral.mistral-large-3-675b-instruct", True, True, True, True, True, True, False, True),
+    "mistral.magistral-small-2509": FoundationModel("Mistral", "mistral.magistral-small-2509", True, True, True, True, True, True, False, True),
+    "mistral.ministral-3-14b-instruct": FoundationModel("Mistral", "mistral.ministral-3-14b-instruct", True, True, True, True, True, True, False, True),
+    "qwen.qwen3-coder-next": FoundationModel("Qwen", "qwen.qwen3-coder-next", True, True, True, True, False, True, False, True),
+    "qwen.qwen3-32b-v1:0": FoundationModel("Qwen", "qwen.qwen3-32b-v1:0", True, True, True, True, False, True, False, True),
+    "openai.gpt-oss-120b-1:0": FoundationModel("OpenAI", "openai.gpt-oss-120b-1:0", True, True, True, True, False, True, False, True),
+    "openai.gpt-oss-20b-1:0": FoundationModel("OpenAI", "openai.gpt-oss-20b-1:0", True, True, True, True, False, True, False, True),
+    "nvidia.nemotron-super-3-120b": FoundationModel("NVIDIA", "nvidia.nemotron-super-3-120b", True, True, True, True, False, True, False, True),
+    "nvidia.nemotron-nano-3-30b": FoundationModel("NVIDIA", "nvidia.nemotron-nano-3-30b", True, True, True, True, False, True, False, True),
 
 
     # Models defined in the documentation but not in opt_model_id_list
