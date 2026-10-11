@@ -219,6 +219,72 @@ class FoundationModel:
     def find(model_id):
         return foundation_models.get(model_id)
 
+    @staticmethod
+    def display_name(model_id):
+        """Friendly label, e.g. 'Claude Opus 5.5', or 'Amazon Nova Premier (US)' for non-global profiles. Falls back to the raw ID."""
+        scope, _, base_id = model_id.partition(".")
+        suffix = {"global": "", "us": " (US)"}.get(scope)
+        if suffix is None:
+            base_id, suffix = model_id, ""
+        return model_display_names.get(base_id, model_id) + suffix
+
+# Display names keyed by model ID without the inference-profile prefix (global./us.)
+model_display_names = {
+    "anthropic.claude-fable-5-1": "Claude Fable 5.1",
+    "anthropic.claude-fable-5": "Claude Fable 5.0",
+    "anthropic.claude-opus-5-5": "Claude Opus 5.5",
+    "anthropic.claude-opus-5": "Claude Opus 5.0",
+    "anthropic.claude-opus-4-8": "Claude Opus 4.8",
+    "anthropic.claude-opus-4-7": "Claude Opus 4.7",
+    "anthropic.claude-opus-4-6-v1": "Claude Opus 4.6",
+    "anthropic.claude-opus-4-5-20251101-v1:0": "Claude Opus 4.5",
+    "anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4.0",
+    "anthropic.claude-3-opus-20240229-v1:0": "Claude Opus 3.0",
+    "anthropic.claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "anthropic.claude-sonnet-5": "Claude Sonnet 5.0",
+    "anthropic.claude-sonnet-4-6": "Claude Sonnet 4.6",
+    "anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude Sonnet 4.5",
+    "anthropic.claude-sonnet-4-20250514-v1:0": "Claude Sonnet 4.0",
+    "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude Sonnet 3.7",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude Sonnet 3.5 v2",
+    "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude Sonnet 3.5",
+    "anthropic.claude-3-sonnet-20240229-v1:0": "Claude Sonnet 3.0",
+    "anthropic.claude-haiku-5-5": "Claude Haiku 5.5",
+    "anthropic.claude-haiku-4-5-20251001-v1:0": "Claude Haiku 4.5",
+    "anthropic.claude-3-haiku-20240307-v1:0": "Claude Haiku 3.0",
+    "amazon.nova-premier-v1:0": "Amazon Nova Premier",
+    "amazon.nova-2-pro-v1:0": "Amazon Nova 2 Pro",
+    "amazon.nova-2-lite-v1:0": "Amazon Nova 2 Lite",
+    "amazon.nova-pro-v1:0": "Amazon Nova Pro",
+    "openai.gpt-5.6-terra": "GPT-5.6 Terra",
+    "openai.gpt-5.6-sol": "GPT-5.6 Sol",
+    "openai.gpt-5.6-luna": "GPT-5.6 Luna",
+    "openai.gpt-oss-safeguard-120b": "gpt-oss-safeguard 120B",
+    "openai.gpt-oss-safeguard-20b": "gpt-oss-safeguard 20B",
+    "meta.llama4-maverick-17b-instruct-v1:0": "Llama 4 Maverick 17B",
+    "meta.llama4-scout-17b-instruct-v1:0": "Llama 4 Scout 17B",
+    "meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B Vision",
+    "meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B Vision",
+    "meta.llama3-70b-instruct-v1:0": "Llama 3 70B Instruct",
+    "meta.llama3-8b-instruct-v1:0": "Llama 3 8B Instruct",
+    "meta.llama2-70b-chat-v1": "Llama 2 Chat 70B",
+    "meta.llama2-13b-chat-v1": "Llama 2 Chat 13B",
+    "mistral.pixtral-large-2502-v1:0": "Pixtral Large (25.02)",
+    "mistral.mistral-large-2402-v1:0": "Mistral Large (24.02)",
+    "mistral.mistral-small-2402-v1:0": "Mistral Small (24.02)",
+    "cohere.command-r-plus-v1:0": "Cohere Command R+",
+    "cohere.command-r-v1:0": "Cohere Command R",
+    "google.gemma-3-27b-it": "Gemma 3 27B",
+    "google.gemma-3-12b-it": "Gemma 3 12B",
+    "google.gemma-3-4b-it": "Gemma 3 4B",
+    "qwen.qwen3-vl-235b-a22b": "Qwen3 VL 235B",
+    "qwen.qwen3-next-80b-a3b": "Qwen3 Next 80B",
+    "nvidia.nemotron-nano-12b-v2": "Nemotron Nano 12B v2",
+    "nvidia.nemotron-nano-9b-v2": "Nemotron Nano 9B v2",
+    "writer.palmyra-x5-v1:0": "Writer Palmyra X5",
+    "writer.palmyra-x4-v1:0": "Writer Palmyra X4",
+}
+
 # Dictionary to store FoundationModel instances
 foundation_models = {
     

@@ -292,73 +292,76 @@ def build_attachment_blocks(files):
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
-    "global.anthropic.claude-fable-5",
+    # --- Anthropic: Fable ---
     "global.anthropic.claude-fable-5-1",
+    "global.anthropic.claude-fable-5",
+    # --- Anthropic: Opus ---
     "global.anthropic.claude-opus-5-5",
     "global.anthropic.claude-opus-5",
-    "global.anthropic.claude-sonnet-5-5",
-    "us.anthropic.claude-sonnet-5",
-    "global.anthropic.claude-sonnet-5",
-    "global.anthropic.claude-haiku-5-5",
-    "global.anthropic.claude-sonnet-4-6",
+    "global.anthropic.claude-opus-4-8",
+    "global.anthropic.claude-opus-4-7",
+    "global.anthropic.claude-opus-4-6-v1",
     "global.anthropic.claude-opus-4-5-20251101-v1:0",
-    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    # --- Anthropic: Sonnet ---
+    "global.anthropic.claude-sonnet-5-5",
+    "global.anthropic.claude-sonnet-5",
+    "global.anthropic.claude-sonnet-4-6",
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "global.anthropic.claude-sonnet-4-20250514-v1:0",
-    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "global.anthropic.claude-opus-4-6-v1",
-    "global.anthropic.claude-opus-4-7",
-    "global.anthropic.claude-opus-4-8",
+    # --- Anthropic: Haiku ---
+    "global.anthropic.claude-haiku-5-5",
+    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 
-    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    #"anthropic.claude-3-opus-20240229-v1:0",
-    "us.anthropic.claude-3-haiku-20240307-v1:0",
-    "us.anthropic.claude-3-sonnet-20240229-v1:0",
-    "us.anthropic.claude-3-opus-20240229-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "us.anthropic.claude-opus-4-20250514-v1:0",
-    "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "amazon.nova-pro-v1:0",
-    "global.amazon.nova-2-lite-v1:0",
-    #"global.amazon.nova-2-pro-v1:0",
-    
-    
-    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
-    "cohere.command-r-plus-v1:0",
-    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
-    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
-    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
-    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
-    "us.meta.llama3-2-11b-instruct-v1:0", # Vision
-    "us.meta.llama3-2-90b-instruct-v1:0", # Vision
-    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
-    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
-    "mistral.mistral-small-2402-v1:0", # Mistral Small
-    "mistral.mistral-large-2402-v1:0", # Mistral Large
-    "us.mistral.pixtral-large-2502-v1:0",
+    # --- Amazon: Nova ---
     "us.amazon.nova-premier-v1:0",
-    "us.meta.llama4-scout-17b-instruct-v1:0",
-    "us.meta.llama4-maverick-17b-instruct-v1:0",
-    "us.writer.palmyra-x4-v1:0",
-    "us.writer.palmyra-x5-v1:0",
-    "qwen.qwen3-next-80b-a3b",
-    "qwen.qwen3-vl-235b-a22b",
-    "openai.gpt-oss-safeguard-20b", #KeyError: 'text'
-    "openai.gpt-oss-safeguard-120b", #KeyError: 'text'
-    "global.openai.gpt-5.6-luna",
-    "global.openai.gpt-5.6-sol",
+    #"global.amazon.nova-2-pro-v1:0",
+    "global.amazon.nova-2-lite-v1:0",
+    "amazon.nova-pro-v1:0",
+
+    # --- OpenAI ---
     "global.openai.gpt-5.6-terra",
-    "google.gemma-3-4b-it",
-    "google.gemma-3-12b-it",
+    "global.openai.gpt-5.6-sol",
+    "global.openai.gpt-5.6-luna",
+    "openai.gpt-oss-safeguard-120b", #KeyError: 'text'
+    "openai.gpt-oss-safeguard-20b", #KeyError: 'text'
+
+    # --- Meta: Llama ---
+    "us.meta.llama4-maverick-17b-instruct-v1:0",
+    "us.meta.llama4-scout-17b-instruct-v1:0",
+    "us.meta.llama3-2-90b-instruct-v1:0", # Vision
+    "us.meta.llama3-2-11b-instruct-v1:0", # Vision
+    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
+    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
+    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
+    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
+
+    # --- Mistral ---
+    "us.mistral.pixtral-large-2502-v1:0",
+    "mistral.mistral-large-2402-v1:0", # Mistral Large
+    "mistral.mistral-small-2402-v1:0", # Mistral Small
+    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
+    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
+
+    # --- Cohere: Command ---
+    "cohere.command-r-plus-v1:0",
+    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
+
+    # --- Google: Gemma ---
     "google.gemma-3-27b-it",
-    "nvidia.nemotron-nano-9b-v2",
+    "google.gemma-3-12b-it",
+    "google.gemma-3-4b-it",
+
+    # --- Qwen ---
+    "qwen.qwen3-vl-235b-a22b",
+    "qwen.qwen3-next-80b-a3b",
+
+    # --- NVIDIA: Nemotron ---
     "nvidia.nemotron-nano-12b-v2",
-    "us.amazon.nova-2-lite-v1:0",
+    "nvidia.nemotron-nano-9b-v2",
+
+    # --- Writer: Palmyra ---
+    "us.writer.palmyra-x5-v1:0",
+    "us.writer.palmyra-x4-v1:0",
 ]
 
 opt_model_id_list_default = "global.anthropic.claude-sonnet-5"
@@ -381,7 +384,7 @@ if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
 
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = opt_model_id_list_default_idx, key="model_id")
+    opt_model_id = st.selectbox(label="Model", options=opt_model_id_list, index = opt_model_id_list_default_idx, format_func=FoundationModel.display_name, key="model_id")
 
 opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
 
@@ -650,7 +653,7 @@ with main_col:
         with st.spinner('Processing...'):
 
             try:
-                use_us_west_2 = "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "us.anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id or "writer.palmyra" in opt_model_id
+                use_us_west_2 = "writer.palmyra" in opt_model_id
                 if use_us_west_2:
                         response = bedrock_runtime_us_west_2.converse_stream(
                         modelId=opt_model_id,
@@ -815,7 +818,7 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
 
     with st.container(border=True):
         st.markdown("**Current Model**")
-        st.caption(opt_model_id)
+        st.caption(FoundationModel.display_name(opt_model_id))
         st.markdown("**Temperature**")
         st.caption(f"{opt_temperature:.1f}")
         st.markdown("**Max Tokens**")
