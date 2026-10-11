@@ -60,11 +60,14 @@ class FoundationModel:
                 }
             # Opus 5 and Fable 5 reject temperature / top_p / top_k outright:
             # "`temperature` may only be set to 1" — verified via converse().
+            # Opus 5.5 / Sonnet 5.5 / Fable 5.1 also reject non-default sampling params.
             elif self.model_id in ["global.anthropic.claude-opus-5",
                                    "us.anthropic.claude-opus-5",
                                    "global.anthropic.claude-fable-5",
                                    "us.anthropic.claude-fable-5",
-                                   "global.anthropic.claude-fable-5-1"]:
+                                   "global.anthropic.claude-fable-5-1",
+                                   "global.anthropic.claude-opus-5-5",
+                                   "global.anthropic.claude-sonnet-5-5"]:
                 return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
@@ -224,6 +227,8 @@ foundation_models = {
     "global.anthropic.claude-fable-5": FoundationModel("Anthropic", "global.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-fable-5": FoundationModel("Anthropic", "us.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-fable-5-1": FoundationModel("Anthropic", "global.anthropic.claude-fable-5-1", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-opus-5-5": FoundationModel("Anthropic", "global.anthropic.claude-opus-5-5", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-sonnet-5-5": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-5-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-4-6": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-6", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-opus-4-5-20251101-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-opus-4-5-20251101-v1:0", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-haiku-4-5-20251001-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-haiku-4-5-20251001-v1:0", True, True, True, True, True, True, True, True),
