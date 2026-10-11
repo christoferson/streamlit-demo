@@ -50,7 +50,8 @@ class FoundationModel:
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
                 }
-            elif self.model_id in ["us.anthropic.claude-sonnet-5", "global.anthropic.claude-sonnet-5"]:
+            elif self.model_id in ["us.anthropic.claude-sonnet-5", "global.anthropic.claude-sonnet-5",
+                                   "global.anthropic.claude-haiku-5-5"]:
                 return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
@@ -62,7 +63,8 @@ class FoundationModel:
             elif self.model_id in ["global.anthropic.claude-opus-5",
                                    "us.anthropic.claude-opus-5",
                                    "global.anthropic.claude-fable-5",
-                                   "us.anthropic.claude-fable-5"]:
+                                   "us.anthropic.claude-fable-5",
+                                   "global.anthropic.claude-fable-5-1"]:
                 return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 16000, 64000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
@@ -221,9 +223,11 @@ foundation_models = {
     "us.anthropic.claude-opus-5": FoundationModel("Anthropic", "us.anthropic.claude-opus-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-fable-5": FoundationModel("Anthropic", "global.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-fable-5": FoundationModel("Anthropic", "us.anthropic.claude-fable-5", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-fable-5-1": FoundationModel("Anthropic", "global.anthropic.claude-fable-5-1", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-4-6": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-6", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-opus-4-5-20251101-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-opus-4-5-20251101-v1:0", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-haiku-4-5-20251001-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-haiku-4-5-20251001-v1:0", True, True, True, True, True, True, True, True),
+    "global.anthropic.claude-haiku-5-5": FoundationModel("Anthropic", "global.anthropic.claude-haiku-5-5", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-sonnet-5": FoundationModel("Anthropic", "us.anthropic.claude-sonnet-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-5": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-5", True, True, True, True, True, True, True, True),
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0": FoundationModel("Anthropic", "global.anthropic.claude-sonnet-4-5-20250929-v1:0", True, True, True, True, True, True, True, True),
