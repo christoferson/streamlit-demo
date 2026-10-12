@@ -45,7 +45,7 @@ class FoundationModel:
                 }
             elif self.model_id in ["us.anthropic.claude-sonnet-4-20250514-v1:0"]:
                 return {
-                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8192, 10000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1),
                 "TopP": InferenceParameter("top_p", 0, 1, 1),
                 "TopK": InferenceParameter("top_k", 0, 250, 500)
@@ -89,7 +89,7 @@ class FoundationModel:
                 }
             elif self.model_id in ["global.anthropic.claude-sonnet-4-5-20250929-v1:0"]:
                 return {
-                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8192, 10000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1),
                 "TopP": InferenceParameter("top_p", 0, 1, 1, False),
                 "TopK": InferenceParameter("top_k", 0, 250, 500, False)
@@ -98,14 +98,14 @@ class FoundationModel:
             
             elif self.model_id in ["global.anthropic.claude-opus-4-6-v1"]:
                 return {
-                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8192, 10000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1),
                 "TopP": InferenceParameter("top_p", 0, 1, 1, False),
                 "TopK": InferenceParameter("top_k", 0, 250, 500, False)
                 }
             elif self.model_id in ["global.anthropic.claude-opus-4-7", "global.anthropic.claude-opus-4-8"]:
                 return {
-                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8092, 10000),
+                "MaxTokensToSample": InferenceParameter("max_tokens", 4096, 8192, 10000),
                 "Temperature": InferenceParameter("temperature", 0, 1, 1, False),
                 "TopP": InferenceParameter("top_p", 0, 1, 1, False),
                 "TopK": InferenceParameter("top_k", 0, 250, 500, False)
@@ -136,7 +136,7 @@ class FoundationModel:
                                  "mistral.mistral-large-2402-v1:0", "mistral.mistral-large-2402-v1", 
                                  "mistral.mistral-small-2402-v1:0", "mistral.mistral-small-2402-v1"]:
                 return {
-                    "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 4098, 8192),
+                    "MaxTokensToSample": InferenceParameter("MaxTokensToSample", 1, 4096, 8192),
                     "Temperature": InferenceParameter("Temperature", 0, 0.7, 1),
                     "TopP": InferenceParameter("TopP", 0, 1, 1),
                     "TopK": InferenceParameter("TopK", 0, 0, 0, supported=False)  # disabled
@@ -166,29 +166,29 @@ class FoundationModel:
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
-                "TopP": InferenceParameter("p", 0, 0.75, 1),
-                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                "TopP": InferenceParameter("top_p", 0, 0.75, 1),
+                "TopK": InferenceParameter("top_k", 0, 0, 500, supported=False)
             }
         elif self.provider == "OpenAI":
             if self.model_id in ["global.openai.gpt-5.6-luna", "global.openai.gpt-5.6-sol", "global.openai.gpt-5.6-terra"]:
                 return {
                     "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                     "Temperature": InferenceParameter("temperature", 0, 0.9, 5, False),
-                    "TopP": InferenceParameter("p", 0, 0.75, 1, False),
-                    "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                    "TopP": InferenceParameter("top_p", 0, 0.75, 1, False),
+                    "TopK": InferenceParameter("top_k", 0, 0, 500, supported=False)
                 }
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
-                "TopP": InferenceParameter("p", 0, 0.75, 1),
-                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                "TopP": InferenceParameter("top_p", 0, 0.75, 1),
+                "TopK": InferenceParameter("top_k", 0, 0, 500, supported=False)
             }
         elif self.provider == "Google":
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
-                "TopP": InferenceParameter("p", 0, 0.75, 1),
-                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                "TopP": InferenceParameter("top_p", 0, 0.75, 1),
+                "TopK": InferenceParameter("top_k", 0, 0, 500, supported=False)
             }
         elif self.provider == "Writer":
             # Palmyra X5 rejects the capitalised "TopK" that the generic
@@ -204,8 +204,8 @@ class FoundationModel:
             return {
                 "MaxTokensToSample": InferenceParameter("max_tokens", 1, 2048, 4096),
                 "Temperature": InferenceParameter("temperature", 0, 0.9, 5),
-                "TopP": InferenceParameter("p", 0, 0.75, 1),
-                "TopK": InferenceParameter("k", 0, 0, 500, supported=False)
+                "TopP": InferenceParameter("top_p", 0, 0.75, 1),
+                "TopK": InferenceParameter("top_k", 0, 0, 500, supported=False)
             }
         else:
             return {
@@ -318,7 +318,7 @@ foundation_models = {
     "us.anthropic.claude-3-sonnet-20240229-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-sonnet-20240229-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-opus-20240229-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-opus-20240229-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-3-5-sonnet-20240620-v1:0": FoundationModel("Anthropic", "us.anthropic.claude-3-5-sonnet-20240620-v1:0", True, True, True, True, True, True, True, True),
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0": FoundationModel("Anthropic", "anthropic.claude-3-5-sonnet-20241022-v2:0", True, True, True, True, True, True, True, True),
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0": FoundationModel("Anthropic", "us.anthropic.claude-3-5-sonnet-20241022-v2:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-opus-4-20250514-v1:0" :  FoundationModel("Anthropic", "us.anthropic.claude-opus-4-20250514-v1:0", True, True, True, True, True, True, True, True),
     "us.anthropic.claude-sonnet-4-20250514-v1:0" : FoundationModel("Anthropic", "us.anthropic.claude-sonnet-4-20250514-v1:0", True, True, True, True, True, True, True, True),
 
@@ -342,8 +342,8 @@ foundation_models = {
     "us.mistral.pixtral-large-2502-v1:0": FoundationModel("Mistral", "us.mistral.pixtral-large-2502-v1:0", True, True, True, True, False, True, False, True),
     "us.writer.palmyra-x4-v1:0": FoundationModel("Writer", "us.writer.palmyra-x4-v1:0", True, True, True, True, False, True, False, True),
     "us.writer.palmyra-x5-v1:0": FoundationModel("Writer", "us.writer.palmyra-x5-v1:0", True, True, True, True, False, True, False, True),
-    "qwen.qwen3-next-80b-a3b": FoundationModel("Qwen", "us.qwen.qwen3-next-80b-a3b", True, True, True, True, False, True, False, True),
-    "qwen.qwen3-vl-235b-a22b": FoundationModel("Qwen", "us.qwen.qwen3-vl-235b-a22b", True, True, True, True, True, True, True, True),
+    "qwen.qwen3-next-80b-a3b": FoundationModel("Qwen", "qwen.qwen3-next-80b-a3b", True, True, True, True, False, True, False, True),
+    "qwen.qwen3-vl-235b-a22b": FoundationModel("Qwen", "qwen.qwen3-vl-235b-a22b", True, True, True, True, True, True, True, True),
     "openai.gpt-oss-safeguard-20b": FoundationModel("OpenAI", "openai.gpt-oss-safeguard-20b", True, True, True, True, False, True, False, True),
     "openai.gpt-oss-safeguard-120b": FoundationModel("OpenAI", "openai.gpt-oss-safeguard-120b", True, True, True, True, False, True, False, True),
     "global.openai.gpt-5.6-luna": FoundationModel("OpenAI", "global.openai.gpt-5.6-luna", True, True, True, True, False, True, False, True),

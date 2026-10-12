@@ -61,11 +61,12 @@ st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 main_col, right_sidebar_col = st.columns([3, 1])
 
 def trim_conversation_history(messages):
-    """Ensure conversation doesn't exceed maximum length"""
-    messages_len = len(messages)
-    if messages_len > MAX_MESSAGES:
-        # Remove oldest messages while keeping pairs together
-        return messages[-(MAX_MESSAGES * 2):]
+    """Keep at most MAX_MESSAGES, dropping the oldest user/assistant pairs"""
+    excess = len(messages) - MAX_MESSAGES
+    if excess > 0:
+        # Round up to an even count so the history still starts with a user message
+        excess += excess % 2
+        return messages[excess:]
     return messages
 
 def validate_conversation_structure(conversation):
@@ -428,7 +429,7 @@ with st.sidebar:
 
 with main_col:
     header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
-    header_flex.markdown("#### 💬 :blue[Converse 3-5-12]")
+    header_flex.markdown("#### 💬 :blue[Converse 3-5-13]")
     header_flex.space("stretch")
     show_guide = header_flex.toggle(":violet[**Guide**]", value=False, key="show_guide_toggle")
 
@@ -674,6 +675,7 @@ with main_col:
 
                 #with st.chat_message("assistant", avatar=setAvatar("assistant")):
                 result_text = ""
+                stream_error = None
                 with st.chat_message("assistant"):
                     result_container = st.container(border=True)
                     result_area = st.empty()
@@ -706,12 +708,12 @@ with main_col:
 
                         if 'metadata' in event:
                             metadata = event['metadata']
-                            if 'usage' in metadata:
-                                input_token_count = metadata['usage']['inputTokens']
-                                output_token_count = metadata['usage']['outputTokens']
-                                total_token_count = metadata['usage']['totalTokens']
-                            if 'metrics' in event['metadata']:
-                                latency = metadata['metrics']['latencyMs']
+                            # usage / metrics are not guaranteed on every metadata event
+                            usage = metadata.get('usage', {})
+                            input_token_count = usage.get('inputTokens', 0)
+                            output_token_count = usage.get('outputTokens', 0)
+                            total_token_count = usage.get('totalTokens', 0)
+                            latency = metadata.get('metrics', {}).get('latencyMs', "n/a")
                             stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
                             result_container.write(stats)
                             user_name = "default_user"  # Replace with actual user name if available
@@ -720,22 +722,14 @@ with main_col:
                             except Exception as e:
                                 logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
-                        if "internalServerException" in event:
-                            exception = event["internalServerException"]
-                            result_text += f"\n{exception}"
-                            result_area.write(result_text)
-                        if "modelStreamErrorException" in event:
-                            exception = event["modelStreamErrorException"]
-                            result_text += f"\n{exception}"
-                            result_area.write(result_text)
-                        if "throttlingException" in event:
-                            exception = event["throttlingException"]
-                            result_text += f"\n{exception}"
-                            result_area.write(result_text)
-                        if "validationException" in event:
-                            exception = event["validationException"]
-                            result_text += f"\n{exception}"
-                            result_area.write(result_text)
+                        # Shown to the user but kept out of result_text, so the
+                        # error is never saved to history and replayed to the model
+                        for error_key in ("internalServerException", "modelStreamErrorException",
+                                          "throttlingException", "validationException",
+                                          "serviceUnavailableException"):
+                            if error_key in event:
+                                stream_error = event[error_key].get("message", str(event[error_key]))
+                                result_area.write(f"{result_text}\n\n:red[{error_key}: {stream_error}]")
 
                     #col1, col2, col3 = st.columns([1,1,5])
 
@@ -749,21 +743,22 @@ with main_col:
                     #    #st.markdown('3')
                     #    pass
 
-                message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+                if stream_error:
+                    # Same as the ClientError path below: don't save a failed
+                    # exchange, so the user can simply resend the message
+                    logger.error("Stream error: %s", stream_error)
+                else:
+                    message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
-                st.session_state.menu_converse_messages.append(message_user_latest)
-                st.session_state.menu_converse_messages.append(message_assistant_latest)
+                    st.session_state.menu_converse_messages.append(message_user_latest)
+                    st.session_state.menu_converse_messages.append(message_assistant_latest)
 
+                    # Trim message History
+                    st.session_state.menu_converse_messages = trim_conversation_history(st.session_state.menu_converse_messages)
 
-                # Trim message History
-                menu_converse_messages = st.session_state.menu_converse_messages
-                menu_converse_messages_len = len(menu_converse_messages)
-                if menu_converse_messages_len > MAX_MESSAGES:
-                    del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-
-                # Rerun so bottom-panel counters and sidebar stats reflect
-                # the exchange that was just appended
-                st.rerun()
+                    # Rerun so bottom-panel counters and sidebar stats reflect
+                    # the exchange that was just appended
+                    st.rerun()
 
             except ClientError as err:
                 message = err.response["Error"]["Message"]
