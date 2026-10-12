@@ -169,8 +169,10 @@ one client per region.
 them, but they don't appear in `listed_models()`. This covers:
 
 - `us.` duplicates of models that have a `global.` profile
-- end-of-life models (Claude 3.x, Opus 4.0): Bedrock returns *"This model
-  version has reached the end of its life"*. Removing them would make
+- end-of-life models: Claude 3.x and Opus 4.0 (found 2026-10-11), and Nova
+  Premier, Llama 3.2 90B / 11B, Llama 2 70B / 13B, Command R+ / R (found
+  2026-10-12). Bedrock returns *"This model version has reached the end of its
+  life"*. Removing them would make
   `FOUNDATION_MODELS.find()` return `None` on older pages that still list them.
 
 ---
@@ -202,7 +204,7 @@ changed. Worth revisiting:
   while the global profile uses `CLAUDE_TEMPERATURE_ONLY_8K`.
 - **Cohere Command R** has a note that it rejects `top_k` ("extraneous key
   [top_k] is not permitted"), but its parameter set still enables `k`. Both
-  Command R models were end of life as of 2026-10-12.
+  Command R models are end of life (unlisted) as of 2026-10-12.
 - **`OPENAI_STYLE` / `COHERE` temperature max is 5.** Unused today (the page's
   slider is fixed at 0–1), but wrong for most of these models.
 - **gpt-oss-safeguard** models used to hit `KeyError: 'text'` in the converse

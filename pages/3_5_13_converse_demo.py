@@ -8,6 +8,10 @@ import logging
 from io import BytesIO
 
 from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
+from cmn.bedrock.converse import (
+    InferenceSettings, build_converse_request, process_stream,
+    strip_binary_content, trim_conversation_history, validate_conversation_structure,
+)
 from datetime import datetime
 
 from botocore.exceptions import ClientError, ReadTimeoutError
@@ -63,61 +67,6 @@ st.markdown(cmn_constants.css_button_primary, unsafe_allow_html=True)
 # Create main layout with right sidebar
 main_col, right_sidebar_col = st.columns([3, 1])
 
-def trim_conversation_history(messages):
-    """Keep at most MAX_MESSAGES, dropping the oldest user/assistant pairs"""
-    excess = len(messages) - MAX_MESSAGES
-    if excess > 0:
-        # Round up to an even count so the history still starts with a user message
-        excess += excess % 2
-        return messages[excess:]
-    return messages
-
-def validate_conversation_structure(conversation):
-    """Validate the structure of uploaded conversation data"""
-    if not isinstance(conversation, list):
-        raise ValueError("Invalid format: expected a list of messages")
-
-    if len(conversation) > MAX_MESSAGES:
-        raise ValueError(f"Conversation exceeds maximum length of {MAX_MESSAGES} messages")
-
-    for message in conversation:
-        if not isinstance(message, dict):
-            raise ValueError("Invalid message format: expected a dictionary")
-
-        if "role" not in message or "content" not in message:
-            raise ValueError("Message missing required fields: 'role' and 'content'")
-
-        if message["role"] not in ["user", "assistant", "system"]:
-            raise ValueError(f"Invalid role: {message['role']}")
-
-        if not isinstance(message["content"], list):
-            raise ValueError("Invalid content format: expected a list")
-
-        for content_item in message["content"]:
-            if not isinstance(content_item, dict) or "text" not in content_item:
-                raise ValueError("Invalid content item: expected 'text' key")
-
-def strip_binary_content(messages):
-    """
-    Replace image/document byte payloads with text placeholders so the
-    conversation is JSON-serializable for download. Attachment bytes are
-    session-only and not restored on upload.
-    """
-    stripped = []
-    for msg in messages:
-        content = []
-        for item in msg["content"]:
-            if "image" in item:
-                content.append({"text": "[image attachment omitted]"})
-            elif "document" in item:
-                doc_name = item["document"].get("name", "unknown")
-                content.append({"text": f"[document attachment omitted: {doc_name}]"})
-            else:
-                content.append(item)
-        stripped.append({"role": msg["role"], "content": content})
-    return stripped
-
-
 def get_conversation_download():
     """Download conversation with security signature"""
     if not st.session_state.menu_converse_messages:
@@ -126,7 +75,7 @@ def get_conversation_download():
     security = cmn_security.ConversationSecurity()
     secure_package = security.secure_conversation(
         strip_binary_content(
-            trim_conversation_history(st.session_state.menu_converse_messages)
+            trim_conversation_history(st.session_state.menu_converse_messages, MAX_MESSAGES)
         )
     )
     return BytesIO(json.dumps(secure_package, indent=2).encode())
@@ -150,7 +99,7 @@ def upload_conversation(uploaded_file):
             return False
 
         # Validate structure
-        validate_conversation_structure(conversation_package["messages"])
+        validate_conversation_structure(conversation_package["messages"], MAX_MESSAGES)
 
         # Update session state
         st.session_state.menu_converse_messages = conversation_package["messages"]
@@ -547,137 +496,55 @@ with main_col:
                 elif f.type in mime_mapping_document:
                     st.caption(f":green[Document: {f.name}]")
 
-        system_prompts = [{"text" : opt_system_msg}]
-
-        inference_config = {
-            #"temperature": opt_temperature,
-            "maxTokens": opt_max_tokens,
-            #"topP": opt_top_p,
-            #stopSequences
-        }
-
-        if opt_fm_temperature.is_supported:
-            inference_config["temperature"] = opt_temperature
-
-        if opt_fm_top_p.is_supported:
-            inference_config["topP"] = opt_top_p
-
-        additional_model_fields = {}
-
-        if opt_fm_top_k.is_supported:
-            additional_model_fields[opt_fm_top_k.name] = opt_top_k
-
-        # If additional_model_fields is an empty dictionary, set it to None
-        if additional_model_fields == {}:
-            additional_model_fields = None
-
-        # additional_model_fields = {"top_k": opt_top_k}
-        # if opt_model_id.startswith("cohere"):
-        #     additional_model_fields = None
-        # if opt_model_id.startswith("meta") or opt_model_id.startswith("us.meta"):
-        #     additional_model_fields = None
-        # if opt_model_id.startswith("mistral"):
-        #     additional_model_fields = None
-
-
-
-        #print(json.dumps(inference_config, indent=3))
-        #print(json.dumps(system_prompts, indent=3))
+        request = build_converse_request(
+            opt_fm,
+            message_history,
+            opt_system_msg,
+            # Values for parameters the model doesn't support are dropped by the builder
+            InferenceSettings(max_tokens=opt_max_tokens, temperature=opt_temperature, top_p=opt_top_p, top_k=opt_top_k),
+        )
 
         with st.spinner('Processing...'):
 
             try:
-                response = get_bedrock_runtime(opt_fm.region).converse_stream(
-                    modelId=opt_model_id,
-                    messages=message_history,
-                    system=system_prompts,
-                    inferenceConfig=inference_config,
-                    additionalModelRequestFields=additional_model_fields
-                )
+                response = get_bedrock_runtime(opt_fm.region).converse_stream(**request)
 
-
-                #with st.chat_message("assistant", avatar=setAvatar("assistant")):
-                result_text = ""
-                stream_error = None
                 with st.chat_message("assistant"):
                     result_container = st.container(border=True)
                     result_area = st.empty()
-                    stream = response.get('stream')
-                    for event in stream:
+                    streamed_chunks = []
 
-                        if 'messageStart' in event:
-                            #opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens} role= {event['messageStart']['role']}"
-                            #result_container.write(opts)
-                            pass
+                    def show_text_delta(chunk):
+                        streamed_chunks.append(chunk)
+                        result_area.write("".join(streamed_chunks))
 
-                        if 'contentBlockDelta' in event:
-                            # .get(): newer models can emit non-text deltas
-                            # (e.g. reasoning blocks) which have no 'text' key
-                            text = event['contentBlockDelta']['delta'].get('text', '')
-                            result_text += f"{text}"
-                            result_area.write(result_text)
+                    result = process_stream(response["stream"], on_text_delta=show_text_delta)
 
-                        if 'messageStop' in event:
-                            #'stopReason': 'end_turn'|'tool_use'|'max_tokens'|'stop_sequence'|'content_filtered'
-                            stop_reason = event['messageStop']['stopReason']
-                            if stop_reason == 'end_turn':
-                                pass
-                            else:
-                                stop_reason_display = stop_reason
-                                if stop_reason == 'max_tokens':
-                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                                result_area.write(result_text_error)
+                    metrics = result.metrics
+                    result_container.write(f"| token.in={metrics.input_tokens} token.out={metrics.output_tokens} token={metrics.total_tokens} latency={metrics.latency_ms} provider={opt_fm.provider}")
+                    if metrics.total_tokens:
+                        try:
+                            push_to_cloudwatch("default_user", metrics.input_tokens, metrics.output_tokens, metrics.total_tokens)  # Replace with actual user name if available
+                        except Exception as e:
+                            logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
 
-                        if 'metadata' in event:
-                            metadata = event['metadata']
-                            # usage / metrics are not guaranteed on every metadata event
-                            usage = metadata.get('usage', {})
-                            input_token_count = usage.get('inputTokens', 0)
-                            output_token_count = usage.get('outputTokens', 0)
-                            total_token_count = usage.get('totalTokens', 0)
-                            latency = metadata.get('metrics', {}).get('latencyMs', "n/a")
-                            stats = f"| token.in={input_token_count} token.out={output_token_count} token={total_token_count} latency={latency} provider={opt_fm.provider}"
-                            result_container.write(stats)
-                            user_name = "default_user"  # Replace with actual user name if available
-                            try:
-                                push_to_cloudwatch(user_name, input_token_count, output_token_count, total_token_count)
-                            except Exception as e:
-                                logger.error(f"Failed to push logs to CloudWatch: {str(e)}")
+                    if result.errors:
+                        result_area.write(f"{result.text}\n\n:red[{'; '.join(result.errors)}]")
+                    elif result.stop_reason_display:
+                        result_area.write(f"{result.text}\n\n:red[Generation Stopped: {result.stop_reason_display}]")
 
-                        # Shown to the user but kept out of result_text, so the
-                        # error is never saved to history and replayed to the model
-                        for error_key in ("internalServerException", "modelStreamErrorException",
-                                          "throttlingException", "validationException",
-                                          "serviceUnavailableException"):
-                            if error_key in event:
-                                stream_error = event[error_key].get("message", str(event[error_key]))
-                                result_area.write(f"{result_text}\n\n:red[{error_key}: {stream_error}]")
-
-                    #col1, col2, col3 = st.columns([1,1,5])
-
-                    #with col1:
-                        #st.button(key='copy_button', label='📄', type='primary', on_click=copy_button_clicked, args=[result_text])
-                    #    pass
-                    #with col2:
-                    #    if "audio_stream" not in st.session_state or st.session_state["audio_stream"] == "":
-                    #        st.button(key='recite_button', label='▶️', type='primary', on_click=recite_button_clicked, args=[result_text])
-                    #with col3:
-                    #    #st.markdown('3')
-                    #    pass
-
-                if stream_error:
-                    # Same as the ClientError path below: don't save a failed
-                    # exchange, so the user can simply resend the message
-                    logger.error("Stream error: %s", stream_error)
+                if result.errors:
+                    # Shown above but not saved, like the ClientError path below,
+                    # so the error is never replayed to the model and the user can resend
+                    logger.error("Stream error: %s", result.errors)
                 else:
-                    message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
+                    message_assistant_latest = {"role": "assistant", "content": [{ "text": result.text }]}
 
                     st.session_state.menu_converse_messages.append(message_user_latest)
                     st.session_state.menu_converse_messages.append(message_assistant_latest)
 
                     # Trim message History
-                    st.session_state.menu_converse_messages = trim_conversation_history(st.session_state.menu_converse_messages)
+                    st.session_state.menu_converse_messages = trim_conversation_history(st.session_state.menu_converse_messages, MAX_MESSAGES)
 
                     # Rerun so bottom-panel counters and sidebar stats reflect
                     # the exchange that was just appended

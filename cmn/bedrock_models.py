@@ -335,7 +335,7 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     FoundationModel("anthropic.claude-3-haiku-20240307-v1:0", "Claude Haiku 3.0", _ANTHROPIC, CLAUDE_LEGACY, listed=False),
 
     # --- Amazon: Nova ---
-    FoundationModel("us.amazon.nova-premier-v1:0", "Amazon Nova Premier", _AMAZON, NOVA),
+    FoundationModel("us.amazon.nova-premier-v1:0", "Amazon Nova Premier", _AMAZON, NOVA, listed=False),  # end of life 2026-10-12
     # FoundationModel("global.amazon.nova-2-pro-v1:0", "Amazon Nova 2 Pro", _AMAZON, NOVA),
     FoundationModel("global.amazon.nova-2-lite-v1:0", "Amazon Nova 2 Lite", _AMAZON, NOVA),
     FoundationModel("us.amazon.nova-2-lite-v1:0", "Amazon Nova 2 Lite", _AMAZON, NOVA, TEXT_NO_TOOLS, listed=False),
@@ -357,14 +357,14 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     FoundationModel("us.meta.llama4-maverick-17b-instruct-v1:0", "Llama 4 Maverick 17B", _META, LLAMA, VISION_TOOLS),
     FoundationModel("us.meta.llama4-scout-17b-instruct-v1:0", "Llama 4 Scout 17B", _META, LLAMA, VISION_TOOLS),
     FoundationModel("us.meta.llama3-3-70b-instruct-v1:0", "Llama 3.3 70B Instruct", _META, LLAMA, TEXT_TOOLS, listed=False),
-    FoundationModel("us.meta.llama3-2-90b-instruct-v1:0", "Llama 3.2 90B Vision", _META, LLAMA, VISION_TOOLS),
-    FoundationModel("us.meta.llama3-2-11b-instruct-v1:0", "Llama 3.2 11B Vision", _META, LLAMA, VISION_TOOLS),
+    FoundationModel("us.meta.llama3-2-90b-instruct-v1:0", "Llama 3.2 90B Vision", _META, LLAMA, VISION_TOOLS, listed=False),  # end of life 2026-10-12
+    FoundationModel("us.meta.llama3-2-11b-instruct-v1:0", "Llama 3.2 11B Vision", _META, LLAMA, VISION_TOOLS, listed=False),  # end of life 2026-10-12
     FoundationModel("us.meta.llama3-1-70b-instruct-v1:0", "Llama 3.1 70B Instruct", _META, LLAMA, TEXT_TOOLS, listed=False),
     FoundationModel("us.meta.llama3-1-8b-instruct-v1:0", "Llama 3.1 8B Instruct", _META, LLAMA, TEXT_TOOLS, listed=False),
     FoundationModel("meta.llama3-70b-instruct-v1:0", "Llama 3 70B Instruct", _META, LLAMA, TEXT_TOOLS),
     FoundationModel("meta.llama3-8b-instruct-v1:0", "Llama 3 8B Instruct", _META, LLAMA, TEXT_TOOLS),
-    FoundationModel("meta.llama2-70b-chat-v1", "Llama 2 Chat 70B", _META, LLAMA, TEXT_NO_TOOLS),
-    FoundationModel("meta.llama2-13b-chat-v1", "Llama 2 Chat 13B", _META, LLAMA, TEXT_NO_TOOLS),
+    FoundationModel("meta.llama2-70b-chat-v1", "Llama 2 Chat 70B", _META, LLAMA, TEXT_NO_TOOLS, listed=False),  # end of life 2026-10-12
+    FoundationModel("meta.llama2-13b-chat-v1", "Llama 2 Chat 13B", _META, LLAMA, TEXT_NO_TOOLS, listed=False),  # end of life 2026-10-12
 
     # --- Mistral ---
     FoundationModel("mistral.mistral-large-3-675b-instruct", "Mistral Large 3 675B", _MISTRAL, MISTRAL_DEFAULT, VISION_TOOLS, listed=False),
@@ -379,8 +379,8 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     # FoundationModel("mistral.mistral-7b-instruct-v0:2", "Mistral 7B Instruct", _MISTRAL, MISTRAL_DEFAULT),
 
     # --- Cohere: Command ---
-    FoundationModel("cohere.command-r-plus-v1:0", "Cohere Command R+", _COHERE, COHERE, COHERE_FEATURES),
-    FoundationModel("cohere.command-r-v1:0", "Cohere Command R", _COHERE, COHERE, COHERE_FEATURES),
+    FoundationModel("cohere.command-r-plus-v1:0", "Cohere Command R+", _COHERE, COHERE, COHERE_FEATURES, listed=False),  # end of life 2026-10-12
+    FoundationModel("cohere.command-r-v1:0", "Cohere Command R", _COHERE, COHERE, COHERE_FEATURES, listed=False),  # end of life 2026-10-12
 
     # --- Google: Gemma ---
     FoundationModel("google.gemma-3-27b-it", "Gemma 3 27B", _GOOGLE, OPENAI_STYLE, TEXT_TOOLS),

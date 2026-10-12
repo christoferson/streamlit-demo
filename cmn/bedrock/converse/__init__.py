@@ -17,3 +17,12 @@ from cmn.bedrock.converse.models import (
 )
 from cmn.bedrock.converse.stream_processor import process_stream
 from cmn.bedrock.converse.conversation_manager import ConversationManager
+from cmn.bedrock.converse.request_builder import (
+    InferenceSettings,
+    build_converse_request,
+)
+from cmn.bedrock.converse.conversation_history import (
+    strip_binary_content,
+    trim_conversation_history,
+    validate_conversation_structure,
+)
