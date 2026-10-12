@@ -7,7 +7,7 @@ import json
 import logging
 from io import BytesIO
 
-from cmn.bedrock_models import FoundationModel
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
 from datetime import datetime
 
 from botocore.exceptions import ClientError, ReadTimeoutError
@@ -33,8 +33,11 @@ logging.basicConfig(level=logging.INFO)
 
 ####################################################################################
 
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
-bedrock_runtime_us_west_2 = boto3.client('bedrock-runtime', region_name="us-west-2")
+@st.cache_resource
+def get_bedrock_runtime(region=None):
+    """bedrock-runtime client for a model's region override (FoundationModel.region), else AWS_REGION"""
+    return boto3.client('bedrock-runtime', region_name=region or AWS_REGION)
+
 cloudwatch_logs = boto3.client('logs', region_name=AWS_REGION)
 polly = boto3.client("polly", region_name=AWS_REGION)
 
@@ -291,82 +294,12 @@ def build_attachment_blocks(files):
             unsupported.append(f"{f.name} ({f.type})")
     return blocks, unsupported
        
-# https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-opt_model_id_list = [
-    # --- Anthropic: Fable ---
-    "global.anthropic.claude-fable-5-1",
-    "global.anthropic.claude-fable-5",
-    # --- Anthropic: Opus ---
-    "global.anthropic.claude-opus-5-5",
-    "global.anthropic.claude-opus-5",
-    "global.anthropic.claude-opus-4-8",
-    "global.anthropic.claude-opus-4-7",
-    "global.anthropic.claude-opus-4-6-v1",
-    "global.anthropic.claude-opus-4-5-20251101-v1:0",
-    # --- Anthropic: Sonnet ---
-    "global.anthropic.claude-sonnet-5-5",
-    "global.anthropic.claude-sonnet-5",
-    "global.anthropic.claude-sonnet-4-6",
-    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "global.anthropic.claude-sonnet-4-20250514-v1:0",
-    # --- Anthropic: Haiku ---
-    "global.anthropic.claude-haiku-5-5",
-    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+# Picker order, display names, parameters and region overrides all live in
+# cmn/bedrock_models.py FOUNDATION_MODELS; see design/model-catalog.md
+opt_model_list = FOUNDATION_MODELS.listed_models()
 
-    # --- Amazon: Nova ---
-    "us.amazon.nova-premier-v1:0",
-    #"global.amazon.nova-2-pro-v1:0",
-    "global.amazon.nova-2-lite-v1:0",
-    "amazon.nova-pro-v1:0",
-
-    # --- OpenAI ---
-    "global.openai.gpt-5.6-terra",
-    "global.openai.gpt-5.6-sol",
-    "global.openai.gpt-5.6-luna",
-    "openai.gpt-oss-safeguard-120b", #KeyError: 'text'
-    "openai.gpt-oss-safeguard-20b", #KeyError: 'text'
-
-    # --- Meta: Llama ---
-    "us.meta.llama4-maverick-17b-instruct-v1:0",
-    "us.meta.llama4-scout-17b-instruct-v1:0",
-    "us.meta.llama3-2-90b-instruct-v1:0", # Vision
-    "us.meta.llama3-2-11b-instruct-v1:0", # Vision
-    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
-    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
-    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
-    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
-
-    # --- Mistral ---
-    "us.mistral.pixtral-large-2502-v1:0",
-    "mistral.mistral-large-2402-v1:0", # Mistral Large
-    "mistral.mistral-small-2402-v1:0", # Mistral Small
-    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
-    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
-
-    # --- Cohere: Command ---
-    "cohere.command-r-plus-v1:0",
-    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
-
-    # --- Google: Gemma ---
-    "google.gemma-3-27b-it",
-    "google.gemma-3-12b-it",
-    "google.gemma-3-4b-it",
-
-    # --- Qwen ---
-    "qwen.qwen3-vl-235b-a22b",
-    "qwen.qwen3-next-80b-a3b",
-
-    # --- NVIDIA: Nemotron ---
-    "nvidia.nemotron-nano-12b-v2",
-    "nvidia.nemotron-nano-9b-v2",
-
-    # --- Writer: Palmyra ---
-    "us.writer.palmyra-x5-v1:0",
-    "us.writer.palmyra-x4-v1:0",
-]
-
-opt_model_id_list_default = "global.anthropic.claude-sonnet-5"
-opt_model_id_list_default_idx = opt_model_id_list.index(opt_model_id_list_default)
+opt_model_default = FOUNDATION_MODELS.find("global.anthropic.claude-sonnet-5")
+opt_model_default_idx = opt_model_list.index(opt_model_default)
 
 
 # "You are a question and answering chatbot"
@@ -385,29 +318,29 @@ if "menu_converse_messages" not in st.session_state:
     st.session_state["menu_converse_messages"] = []
 
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model", options=opt_model_id_list, index = opt_model_id_list_default_idx, format_func=FoundationModel.display_name, key="model_id")
+    opt_fm: FoundationModel = st.selectbox(label="Model", options=opt_model_list, index=opt_model_default_idx, format_func=lambda model: model.display_name, key="model_id")
 
-opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
+opt_model_id = opt_fm.model_id
 
-opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
-opt_fm_temperature = opt_fm.InferenceParameter.get("Temperature")
-opt_fm_top_p = opt_fm.InferenceParameter.get("TopP")
-opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_temperature = opt_fm.inference_parameters.temperature
+opt_fm_top_p = opt_fm.inference_parameters.top_p
+opt_fm_top_k = opt_fm.inference_parameters.top_k
 
 with st.sidebar:
-    if opt_fm_temperature.isSupported():
+    if opt_fm_temperature.is_supported:
         opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     else:
         opt_temperature = 0.0
-    if opt_fm_top_p.isSupported():
+    if opt_fm_top_p.is_supported:
         opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     else:
         opt_top_p = 0.0
-    if opt_fm_top_k.isSupported():
+    if opt_fm_top_k.is_supported:
         opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     else:
         opt_top_k = 0
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
 
 with st.sidebar:
@@ -540,9 +473,9 @@ with main_col:
     # File attachments now come through st.chat_input (accept_file="multiple").
     # Build the accepted-type list from the model's capabilities.
     chat_input_file_types = []
-    if opt_fm.isFeatureSupported("document_chat"):
+    if opt_fm.is_feature_supported("document_chat"):
         chat_input_file_types.extend(["txt", "csv", "pdf", "md"])
-    if opt_fm.isFeatureSupported("vision"):
+    if opt_fm.is_feature_supported("vision"):
         chat_input_file_types.extend(["png", "jpg", "jpeg", "gif", "webp"])
 
 # Chat input at the bottom of viewport
@@ -623,16 +556,16 @@ with main_col:
             #stopSequences
         }
 
-        if opt_fm_temperature.isSupported():
+        if opt_fm_temperature.is_supported:
             inference_config["temperature"] = opt_temperature
 
-        if opt_fm_top_p.isSupported():
+        if opt_fm_top_p.is_supported:
             inference_config["topP"] = opt_top_p
 
         additional_model_fields = {}
 
-        if opt_fm_top_k.isSupported():
-            additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+        if opt_fm_top_k.is_supported:
+            additional_model_fields[opt_fm_top_k.name] = opt_top_k
 
         # If additional_model_fields is an empty dictionary, set it to None
         if additional_model_fields == {}:
@@ -654,23 +587,13 @@ with main_col:
         with st.spinner('Processing...'):
 
             try:
-                use_us_west_2 = "writer.palmyra" in opt_model_id
-                if use_us_west_2:
-                        response = bedrock_runtime_us_west_2.converse_stream(
-                        modelId=opt_model_id,
-                        messages=message_history,
-                        system=system_prompts,
-                        inferenceConfig=inference_config,
-                        additionalModelRequestFields=additional_model_fields
-                    )
-                else:
-                    response = bedrock_runtime.converse_stream(
-                        modelId=opt_model_id,
-                        messages=message_history,
-                        system=system_prompts,
-                        inferenceConfig=inference_config,
-                        additionalModelRequestFields=additional_model_fields
-                    )
+                response = get_bedrock_runtime(opt_fm.region).converse_stream(
+                    modelId=opt_model_id,
+                    messages=message_history,
+                    system=system_prompts,
+                    inferenceConfig=inference_config,
+                    additionalModelRequestFields=additional_model_fields
+                )
 
 
                 #with st.chat_message("assistant", avatar=setAvatar("assistant")):
@@ -813,7 +736,7 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
 
     with st.container(border=True):
         st.markdown("**Current Model**")
-        st.caption(FoundationModel.display_name(opt_model_id))
+        st.caption(opt_fm.display_name)
         st.markdown("**Temperature**")
         st.caption(f"{opt_temperature:.1f}")
         st.markdown("**Max Tokens**")
@@ -825,9 +748,9 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
         st.caption(f"**{opt_fm.provider}**")
 
         features = []
-        if opt_fm.isFeatureSupported("vision"):
+        if opt_fm.is_feature_supported("vision"):
             features.append("Vision")
-        if opt_fm.isFeatureSupported("document_chat"):
+        if opt_fm.is_feature_supported("document_chat"):
             features.append("Documents")
 
         if features:

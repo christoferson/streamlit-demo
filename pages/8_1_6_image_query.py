@@ -8,7 +8,7 @@ import cmn_auth
 import io
 import base64
 from PIL import Image
-from cmn.bedrock_models import FoundationModel
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
 
 from botocore.exceptions import ClientError
 
@@ -139,27 +139,27 @@ Always base your responses solely on the content of the provided image(s) and th
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
 
-opt_fm: FoundationModel = FoundationModel.find(opt_model_id)
+opt_fm: FoundationModel = FOUNDATION_MODELS.find(opt_model_id)
 
-opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
-opt_fm_temperature = opt_fm.InferenceParameter.get("Temperature")
-opt_fm_top_p = opt_fm.InferenceParameter.get("TopP")
-opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_temperature = opt_fm.inference_parameters.temperature
+opt_fm_top_p = opt_fm.inference_parameters.top_p
+opt_fm_top_k = opt_fm.inference_parameters.top_k
 
 with st.sidebar:
-    if opt_fm_temperature.isSupported():
+    if opt_fm_temperature.is_supported:
         opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     else:
         opt_temperature = 0.0
-    if opt_fm_top_p.isSupported():
+    if opt_fm_top_p.is_supported:
         opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     else:
         opt_top_p = 0.0
-    if opt_fm_top_k.isSupported():
+    if opt_fm_top_k.is_supported:
         opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     else:
         opt_top_k = 0
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=SYSTEM_PROMPT, key="system_msg")
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
@@ -308,16 +308,16 @@ if prompt:
         #stopSequences
     }
 
-    if opt_fm_temperature.isSupported():
+    if opt_fm_temperature.is_supported:
         inference_config["temperature"] = opt_temperature
 
-    if opt_fm_top_p.isSupported():
+    if opt_fm_top_p.is_supported:
         inference_config["topP"] = opt_top_p
 
     additional_model_fields = {}
 
-    if opt_fm_top_k.isSupported():
-        additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+    if opt_fm_top_k.is_supported:
+        additional_model_fields[opt_fm_top_k.name] = opt_top_k
 
     # If additional_model_fields is an empty dictionary, set it to None
     if additional_model_fields == {}:

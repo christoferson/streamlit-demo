@@ -5,7 +5,7 @@ import json
 import logging
 import cmn_auth
 import cmn_constants
-from cmn.bedrock_models import FoundationModel
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
 
 from botocore.exceptions import ClientError
 
@@ -81,10 +81,10 @@ Remember: Provide your analysis in the SAME LANGUAGE as the input text."""
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
 
-opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
+opt_fm:FoundationModel = FOUNDATION_MODELS.find(opt_model_id)
 
-opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
-opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_top_k = opt_fm.inference_parameters.top_k
 
 with st.sidebar:
 
@@ -150,8 +150,8 @@ if user_text and analyze_button:  # Only analyze when button is clicked
 
             # Add additional model fields if supported
             additional_model_fields = {}
-            if opt_fm_top_k.isSupported():
-                additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+            if opt_fm_top_k.is_supported:
+                additional_model_fields[opt_fm_top_k.name] = opt_top_k
             if not additional_model_fields:
                 additional_model_fields = None
 
@@ -237,8 +237,8 @@ Remember: Keep the response in the SAME LANGUAGE as the input text."""
 
             # Add additional model fields if supported
             additional_model_fields = {}
-            if opt_fm_top_k.isSupported():
-                additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+            if opt_fm_top_k.is_supported:
+                additional_model_fields[opt_fm_top_k.name] = opt_top_k
             if not additional_model_fields:
                 additional_model_fields = None
 
@@ -310,8 +310,8 @@ Remember: Keep the response in the SAME LANGUAGE as the input text."""
 
                 # Add additional model fields if supported
                 additional_model_fields = {}
-                if opt_fm_top_k.isSupported():
-                    additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+                if opt_fm_top_k.is_supported:
+                    additional_model_fields[opt_fm_top_k.name] = opt_top_k
                 if not additional_model_fields:
                     additional_model_fields = None
 

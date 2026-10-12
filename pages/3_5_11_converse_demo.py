@@ -12,7 +12,7 @@ from PIL import Image
 import io
 import base64
 import pandas as pd
-from cmn.bedrock_models import FoundationModel
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
 from datetime import datetime
 
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
@@ -282,19 +282,19 @@ if "menu_converse_messages_feedback" not in st.session_state:
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
 
-opt_fm:FoundationModel = FoundationModel.find(opt_model_id)
+opt_fm:FoundationModel = FOUNDATION_MODELS.find(opt_model_id)
 
-opt_fm_max_tokens = opt_fm.InferenceParameter.get("MaxTokensToSample")
-opt_fm_top_k = opt_fm.InferenceParameter.get("TopK")
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_top_k = opt_fm.inference_parameters.top_k
 
 with st.sidebar:
     opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    if opt_fm_top_k.isSupported():
+    if opt_fm_top_k.is_supported:
         opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
     else:
         opt_top_k = 0
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.MinValue, max_value=opt_fm_max_tokens.MaxValue, value=opt_fm_max_tokens.DefaultValue, step=1, key="max_tokens")
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value=opt_system_msg_int, key="system_msg")
 
 with st.sidebar:
@@ -362,12 +362,12 @@ for msg in st.session_state.menu_converse_messages:
 if "menu_converse_uploader_key" not in st.session_state:
     st.session_state.menu_converse_uploader_key = 0
 
-#st.write(f"""{opt_fm.isFeatureSupported("document_chat")}   {opt_fm.isFeatureSupported("vision")}""")
+#st.write(f"""{opt_fm.is_feature_supported("document_chat")}   {opt_fm.is_feature_supported("vision")}""")
 
 uploaded_file_type_list = []
-if opt_fm.isFeatureSupported("document_chat"):
+if opt_fm.is_feature_supported("document_chat"):
     uploaded_file_type_list.extend(["txt", "csv", "pdf", "md"])
-if opt_fm.isFeatureSupported("vision"):
+if opt_fm.is_feature_supported("vision"):
     uploaded_file_type_list.extend(["png", "jpg", "jpeg"])
 
 if uploaded_file_type_list:
@@ -479,8 +479,8 @@ if prompt:
 
     additional_model_fields = {}
 
-    if opt_fm_top_k.isSupported():
-        additional_model_fields[opt_fm_top_k.Name] = opt_top_k
+    if opt_fm_top_k.is_supported:
+        additional_model_fields[opt_fm_top_k.name] = opt_top_k
     
     # If additional_model_fields is an empty dictionary, set it to None
     if additional_model_fields == {}:
