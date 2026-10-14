@@ -1,6 +1,6 @@
 import streamlit as st
 import cmn_auth
-from streamlit.web.server.websocket_headers import _get_websocket_headers
+#from streamlit.web.server.websocket_headers import _get_websocket_headers
 import boto3
 from botocore.exceptions import ClientError
 
@@ -18,19 +18,19 @@ import random
 def process_aws_oidc_data():
 
    access_token = "oidc_data"
-   headers = st.context.headers #_get_websocket_headers()
-   if headers:
-      #if "X-Amzn-Oidc-Identity" in headers:
-      #   identity = headers["X-Amzn-Oidc-Identity"]
-      if "X-Amzn-Oidc-Accesstoken" in headers:
-         access_token_jwt =  headers["X-Amzn-Oidc-Accesstoken"]
-         #access_token_claim = _decode_access_token(access_token=access_token_jwt)
-         access_token_claims = jwt.decode(access_token_jwt, options={"verify_signature": False})
-         #access_token = json.dumps(access_token_claims)
-         if "name" in access_token_claims:
-            access_token = access_token_claims["name"]
-         elif "upn" in access_token_claims:
-            access_token = access_token_claims["upn"]
+#    headers = st.context.headers #_get_websocket_headers()
+#    if headers:
+#       #if "X-Amzn-Oidc-Identity" in headers:
+#       #   identity = headers["X-Amzn-Oidc-Identity"]
+#       if "X-Amzn-Oidc-Accesstoken" in headers:
+#          access_token_jwt =  headers["X-Amzn-Oidc-Accesstoken"]
+#          #access_token_claim = _decode_access_token(access_token=access_token_jwt)
+#          access_token_claims = jwt.decode(access_token_jwt, options={"verify_signature": False})
+#          #access_token = json.dumps(access_token_claims)
+#          if "name" in access_token_claims:
+#             access_token = access_token_claims["name"]
+#          elif "upn" in access_token_claims:
+#             access_token = access_token_claims["upn"]
 
    return access_token
 
@@ -145,6 +145,10 @@ if st.button('Save Settings'):
    st._config.set_option('theme.base', st.session_state.theme)
    st.success('Settings saved successfully!')
    st.rerun()
+
+# Quick Links
+st.header("Quick Links")
+st.page_link("pages/14_1_1_session_rag.py", label="Session-Based RAG", icon="🧠")
 
 
 # Add a new section for listing Bedrock Foundation models
