@@ -8,6 +8,7 @@ import logging
 from io import BytesIO
 
 from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
+from cmn.view.mime_constants import mime_mapping_document, mime_mapping_image
 from cmn.bedrock.converse import (
     InferenceSettings, build_converse_request, process_stream,
     strip_binary_content, trim_conversation_history, validate_conversation_structure,
@@ -43,7 +44,6 @@ def get_bedrock_runtime(region=None):
     return boto3.client('bedrock-runtime', region_name=region or AWS_REGION)
 
 cloudwatch_logs = boto3.client('logs', region_name=AWS_REGION)
-polly = boto3.client("polly", region_name=AWS_REGION)
 
 ####################################################################################
 
@@ -128,23 +128,24 @@ def upload_conversation(uploaded_file):
 # | parse @message '{"user_name":"*","input_tokens":*,"output_tokens":*,"total_tokens":*,"event_time":"*"}' as user_name, input_tokens, output_tokens, total_tokens, event_time
 # | filter user_name = 'specific_user_name' and ispresent(total_tokens)
 # | stats sum(total_tokens) as total_tokens_used by user_name
-def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
-    log_group_name = "/app/openai/metrics/invocations"
-    log_stream_name = datetime.now().strftime("%Y-%m-%d")
-
-    # Ensure the log group exists
+@st.cache_resource
+def ensure_cloudwatch_log_stream(log_group_name, log_stream_name):
+    """Create the log group and daily stream if missing. Cached, so it runs once per day per server process."""
     try:
         cloudwatch_logs.create_log_group(logGroupName=log_group_name)
-    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException as e:
-        #logger.error(f"Failed to create log group to CloudWatch: {str(e)}")
+    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException:
         pass
-
-    # Ensure the log stream exists
     try:
         cloudwatch_logs.create_log_stream(logGroupName=log_group_name, logStreamName=log_stream_name)
-    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException as e:
-        #logger.error(f"Failed to create log stream to CloudWatch: {str(e)}")
+    except cloudwatch_logs.exceptions.ResourceAlreadyExistsException:
         pass
+    return True
+
+def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
+    # Group name kept as-is so existing CloudWatch Insights queries keep working
+    log_group_name = "/app/openai/metrics/invocations"
+    log_stream_name = datetime.now().strftime("%Y-%m-%d")
+    ensure_cloudwatch_log_stream(log_group_name, log_stream_name)
 
     # Create the log entry as a JSON object
     log_entry = {
@@ -187,31 +188,6 @@ def on_button_clear_clicked():
     """Handle clear conversation button click"""
     clear_conversation()
     st.rerun()
-
-mime_mapping = {
-    "image/png": "png",
-    "image/jpeg": "jpeg",
-    "image/jpg": "jpeg",
-    "image/gif": "gif",
-    "image/webp": "webp",
-}
-
-mime_mapping_image = {
-    "image/png": "png",
-    "image/jpeg": "jpeg",
-    "image/jpg": "jpeg",
-    "image/gif": "gif",
-    "image/webp": "webp",
-}
-
-#'pdf'|'csv'|'doc'|'docx'|'xls'|'xlsx'|'html'|'txt'|'md',
-mime_mapping_document = {
-    "text/plain": "txt",
-    "application/vnd.ms-excel": "csv",
-    "text/csv": "csv",
-    "application/pdf": "pdf",
-    "text/markdown": "md",
-}
 
 
 def build_attachment_blocks(files):
@@ -295,7 +271,6 @@ with st.sidebar:
 with st.sidebar:
     st.divider()
     st.markdown(":blue[**Conversation**]")
-    #st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
     uploaded_conversation = st.file_uploader(
         ":green[**Upload Conversation**]",
         type=["json"],
@@ -306,8 +281,6 @@ with st.sidebar:
         if st.button("Load Conversation", type="secondary", icon=":material/upload:", use_container_width=False):
             if upload_conversation(uploaded_conversation):
                 st.rerun()
-
-#st.markdown("#### 💬 :blue[Converse 3-5-12]")
 
 with main_col:
     header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
@@ -451,11 +424,7 @@ with st.bottom:
         else:
             st.button(":material/archive:", type="tertiary", help="Download Conversation (no data)", disabled=True)
 
-        action = st.menu_button("Export", options=["CSV", "JSON", "PDF"], type="tertiary", help="Export Conversation in different formats")
-        # options = ["North", "East", "South", "West"]
-        # selection = st.segmented_control(
-        #     "", options, selection_mode="single",
-        # )
+        st.menu_button("Export", options=["CSV", "JSON", "PDF"], type="tertiary", help="Export Conversation in different formats")
         st.space(size="small")
 
     chat_input_prompt = st.chat_input(
@@ -469,21 +438,12 @@ with main_col:
     if chat_input_prompt and chat_input_prompt.text:
         prompt = chat_input_prompt.text
 
-        # menu_converse_messages = st.session_state.menu_converse_messages
-        # menu_converse_messages_len = len(menu_converse_messages)
-        # if menu_converse_messages_len > MAX_MESSAGES:
-        #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
-        #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
-        #st.session_state["audio_stream"] = ""
-
         message_history = st.session_state.menu_converse_messages.copy()
         message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
 
-        attached_names = []
         if chat_input_prompt.files:
             attachment_blocks, unsupported = build_attachment_blocks(chat_input_prompt.files)
             message_user_latest["content"].extend(attachment_blocks)
-            attached_names = [f.name for f in chat_input_prompt.files]
             if unsupported:
                 st.warning(f"Unsupported file type(s) skipped: {', '.join(unsupported)}")
 
@@ -553,16 +513,10 @@ with main_col:
             except ClientError as err:
                 message = err.response["Error"]["Message"]
                 logger.error("A client error occurred: %s", message)
-                print("A client error occured: " + format(message))
                 st.chat_message("system").write(message)
             except ReadTimeoutError as err:
-                logger.error("A client error occurred: %s", err)  # Log the error directly
-                print("A client error occurred: " + str(err))     # Print the error as a string
-                st.chat_message("system").write(str(err))         # Use str() to display in chat message
-
-#if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
-#    audio_bytes = BytesIO(st.session_state['audio_stream'])
-#    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+                logger.error("A client error occurred: %s", err)
+                st.chat_message("system").write(str(err))
 
 # Right sidebar content
 # Pin the Info Panel so it stays visible while the conversation scrolls.

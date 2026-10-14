@@ -109,19 +109,13 @@ for message in st.session_state.menu_filequery_messages:
                 st.json(message["citations"])
 
 
-if "menu_filequery_session_id" in st.session_state:
-    menu_filequery_session_id = st.session_state["menu_filequery_session_id"]
-    menu_filequery_uploaded_file_name = st.session_state["menu_filequery_uploaded_file_name"]
-    st.caption(f":blue[Session:] {menu_filequery_session_id} | :blue[File:] {menu_filequery_uploaded_file_name}")
-elif "menu_filequery_uploaded_file_name" in st.session_state:
-    menu_filequery_uploaded_file_name = st.session_state["menu_filequery_uploaded_file_name"]
-    st.caption(f":blue[Session:] new | :blue[File:] {menu_filequery_uploaded_file_name}")
-
 ####
 # File attachment via chat_input (accept_file). The Bedrock EXTERNAL_SOURCES
 # call needs the file bytes on EVERY question, but chat_input only delivers
 # the file on the submission it was attached to — so the current file is
 # persisted in session state and reused for follow-up questions.
+# Note: chat_input renders pinned at the bottom regardless of code position,
+# so it is called before the active-file panel to keep the panel current.
 
 submission = st.chat_input(
     "Ask a question — attach a file (max 20000 tokens)",
@@ -139,6 +133,28 @@ if submission:
         st.session_state["menu_filequery_uploaded_file_name"] = attached.name
         st.session_state["menu_filequery_uploaded_file_type"] = attached.type
         st.session_state["menu_filequery_uploaded_file_bytes"] = attached.getvalue()
+
+####
+# Active file panel — shows the single file all questions currently operate
+# on, with a thumbnail when it's an image.
+
+if "menu_filequery_uploaded_file_name" in st.session_state:
+    active_name  = st.session_state["menu_filequery_uploaded_file_name"]
+    active_type  = st.session_state.get("menu_filequery_uploaded_file_type", "")
+    active_bytes = st.session_state.get("menu_filequery_uploaded_file_bytes")
+    session_label = st.session_state.get("menu_filequery_session_id", "new")
+
+    with st.container(border=True):
+        if active_type in _IMAGE_FORMATS and active_bytes:
+            col_thumb, col_info = st.columns([1, 4], vertical_alignment="center")
+            with col_thumb:
+                st.image(active_bytes, width=96)
+            with col_info:
+                st.markdown(f"🖼️ **{active_name}**")
+                st.caption("Active image — questions are answered about this image")
+        else:
+            st.markdown(f"📄 **{active_name}**")
+            st.caption(f":blue[Session:] {session_label}")
 
 if submission and not submission.text:
     # File attached without a question — acknowledge and wait for the question

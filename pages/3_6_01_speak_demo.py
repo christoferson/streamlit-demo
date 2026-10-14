@@ -16,11 +16,567 @@ from datetime import datetime
 
 from botocore.exceptions import ClientError, ReadTimeoutError
 
+import streamlit as st
+import boto3
+import cmn_settings
+import cmn_constants
+import cmn_security
+import json
+import logging
+from io import BytesIO
+import asyncio
+import base64
+import uuid
+from PIL import Image
+import io
+import pandas as pd
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel
+from datetime import datetime
+import sounddevice as sd
+import numpy as np
+import wave
+import threading
+import queue
+import pyaudio
+from botocore.config import Config
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
+from botocore.exceptions import ClientError, ReadTimeoutError
+from aws_crt.auth import AwsCredentialsProvider
+from aws_crt.http import HttpAuthSchemeResolver, SigV4AuthScheme, HTTPAuthScheme
+from aws_crt.io import ClientBootstrap, DefaultHostResolver, EventLoopGroup
+from awscrt.io import ClientBootstrap, DefaultHostResolver, EventLoopGroup
+from awscrt.auth import AwsCredentialsProvider
+from awscrt.http import HttpAuthSchemeResolver, SigV4AuthScheme, HTTPAuthScheme
+from awscrt.io import ClientBootstrap, DefaultHostResolver, EventLoopGroup
+
+# Import the experimental bidirectional streaming SDK for Nova Sonic
+from bedrock_runtime.bedrock_runtime_client import BedrockRuntimeClient
+from bedrock_runtime.models import (
+    InvokeModelWithBidirectionalStreamInput,
+    InvokeModelWithBidirectionalStreamInputChunk,
+    BidirectionalInputPayloadPart
+)
+
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 80 * 2
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Environment credentials resolver for bidirectional streaming
+class EnvironmentCredentialsResolver:
+    def __call__(self):
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        return AwsCredentialsProvider.new_default()
+
+# Audio handling classes for recording and playback
+class AudioRecorder:
+    def __init__(self, sample_rate=16000, channels=1):
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.audio_queue = queue.Queue()
+        self.is_recording = False
+        self.audio_data = []
+        self.stream = None
+        self.p = pyaudio.PyAudio()
+
+    def callback(self, in_data, frame_count, time_info, status):
+        if self.is_recording:
+            self.audio_queue.put(in_data)
+            self.audio_data.append(in_data)
+        return (in_data, pyaudio.paContinue)
+
+    def start_recording(self):
+        self.is_recording = True
+        self.audio_data = []
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=self.channels,
+            rate=self.sample_rate,
+            input=True,
+            frames_per_buffer=1024,
+            stream_callback=self.callback
+        )
+        self.stream.start_stream()
+
+    def stop_recording(self):
+        if self.stream and self.stream.is_active():
+            self.stream.stop_stream()
+            self.stream.close()
+        self.is_recording = False
+        return b''.join(self.audio_data)
+
+    def get_audio_chunk(self, timeout=0.1):
+        try:
+            return self.audio_queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def __del__(self):
+        if self.stream:
+            self.stream.close()
+        self.p.terminate()
+
+class AudioPlayer:
+    def __init__(self, sample_rate=16000, channels=1):
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.p = pyaudio.PyAudio()
+        self.stream = None
+
+    def play_audio(self, audio_bytes):
+        if self.stream and self.stream.is_active():
+            self.stream.stop_stream()
+            self.stream.close()
+
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=self.channels,
+            rate=self.sample_rate,
+            output=True
+        )
+        self.stream.write(audio_bytes)
+        self.stream.stop_stream()
+        self.stream.close()
+
+    def __del__(self):
+        if self.stream:
+            self.stream.close()
+        self.p.terminate()
+
+class NovaSonicClient:
+    def __init__(self, model_id="amazon.nova-sonic-v1:0", region=AWS_REGION):
+        self.model_id = model_id
+        self.region = region
+        self.bedrock_client = None
+        self.stream_response = None
+        self.is_active = False
+        self.audio_output_queue = asyncio.Queue()
+        self.output_queue = asyncio.Queue()
+        self.role = None
+        self.display_assistant_text = False
+        self.barge_in = False
+        self.toolUseContent = None
+        self.toolName = None
+        self.toolUseId = None
+        self._initialize_client()
+
+    def _initialize_client(self):
+        """Initialize the Bedrock client."""
+        config = Config(
+            endpoint_uri=f"https://bedrock-runtime.{self.region}.amazonaws.com",
+            region=self.region,
+            aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
+            http_auth_scheme_resolver=HttpAuthSchemeResolver(),
+            http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()}
+        )
+        self.bedrock_client = BedrockRuntimeClient(config=config)
+
+    async def start_session(self, temperature=0.7, top_p=0.9, max_tokens=1024):
+        """Start a bidirectional streaming session with Nova Sonic."""
+        self.stream_response = await self.bedrock_client.invoke_model_with_bidirectional_stream(
+            InvokeModelWithBidirectionalStreamInput(model_id=self.model_id)
+        )
+        self.is_active = True
+
+        # Start the response processing task
+        asyncio.create_task(self._process_responses())
+
+        # Send the session start event
+        START_SESSION_EVENT = f'''{{
+            "event": {{
+                "sessionStart": {{
+                "inferenceConfiguration": {{
+                    "maxTokens": {max_tokens},
+                    "topP": {top_p},
+                    "temperature": {temperature}
+                    }}
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=START_SESSION_EVENT.encode('utf-8'))
+        )  
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending session start event: {str(e)}")
+
+    async def send_audio(self, audio_bytes):
+        """Send audio data to the model."""
+        if not self.is_active:
+            print("Session not active")
+            return
+
+        # Convert audio bytes to base64
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+        # Create the audio input event
+        AUDIO_INPUT_EVENT = f'''{{
+            "event": {{
+                "audioInput": {{
+                    "content": "{audio_base64}"
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=AUDIO_INPUT_EVENT.encode('utf-8'))
+        )
+
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending audio: {str(e)}")
+
+    async def send_text(self, text):
+        """Send text to the model."""
+        if not self.is_active:
+            print("Session not active")
+            return
+
+        # Create the text input event
+        TEXT_INPUT_EVENT = f'''{{
+            "event": {{
+                "textInput": {{
+                    "content": "{text}"
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=TEXT_INPUT_EVENT.encode('utf-8'))
+        )
+
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending text: {str(e)}")
+
+    async def send_tool_start_event(self, tool_content_id):
+        """Send tool start event."""
+        TOOL_START_EVENT = f'''{{
+            "event": {{
+                "toolStart": {{
+                    "toolContentId": "{tool_content_id}"
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=TOOL_START_EVENT.encode('utf-8'))
+        )
+
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending tool start event: {str(e)}")
+
+    async def send_tool_result_event(self, tool_content_id, tool_result):
+        """Send tool result event."""
+        TOOL_RESULT_EVENT = f'''{{
+            "event": {{
+                "toolResult": {{
+                    "toolContentId": "{tool_content_id}",
+                    "content": "{tool_result}"
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=TOOL_RESULT_EVENT.encode('utf-8'))
+        )
+
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending tool result event: {str(e)}")
+
+    async def send_tool_content_end_event(self, tool_content_id):
+        """Send tool content end event."""
+        TOOL_CONTENT_END_EVENT = f'''{{
+            "event": {{
+                "contentEnd": {{
+                    "toolContentId": "{tool_content_id}"
+                }}
+            }}
+        }}'''
+
+        event = InvokeModelWithBidirectionalStreamInputChunk(
+            value=BidirectionalInputPayloadPart(bytes_=TOOL_CONTENT_END_EVENT.encode('utf-8'))
+        )
+
+        try:
+            await self.stream_response.input_stream.send(event)
+        except Exception as e:
+            print(f"Error sending tool content end event: {str(e)}")
+
+    async def _process_responses(self):
+        """Process incoming responses from Bedrock."""
+        try:            
+            while self.is_active:
+                try:
+                    output = await self.stream_response.await_output()
+                    result = await output[1].receive()
+                    if result.value and result.value.bytes_:
+                        try:
+                            response_data = result.value.bytes_.decode('utf-8')
+                            json_data = json.loads(response_data)
+
+                            # Handle different response types
+                            if 'event' in json_data:
+                                if 'contentStart' in json_data['event']:
+                                    content_start = json_data['event']['contentStart']
+                                    # set role
+                                    self.role = content_start['role']
+                                    # Check for speculative content
+                                    if 'additionalModelFields' in content_start:
+                                        try:
+                                            additional_fields = json.loads(content_start['additionalModelFields'])
+                                            if additional_fields.get('generationStage') == 'SPECULATIVE':
+                                                self.display_assistant_text = True
+                                            else:
+                                                self.display_assistant_text = False
+                                        except json.JSONDecodeError:
+                                            print("Error parsing additionalModelFields")
+                                elif 'textOutput' in json_data['event']:
+                                    text_content = json_data['event']['textOutput']['content']
+                                    role = json_data['event']['textOutput']['role']
+                                    # Check if there is a barge-in
+                                    if '{ "interrupted" : true }' in text_content:
+                                        self.barge_in = True
+
+                                    if (self.role == "ASSISTANT" and self.display_assistant_text):
+                                        print(f"Assistant: {text_content}")
+                                    elif (self.role == "USER"):
+                                        print(f"User: {text_content}")
+
+                                elif 'audioOutput' in json_data['event']:
+                                    audio_content = json_data['event']['audioOutput']['content']
+                                    audio_bytes = base64.b64decode(audio_content)
+                                    await self.audio_output_queue.put(audio_bytes)
+                                elif 'toolUse' in json_data['event']:
+                                    self.toolUseContent = json_data['event']['toolUse']
+                                    self.toolName = json_data['event']['toolUse']['toolName']
+                                    self.toolUseId = json_data['event']['toolUse']['toolUseId']
+                                elif 'contentEnd' in json_data['event'] and json_data['event'].get('contentEnd', {}).get('type') == 'TOOL':
+                                    toolResult = await self.processToolUse(self.toolName, self.toolUseContent)
+                                    toolContent = str(uuid.uuid4())
+                                    await self.send_tool_start_event(toolContent)
+                                    await self.send_tool_result_event(toolContent, toolResult)
+                                    await self.send_tool_content_end_event(toolContent)
+                                elif 'completionEnd' in json_data['event']:
+                                    # Handle end of conversation, no more response will be generated
+                                    print("End of response sequence")
+
+                            # Put the response in the output queue for other components
+                            await self.output_queue.put(json_data)
+                        except json.JSONDecodeError:
+                            await self.output_queue.put({"raw_data": response_data})
+                except StopAsyncIteration:
+                    # Stream has ended
+                    break
+                except Exception as e:
+                   # Handle ValidationException properly
+                    if "ValidationException" in str(e):
+                        error_message = str(e)
+                        print(f"Validation error: {error_message}")
+                    else:
+                        print(f"Error receiving response: {e}")
+                    break
+
+        except Exception as e:
+            print(f"Response processing error: {e}")
+        finally:
+            self.is_active = False
+
+    async def processToolUse(self, toolName, toolUseContent):
+        """Process tool use requests."""
+        # Implement tool processing logic here
+        return "Tool result placeholder"
+
+    async def close(self):
+        """Close the streaming session."""
+        self.is_active = False
+        if self.stream_response:
+            try:
+                await self.stream_response.input_stream.end()
+            except Exception as e:
+                print(f"Error closing stream: {str(e)}")
+
+    async def get_audio_output(self, timeout=None):
+        """Get audio output from the queue."""
+        try:
+            return await asyncio.wait_for(self.audio_output_queue.get(), timeout)
+        except asyncio.TimeoutError:
+            return None
+
+
+####
+
+# Add these to your existing Streamlit UI setup
+def initialize_session_state():
+    """Initialize session state variables for speech-to-speech functionality"""
+    if "nova_sonic_session_active" not in st.session_state:
+        st.session_state.nova_sonic_session_active = False
+    if "audio_recorder" not in st.session_state:
+        st.session_state.audio_recorder = AudioRecorder()
+    if "audio_player" not in st.session_state:
+        st.session_state.audio_player = AudioPlayer()
+    if "recording" not in st.session_state:
+        st.session_state.recording = False
+    if "audio_output_buffer" not in st.session_state:
+        st.session_state.audio_output_buffer = []
+    if "conversation_text" not in st.session_state:
+        st.session_state.conversation_text = []
+    if "nova_client" not in st.session_state:
+        st.session_state.nova_client = None
+    if "async_tasks" not in st.session_state:
+        st.session_state.async_tasks = []
+
+def start_recording():
+    """Start audio recording"""
+    if not st.session_state.recording:
+        st.session_state.audio_recorder.start_recording()
+        st.session_state.recording = True
+
+def stop_recording():
+    """Stop audio recording and process the audio"""
+    if st.session_state.recording:
+        audio_data = st.session_state.audio_recorder.stop_recording()
+        st.session_state.recording = False
+
+        # Process the recorded audio
+        if audio_data and st.session_state.nova_sonic_session_active:
+            # Create a new task to send the audio to Nova Sonic
+            asyncio.create_task(send_audio_to_nova(audio_data))
+
+            # Add user audio to conversation history
+            st.session_state.conversation_text.append({"role": "user", "content": "[Audio Input]"})
+
+async def send_audio_to_nova(audio_data):
+    """Send audio data to Nova Sonic"""
+    if st.session_state.nova_client and st.session_state.nova_sonic_session_active:
+        await st.session_state.nova_client.send_audio(audio_data)
+
+async def start_nova_sonic_session():
+    """Start a new Nova Sonic session"""
+    if st.session_state.nova_sonic_session_active:
+        return
+
+    # Create a new Nova Sonic client
+    st.session_state.nova_client = NovaSonicClient(
+        model_id="amazon.nova-sonic-v1:0",
+        region=AWS_REGION
+    )
+
+    # Start the session with the configured parameters
+    await st.session_state.nova_client.start_session(
+        temperature=st.session_state.temperature,
+        top_p=st.session_state.top_p,
+        max_tokens=st.session_state.max_tokens
+    )
+
+    st.session_state.nova_sonic_session_active = True
+
+    # Start the audio output processing task
+    asyncio.create_task(process_audio_output())
+
+async def end_nova_sonic_session():
+    """End the Nova Sonic session"""
+    if st.session_state.nova_client:
+        await st.session_state.nova_client.close()
+    st.session_state.nova_sonic_session_active = False
+
+async def process_audio_output():
+    """Process audio output from Nova Sonic"""
+    while st.session_state.nova_sonic_session_active:
+        try:
+            # Get audio output from the Nova Sonic client
+            audio_bytes = await st.session_state.nova_client.get_audio_output(timeout=0.5)
+            if audio_bytes:
+                # Play the audio
+                st.session_state.audio_player.play_audio(audio_bytes)
+
+                # Store the audio for potential replay
+                st.session_state.audio_output_buffer.append(audio_bytes)
+        except Exception as e:
+            print(f"Error processing audio output: {e}")
+            await asyncio.sleep(0.1)
+    
+# Add this to your Streamlit UI section
+def create_speech_to_speech_ui():
+    """Create the speech-to-speech UI components"""
+    st.markdown("## 🎙️ Speech-to-Speech Conversation")
+
+    # Initialize session state
+    initialize_session_state()
+
+    # Session control buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if not st.session_state.nova_sonic_session_active:
+            if st.button("Start Speech Session", type="primary"):
+                # Use asyncio to start the Nova Sonic session
+                asyncio.run(start_nova_sonic_session())
+                st.rerun()
+        else:
+            st.success("Session Active")
+
+    with col2:
+        if st.session_state.nova_sonic_session_active:
+            if st.button("End Speech Session", type="secondary"):
+                # Use asyncio to end the Nova Sonic session
+                asyncio.run(end_nova_sonic_session())
+                st.rerun()
+
+    # Recording controls
+    if st.session_state.nova_sonic_session_active:
+        st.markdown("### Recording Controls")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if not st.session_state.recording:
+                if st.button("Start Recording 🎤", type="primary"):
+                    start_recording()
+                    st.rerun()
+            else:
+                st.warning("Recording in progress...")
+
+        with col2:
+            if st.session_state.recording:
+                if st.button("Stop Recording ⏹️", type="secondary"):
+                    # Use a thread to stop recording to avoid blocking
+                    threading.Thread(target=stop_recording).start()
+                    st.rerun()
+
+    # Display conversation history
+    st.markdown("### Conversation History")
+    conversation_container = st.container()
+
+    with conversation_container:
+        for message in st.session_state.conversation_text:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+
+    # Text input as an alternative to speech
+    if st.session_state.nova_sonic_session_active:
+        text_input = st.chat_input("Type a message (alternative to speech)")
+        if text_input:
+            # Add user text to conversation history
+            st.session_state.conversation_text.append({"role": "user", "content": text_input})
+
+            # Send text to Nova Sonic
+            if st.session_state.nova_client:
+                asyncio.run(st.session_state.nova_client.send_text(text_input))
+
+            st.rerun()
+
+
 
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime/client/converse_stream.html
 
@@ -101,19 +657,19 @@ def validate_conversation_structure(conversation):
 
 def get_conversation_download():
     """Download conversation with security signature"""
-    if not st.session_state.menu_converse_messages:
+    if not st.session_state.menu_speak_messages:
         raise ValueError("No conversation to download")
 
     security = cmn_security.ConversationSecurity()
     secure_package = security.secure_conversation(
-        trim_conversation_history(st.session_state.menu_converse_messages)
+        trim_conversation_history(st.session_state.menu_speak_messages)
     )
     return BytesIO(json.dumps(secure_package, indent=2).encode())
 
 def clear_conversation():
     """Clear conversation state"""
-    st.session_state.menu_converse_messages = []
-    st.session_state.menu_converse_uploader_key = 0
+    st.session_state.menu_speak_messages = []
+    st.session_state.menu_speak_uploader_key = 0
 
 def upload_conversation(uploaded_file):
     """Upload and verify conversation integrity"""
@@ -133,8 +689,8 @@ def upload_conversation(uploaded_file):
         validate_conversation_structure(conversation_package["messages"])
 
         # Update session state
-        st.session_state.menu_converse_messages = conversation_package["messages"]
-        st.session_state.menu_converse_uploader_key = 0
+        st.session_state.menu_speak_messages = conversation_package["messages"]
+        st.session_state.menu_speak_uploader_key = 0
 
         st.success("Conversation uploaded and verified successfully!")
         return True
@@ -202,10 +758,10 @@ def push_to_cloudwatch(user_name, input_tokens, output_tokens, total_tokens):
 
 
 def delete_message_pair(index):
-    if index < len(st.session_state.menu_converse_messages):
-        del st.session_state.menu_converse_messages[index:index+2]
-    if f"feedback_{index+1}" in st.session_state.menu_converse_messages_feedback:
-        del st.session_state.menu_converse_messages_feedback[f"feedback_{index+1}"]
+    if index < len(st.session_state.menu_speak_messages):
+        del st.session_state.menu_speak_messages[index:index+2]
+    if f"feedback_{index+1}" in st.session_state.menu_speak_messages_feedback:
+        del st.session_state.menu_speak_messages_feedback[f"feedback_{index+1}"]
 
 mime_mapping = {
     "image/png": "png",
@@ -232,55 +788,20 @@ mime_mapping_document = {
        
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 opt_model_id_list = [
-    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-
-    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    #"anthropic.claude-3-opus-20240229-v1:0",
-    "us.anthropic.claude-3-haiku-20240307-v1:0",
-    "us.anthropic.claude-3-sonnet-20240229-v1:0",
-    "us.anthropic.claude-3-opus-20240229-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-
-    "amazon.nova-pro-v1:0",
-    
-    "cohere.command-r-v1:0", # The model returned the following errors: Malformed input request: #: extraneous key [top_k] is not permitted, please reformat your input and try again.
-    "cohere.command-r-plus-v1:0",
-    "meta.llama2-13b-chat-v1", # Llama 2 Chat 13B
-    "meta.llama2-70b-chat-v1", # Llama 2 Chat 70B
-    "meta.llama3-8b-instruct-v1:0", # Llama 3 8b Instruct
-    "meta.llama3-70b-instruct-v1:0",  # Llama 3 70b Instruct
-    "us.meta.llama3-2-11b-instruct-v1:0", # Vision
-    "us.meta.llama3-2-90b-instruct-v1:0", # Vision
-    #"mistral.mistral-7b-instruct-v0:2", # Mistral 7B Instruct Does not support system message
-    #"mistral.mixtral-8x7b-instruct-v0:1", # Mixtral 8X7B Instruct Does not support system message
-    "mistral.mistral-small-2402-v1:0", # Mistral Small
-    "mistral.mistral-large-2402-v1:0", # Mistral Large
-    "us.mistral.pixtral-large-2502-v1:0",
+    "amazon.nova-sonic-v1:0",
 ]
 
 # "You are a question and answering chatbot"
 # - Maintaining a helpful and courteous tone throughout the interaction.
-opt_system_msg_int = """You are a smart and helpful Assistant. Your tasks include:
-- Providing detailed, step-by-step, and professional responses to user queries.
-- Ensuring accuracy and depth in your explanations.
-- Adapting your language and complexity to suit the user's level of understanding.
-- Offering relevant examples or analogies to clarify complex concepts.
-- Citing reliable sources when appropriate to support your information.
-Please think through each step carefully before responding to ensure clarity, completeness, and coherence in your answer. 
-If any part of the query is unclear, don't hesitate to ask for clarification to provide the most accurate and helpful response possible.
+opt_system_msg_int = """You are a friend. The user and you will engage in a spoken dialog exchanging the transcripts of a natural real-time conversation. Keep your responses short, generally two or three sentences for chatty scenarios.
 """
 
-if "menu_converse_messages" not in st.session_state:
-    st.session_state["menu_converse_messages"] = []
+if "menu_speak_messages" not in st.session_state:
+    st.session_state["menu_speak_messages"] = []
 
 # Add this to store feedback
-if "menu_converse_messages_feedback" not in st.session_state:
-    st.session_state["menu_converse_messages_feedback"] = {}
+if "menu_speak_messages_feedback" not in st.session_state:
+    st.session_state["menu_speak_messages_feedback"] = {}
     
 with st.sidebar:
     opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
@@ -303,7 +824,7 @@ with st.sidebar:
 with st.sidebar:
     st.divider()
     st.markdown(":blue[**Conversation**]")
-    #st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+    #st.markdown(f"{len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}")
     uploaded_conversation = st.file_uploader(
         ":green[**Upload Conversation**]",
         type=["json"],
@@ -315,14 +836,88 @@ with st.sidebar:
             if upload_conversation(uploaded_conversation):
                 st.rerun()
 
-st.markdown("💬 Converse 3-5-12")
+st.markdown("💬 Speech-to-Speech Conversation")
+
+# Initialize session state variables for speech-to-speech functionality
+initialize_session_state()
+
+
+# Session control buttons
+col1, col2 = st.columns(2)
+with col1:
+    if not st.session_state.nova_sonic_session_active:
+        if st.button("Start Speech Session", type="primary"):
+            # Use asyncio to start the Nova Sonic session
+            asyncio.run(start_nova_sonic_session())
+            st.rerun()
+    else:
+        st.success("Session Active")
+
+with col2:
+    if st.session_state.nova_sonic_session_active:
+        if st.button("End Speech Session", type="secondary"):
+            # Use asyncio to end the Nova Sonic session
+            asyncio.run(end_nova_sonic_session())
+            st.rerun()
+
+# Recording controls
+if st.session_state.nova_sonic_session_active:
+    st.markdown("### Recording Controls")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if not st.session_state.recording:
+            if st.button("Start Recording 🎤", type="primary"):
+                start_recording()
+                st.rerun()
+        else:
+            st.warning("Recording in progress...")
+
+    with col2:
+        if st.session_state.recording:
+            if st.button("Stop Recording ⏹️", type="secondary"):
+                # Use a thread to stop recording to avoid blocking
+                threading.Thread(target=stop_recording).start()
+                st.rerun()
+
+# Display conversation history
+st.markdown("### Conversation History")
+conversation_container = st.container()
+
+with conversation_container:
+    for message in st.session_state.conversation_text:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+# Text input as an alternative to speech
+if st.session_state.nova_sonic_session_active:
+    text_input = st.chat_input("Type a message (alternative to speech)")
+    if text_input:
+        # Add user text to conversation history
+        st.session_state.conversation_text.append({"role": "user", "content": text_input})
+
+        # Send text to Nova Sonic
+        if st.session_state.nova_client:
+            asyncio.run(st.session_state.nova_client.send_text(text_input))
+
+        st.rerun()
+
+# Conversation management buttons
+st.markdown(f":violet[**Conversation History: {len(st.session_state.conversation_text)} messages**]")
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("Clear Conversation", type="secondary", icon=":material_clear_all:", use_container_width=False):
+        if "conversation_text" in st.session_state:
+            st.session_state.conversation_text = []
+        st.rerun()
 
 
 #:markdown/forum:
-st.markdown(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
+st.markdown(f"{len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}")
 
 idx = 1
-for msg in st.session_state.menu_converse_messages:
+for msg in st.session_state.menu_speak_messages:
     idx = idx + 1
     contents = msg["content"]
     with st.chat_message(msg["role"]):
@@ -356,17 +951,17 @@ for msg in st.session_state.menu_converse_messages:
             feedback = st.feedback(
                 options="stars",
                 key=feedback_key,
-                on_change=lambda: st.session_state.menu_converse_messages_feedback.update({idx: st.session_state[feedback_key]})
+                on_change=lambda: st.session_state.menu_speak_messages_feedback.update({idx: st.session_state[feedback_key]})
             )
 
             # Display existing feedback if available
-            if idx in st.session_state["menu_converse_messages_feedback"]:
-                previous_feedback = st.session_state["menu_converse_messages_feedback"][idx]
+            if idx in st.session_state["menu_speak_messages_feedback"]:
+                previous_feedback = st.session_state["menu_speak_messages_feedback"][idx]
                 st.info(f"Previous feedback: {previous_feedback + 1} star(s)")
 
     
-if "menu_converse_uploader_key" not in st.session_state:
-    st.session_state.menu_converse_uploader_key = 0
+if "menu_speak_uploader_key" not in st.session_state:
+    st.session_state.menu_speak_uploader_key = 0
 
 #st.write(f"""{opt_fm.is_feature_supported("document_chat")}   {opt_fm.is_feature_supported("vision")}""")
 
@@ -383,7 +978,7 @@ if uploaded_file_type_list:
             type=uploaded_file_type_list,
             accept_multiple_files=False,
             label_visibility="collapsed",
-            key=f"menu_converse_uploader_key_{st.session_state.menu_converse_uploader_key}"
+            key=f"menu_speak_uploader_key_{st.session_state.menu_speak_uploader_key}"
         )
 else:
     uploaded_file = None
@@ -432,14 +1027,14 @@ if uploaded_file:
 
 if prompt:
     
-    # menu_converse_messages = st.session_state.menu_converse_messages
-    # menu_converse_messages_len = len(menu_converse_messages)
-    # if menu_converse_messages_len > MAX_MESSAGES:
-    #     del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2]
+    # menu_speak_messages = st.session_state.menu_speak_messages
+    # menu_speak_messages_len = len(menu_speak_messages)
+    # if menu_speak_messages_len > MAX_MESSAGES:
+    #     del menu_speak_messages[0 : (menu_speak_messages_len - MAX_MESSAGES) * 2]
     #st.write(f"""{mime_mapping_image[uploaded_file_type]}""")
     #st.session_state["audio_stream"] = ""
 
-    message_history = st.session_state.menu_converse_messages.copy()
+    message_history = st.session_state.menu_speak_messages.copy()
     message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
     if uploaded_file_name:
         content = message_user_latest['content']
@@ -604,19 +1199,19 @@ if prompt:
             
             message_assistant_latest = {"role": "assistant", "content": [{ "text": result_text }]}
 
-            st.session_state.menu_converse_messages.append(message_user_latest)
-            st.session_state.menu_converse_messages.append(message_assistant_latest)
+            st.session_state.menu_speak_messages.append(message_user_latest)
+            st.session_state.menu_speak_messages.append(message_assistant_latest)
 
             
             # Trim message History
-            menu_converse_messages = st.session_state.menu_converse_messages
-            menu_converse_messages_len = len(menu_converse_messages)
-            if menu_converse_messages_len > MAX_MESSAGES:
-                del menu_converse_messages[0 : (menu_converse_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
-            #print(f"menu_converse_messages_len={menu_converse_messages_len}")
+            menu_speak_messages = st.session_state.menu_speak_messages
+            menu_speak_messages_len = len(menu_speak_messages)
+            if menu_speak_messages_len > MAX_MESSAGES:
+                del menu_speak_messages[0 : (menu_speak_messages_len - MAX_MESSAGES) * 2] #make sure we remove both the user and assistant responses
+            #print(f"menu_speak_messages_len={menu_speak_messages_len}")
 
             if uploaded_file_name:
-                st.session_state.menu_converse_uploader_key += 1
+                st.session_state.menu_speak_uploader_key += 1
 
             #print(json.dumps(message_user_latest, indent=2))
             #print(message_user_latest)
@@ -637,14 +1232,14 @@ if prompt:
 #    audio_bytes = BytesIO(st.session_state['audio_stream'])
 #    st.audio(audio_bytes, format='audio/mp3', autoplay=False)
 
-#st.markdown(f"Entry: 💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-st.markdown(f":violet[**Entry: {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]")
+#st.markdown(f"Entry: 💬 {len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}")
+st.markdown(f":violet[**Entry: {len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}**]")
 col1, col2, col3 = st.columns(3)
 
 with col1:
     #st.markdown("Conversation: ")
     if st.button("Download Conversation", type="secondary", icon=":material/download:", use_container_width=False):
-        if not st.session_state.menu_converse_messages:
+        if not st.session_state.menu_speak_messages:
             st.error("No data to download!")
         else:
             try:
@@ -666,8 +1261,8 @@ with col2:
     #         upload_conversation(uploaded_file)
     #         st.rerun()
     
-    #st.markdown(f"💬 {len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}")
-    #st.info(f"{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}", icon=":material/forum:")
+    #st.markdown(f"💬 {len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}")
+    #st.info(f"{len(st.session_state.menu_speak_messages)}/{MAX_MESSAGES}", icon=":material/forum:")
     pass
 with col3:
     if st.button("Clear Conversation", type="secondary", icon=":material/clear_all:", use_container_width=False):
