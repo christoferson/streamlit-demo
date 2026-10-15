@@ -12,6 +12,9 @@ pip install --upgrade PyJWT
 
 pip install --upgrade streamlit-webrtc
 
+pip install --upgrade anthropic
+pip install --upgrade anthropic[bedrock]
+
 ##### Start Application
 streamlit run app.py --server.headless=true
 
@@ -92,3 +95,9 @@ us.meta.llama3-2-11b-instruct-v1:0
 us.meta.llama3-2-90b-instruct-v1:0
 Note, make sure to replace 'us' with the correct region. Refer to the followng for the list of model id.
 https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference-support.html
+
+
+TODO:
+SQL / relational and natural language
+meeting minutes
+coding buddy

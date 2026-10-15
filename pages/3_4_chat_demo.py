@@ -4,7 +4,6 @@ import cmn_settings
 import json
 import logging
 import cmn_auth
-import pyperclip
 import os
 from io import BytesIO
 import sys
@@ -17,6 +16,7 @@ from pydub.playback import play
 
 from botocore.exceptions import BotoCoreError, ClientError
 import cmn.cloudwatch_metrics_lib
+from cmn.bedrock_models import FOUNDATION_MODELS
 import random
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -158,6 +158,7 @@ def recite_button_clicked(text):
        
 
 opt_model_id_list = [
+    "global.anthropic.claude-sonnet-5-5",
     "anthropic.claude-3-sonnet-20240229-v1:0",
     "anthropic.claude-3-haiku-20240307-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -264,6 +265,13 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
             "system": opt_system_msg,
             "messages": message_history
         })
+        # Newer Claude models reject some sampling parameters (e.g. Claude 5.x accepts none)
+        opt_fm = FOUNDATION_MODELS.find(opt_model_id)
+        if opt_fm:
+            params = opt_fm.inference_parameters
+            for param in (params.temperature, params.top_p, params.top_k):
+                if not param.is_supported:
+                    request.pop(param.name, None)
     elif "amazon.nova" in opt_model_id:
         # Amazon Nova models require a different message format
         nova_messages = []
@@ -727,9 +735,8 @@ if prompt := st.chat_input():
                 'Value': random.choice(dummy_user_list),
             }])
     except ClientError as err:
-            message = err.response["Error"]["Message"]
-            logger.error("A client error occurred: %s", message)
-            print("A client error occured: " + format(message))
+            # Usage metric is optional; needs cloudwatch:PutMetricData
+            logger.warning("Skipped usage metric: %s", err.response["Error"]["Message"])
 
 if "audio_stream" in st.session_state and st.session_state["audio_stream"] != "":
     audio_bytes = BytesIO(st.session_state['audio_stream'])

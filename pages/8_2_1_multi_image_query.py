@@ -5,7 +5,7 @@ import cmn_settings
 import json
 import logging
 import cmn_auth
-import pyperclip
+#import pyperclip
 import io
 import base64
 from PIL import Image
@@ -74,7 +74,8 @@ st.markdown(
 )
 
 def copy_button_clicked(text):
-    pyperclip.copy(text)
+    #pyperclip.copy(text)
+    pass
     #st.session_state.button = not st.session_state.button
 
 def image_to_base64(image:Image, mime_type:str):
