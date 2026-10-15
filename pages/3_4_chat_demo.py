@@ -16,7 +16,7 @@ from pydub.playback import play
 
 from botocore.exceptions import BotoCoreError, ClientError
 import cmn.cloudwatch_metrics_lib
-from cmn.bedrock_models import FOUNDATION_MODELS
+from cmn.bedrock_models import FOUNDATION_MODELS, FoundationModel, Provider
 import random
 
 AWS_REGION = cmn_settings.AWS_REGION
@@ -157,65 +157,52 @@ def recite_button_clicked(text):
         return
        
 
-opt_model_id_list = [
-    "global.anthropic.claude-sonnet-5-5",
-    "anthropic.claude-3-sonnet-20240229-v1:0",
-    "anthropic.claude-3-haiku-20240307-v1:0",
-    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "amazon.nova-micro-v1:0",
-    "amazon.nova-lite-v1:0",
-    "amazon.nova-pro-v1:0",
-    "amazon.nova-premier-v1:0", #NG
-    "deepseek.r1-v1:0", #NG
-    "meta.llama3-70b-instruct-v1:0",
-    "meta.llama3-1-70b-instruct-v1:0", #NG
-    "meta.llama3-2-90b-instruct-v1:0", #NG
-    "meta.llama3-3-70b-instruct-v1:0", #NG
-    "meta.llama4-maverick-17b-instruct-v1:0", #NG
-    "meta.llama4-scout-17b-instruct-v1:0", #NG
-    "writer.palmyra-x4-v1:0", #NG
-    "writer.palmyra-x5-v1:0", #NG
-    "mistral.mistral-large-2402-v1:0",
-    "mistral.pixtral-large-2502-v1:0", #NG
-    "cohere.command-r-plus-v1:0",
+# Models come from FOUNDATION_MODELS (cmn/bedrock_models.py), limited to the
+# providers whose native request format invoke_model() implements, and to fast
+# and light models: no Opus / Fable, no large-tier models
+opt_model_providers = (Provider.ANTHROPIC, Provider.AMAZON, Provider.META, Provider.MISTRAL)
+opt_model_excluded = ("opus", "fable", "nova-pro", "70b", "large")
+opt_model_list = [
+    model for model in FOUNDATION_MODELS.listed_models()
+    if model.provider in opt_model_providers
+    and not any(excluded in model.model_id for excluded in opt_model_excluded)
 ]
 
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index = 0, key="model_id")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    # Adjust Top P range for Cohere models
-    if "cohere" in opt_model_id:
-        opt_top_p_max = 0.99
+    opt_fm: FoundationModel = st.selectbox(label="Model", options=opt_model_list, index=0, format_func=lambda model: model.display_name, key="model_id")
+
+opt_model_id = opt_fm.model_id
+
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_temperature = opt_fm.inference_parameters.temperature
+opt_fm_top_p = opt_fm.inference_parameters.top_p
+opt_fm_top_k = opt_fm.inference_parameters.top_k
+
+# Sliders only for the parameters the model accepts; the rest keep their default
+with st.sidebar:
+    if opt_fm_temperature.is_supported:
+        opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
     else:
-        opt_top_p_max = 1.0
-
-    opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=opt_top_p_max, value=opt_top_p_max, step=0.1, key="top_p")
-
-    
-    # Adjust Top K range based on model
-    if "mistral" in opt_model_id:
-        top_k_max = 200  # Mistral's limit
+        opt_temperature = opt_fm_temperature.default_value
+    if opt_fm_top_p.is_supported:
+        opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
     else:
-        top_k_max = 500  # Default limit
-
-    opt_top_k = st.slider(label="Top K", min_value=0, max_value=top_k_max, value=min(250, top_k_max), step=1, key="top_k")
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
+        opt_top_p = opt_fm_top_p.default_value
+    if opt_fm_top_k.is_supported:
+        opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    else:
+        opt_top_k = opt_fm_top_k.default_value
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="", key="system_msg")
 
+# Invocation metrics of the last response, shown at the bottom of the sidebar
 with st.sidebar:
-    if "cohere" in opt_model_id:
-        return_likelihoods = st.selectbox(
-            "Return Likelihoods",
-            ["NONE", "GENERATION", "ALL"],
-            index=0
-        )
-        truncate = st.selectbox(
-            "Truncate",
-            ["NONE", "START", "END"],
-            index=2
-        )
+    metrics_area = st.empty()
+
+if st.session_state.get("last_metrics"):
+    with metrics_area.container(border=True):
+        for line in st.session_state["last_metrics"]:
+            st.write(line)
 
 st.title("💬 Chatbot 3")
 st.write("Ask LLM Questions")
@@ -288,15 +275,11 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
                 "content": nova_content
             })
 
-        # Ensure topK is within valid range for Nova (1-128)
-        nova_top_k = min(max(1, opt_top_k), 128)
-
         request = {
             "messages": nova_messages,
             "inferenceConfig": {
                 "temperature": opt_temperature,
                 "topP": opt_top_p,
-                "topK": nova_top_k,
                 "maxTokens": opt_max_tokens
             }
         }
@@ -307,21 +290,27 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
     elif "meta.llama" in opt_model_id:
         # Meta Llama models
         # Construct conversation history in Llama format
+        # Llama 4 uses different header / end-of-turn tokens than Llama 3
+        if "llama4" in opt_model_id:
+            header_start, header_end, end_of_turn = "<|header_start|>", "<|header_end|>", "<|eot|>"
+        else:
+            header_start, header_end, end_of_turn = "<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"
+
         formatted_prompt = "<|begin_of_text|>"
 
         # Add system message if provided
         if opt_system_msg:
-            formatted_prompt += f"<|start_header_id|>system<|end_header_id|>\n{opt_system_msg}\n<|eot_id|>\n"
+            formatted_prompt += f"{header_start}system{header_end}\n\n{opt_system_msg}{end_of_turn}"
 
         # Add message history
         for msg in message_history:
             role = msg["role"]
             content = msg["content"]
 
-            formatted_prompt += f"<|start_header_id|>{role}<|end_header_id|>\n{content}\n<|eot_id|>\n"
+            formatted_prompt += f"{header_start}{role}{header_end}\n\n{content}{end_of_turn}"
 
         # Add the assistant header for the response
-        formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>\n"
+        formatted_prompt += f"{header_start}assistant{header_end}\n\n"
 
         # Create the Llama-specific request format
         request = {
@@ -355,57 +344,13 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
         elif not formatted_prompt.endswith(" [/INST]"):
             formatted_prompt += " [/INST]"
 
-        # Ensure top_k is within Mistral's limits
-        mistral_top_k = min(opt_top_k, 200)
-
         request = {
             "prompt": formatted_prompt,
             "max_tokens": opt_max_tokens,
             "temperature": opt_temperature,
             "top_p": opt_top_p,
-            "top_k": mistral_top_k,
             "stop": ["</s>"]
         }
-    elif "cohere" in opt_model_id:
-        # Cohere models
-        message_text = ""
-
-        # Add system message if provided
-        if opt_system_msg:
-            message_text += f"{opt_system_msg}\n\n"
-
-        # Add message history
-        for msg in message_history:
-            if msg["role"] == "user":
-                message_text += f"{msg['content']}\n"
-            elif msg["role"] == "assistant":
-                message_text += f"{msg['content']}\n\n"
-
-        request = {
-            "message": message_text,
-            "max_tokens": opt_max_tokens,
-            "temperature": opt_temperature,
-            "p": min(opt_top_p, 0.99),  # Ensure p is <= 0.99
-            "k": min(opt_top_k, 500),  # Ensure within Cohere's limits
-            #"stream": True,
-            #"return_likelihoods": "NONE",  # Can be "NONE", "GENERATION", or "ALL"
-            #"truncate": "END",  # Can be "NONE", "START", or "END"
-            #"stop_sequences": [],  # Optional list of sequences where generation should stop
-        }
-
-        #request.update({
-        #    "return_likelihoods": return_likelihoods,
-        #    "truncate": truncate,
-        #    # Add other Cohere-specific parameters as needed
-        #})
-    elif "deepseek" in opt_model_id:
-        # Deepseek models
-        # Implement Deepseek-specific request format
-        pass
-    elif "writer.palmyra" in opt_model_id:
-        # Palmyra models
-        # Implement Palmyra-specific request format
-        pass
     else:
         # Default format for other models
         request.update({
@@ -414,8 +359,8 @@ def invoke_model(prompt, message_history, opt_model_id, opt_temperature, opt_top
             "messages": message_history
         })
 
-    # Determine which client to use based on region
-    if "anthropic.claude-3-5-sonnet-20241022-v2:0" == opt_model_id:
+    # Determine which client to use based on region (FoundationModel.region override)
+    if FOUNDATION_MODELS.find(opt_model_id).region == "us-west-2":
         client = bedrock_runtime_us_west_2
     else:
         client = bedrock_runtime
@@ -449,13 +394,29 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
     """
     result_text = ""
 
+    st.session_state["last_metrics"] = []
+    metrics_container = metrics_area.container(border=True)
+
+    def write_metrics(line):
+        st.session_state["last_metrics"].append(line)
+        metrics_container.write(line)
+
     with st.chat_message("assistant"):
-        result_container = st.container(border=True)
         result_area = st.empty()
 
         # Display model parameters
-        opts = f"| temperature={opt_temperature} top_p={opt_top_p} top_k={opt_top_k} max_tokens={opt_max_tokens}"
-        result_container.write(opts)
+        params = FOUNDATION_MODELS.find(opt_model_id).inference_parameters
+        sent_params = [
+            f"{name}={value}"
+            for name, value, param in (
+                ("temperature", opt_temperature, params.temperature),
+                ("top_p", opt_top_p, params.top_p),
+                ("top_k", opt_top_k, params.top_k),
+            )
+            if param.is_supported
+        ]
+        opts = "| " + " ".join(sent_params + [f"max_tokens={opt_max_tokens}"])
+        write_metrics(opts)
 
         stream = response["body"]
 
@@ -488,7 +449,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                             latency = invocation_metrics["invocationLatency"]
                             lag = invocation_metrics["firstByteLatency"]
                             stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                            result_container.write(stats)
+                            write_metrics(stats)
 
                 # Handle exceptions
                 elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
@@ -524,7 +485,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         latency = invocation_metrics.get("invocationLatency", "N/A")
                         lag = invocation_metrics.get("firstByteLatency", "N/A")
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
+                        write_metrics(stats)
 
                 # Handle exceptions
                 elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
@@ -556,7 +517,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         latency = invocation_metrics.get("invocationLatency", "N/A")
                         lag = invocation_metrics.get("firstByteLatency", "N/A")
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
+                        write_metrics(stats)
 
                 # Handle exceptions
                 elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
@@ -587,41 +548,8 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         latency = invocation_metrics.get("invocationLatency", "N/A")
                         lag = invocation_metrics.get("firstByteLatency", "N/A")
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
+                        write_metrics(stats)
 
-                # Handle exceptions
-                elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
-                                                "modelTimeoutException", "throttlingException", "validationException"]):
-                    for exception_type in ["internalServerException", "modelStreamErrorException", 
-                                        "modelTimeoutException", "throttlingException", "validationException"]:
-                        if exception := event.get(exception_type):
-                            result_text += f"\n\n{exception}"
-                            result_area.write(result_text)
-                            break
-        elif "cohere" in opt_model_id:
-            # Process Cohere models
-            for event in stream:
-                if event["chunk"]:
-                    chunk = json.loads(event["chunk"]["bytes"])
-
-                    # Debug print to see the structure
-                    print(f"Cohere chunk: {chunk}")
-
-                    # Extract text from Cohere's response format
-                    if "text" in chunk:  # Changed from "generations" to "text"
-                        text = chunk["text"]
-                        result_text += text
-                        result_area.write(result_text)
-
-                    # Handle metrics if available
-                    if "amazon-bedrock-invocationMetrics" in chunk:
-                        invocation_metrics = chunk['amazon-bedrock-invocationMetrics']
-                        input_token_count = invocation_metrics.get("inputTokenCount", "N/A")
-                        output_token_count = invocation_metrics.get("outputTokenCount", "N/A")
-                        latency = invocation_metrics.get("invocationLatency", "N/A")
-                        lag = invocation_metrics.get("firstByteLatency", "N/A")
-                        stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
                 # Handle exceptions
                 elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 
                                                 "modelTimeoutException", "throttlingException", "validationException"]):
@@ -663,7 +591,7 @@ def process_invoke_response(response, opt_model_id, opt_temperature, opt_top_p, 
                         latency = invocation_metrics.get("invocationLatency", "N/A")
                         lag = invocation_metrics.get("firstByteLatency", "N/A")
                         stats = f"| token.in={input_token_count} token.out={output_token_count} latency={latency} lag={lag}"
-                        result_container.write(stats)
+                        write_metrics(stats)
 
                 # Handle exceptions
                 elif any(key in event for key in ["internalServerException", "modelStreamErrorException", 

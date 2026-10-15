@@ -39,6 +39,7 @@ class Provider(_StringEnum):
     META = "Meta"
     MISTRAL = "Mistral"
     COHERE = "Cohere"
+    DEEPSEEK = "DeepSeek"
     GOOGLE = "Google"
     QWEN = "Qwen"
     NVIDIA = "NVIDIA"
@@ -184,6 +185,16 @@ COHERE = InferenceParameterSet(
     InferenceParameter("k", 0, 0, 500),
 )
 
+# DeepSeek V3.2 / R1: maxTokens 32768 verified via converse(). top_k off: R1
+# rejects it ("Validation Error"), V3.2 caps it at 128 ("Invalid 'top_k': value
+# '250' larger than maximum '128'") while the page sliders go to 500.
+DEEPSEEK = InferenceParameterSet(
+    InferenceParameter("max_tokens", 1, 4096, 32768),
+    InferenceParameter("temperature", 0, 0.5, 1),
+    InferenceParameter("top_p", 0, 1, 1),
+    InferenceParameter("top_k", 0, 0, 500, is_supported=False),
+)
+
 # Palmyra X5 rejects capitalised "TopK" ("Request contains unrecognized fields");
 # X4 and X5 both accept lowercase "top_k".
 WRITER = InferenceParameterSet(
@@ -227,6 +238,7 @@ TEXT_NO_TOOLS = all_features_except(Feature.VISION, Feature.TOOL_USE, Feature.ST
 NO_VISION = all_features_except(Feature.VISION)
 COHERE_FEATURES = all_features_except(Feature.VISION, Feature.GUARDRAILS)
 MISTRAL_SMALL_FEATURES = all_features_except(Feature.DOCUMENT_CHAT, Feature.VISION, Feature.STREAMING_TOOL_USE)
+TEXT_ONLY_TOOLS = all_features_except(Feature.DOCUMENT_CHAT, Feature.VISION)    # DeepSeek V3.2: "doesn't support documents"
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +306,7 @@ class FoundationModelCatalog:
 
 _ANTHROPIC, _AMAZON, _OPENAI, _META, _MISTRAL = Provider.ANTHROPIC, Provider.AMAZON, Provider.OPENAI, Provider.META, Provider.MISTRAL
 _COHERE, _GOOGLE, _QWEN, _NVIDIA, _WRITER = Provider.COHERE, Provider.GOOGLE, Provider.QWEN, Provider.NVIDIA, Provider.WRITER
+_DEEPSEEK = Provider.DEEPSEEK
 
 FOUNDATION_MODELS = FoundationModelCatalog([
     # --- Anthropic: Fable ---
@@ -381,6 +394,11 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     # --- Cohere: Command ---
     FoundationModel("cohere.command-r-plus-v1:0", "Cohere Command R+", _COHERE, COHERE, COHERE_FEATURES, listed=False),  # end of life 2026-10-12
     FoundationModel("cohere.command-r-v1:0", "Cohere Command R", _COHERE, COHERE, COHERE_FEATURES, listed=False),  # end of life 2026-10-12
+
+    # --- DeepSeek ---
+    FoundationModel("deepseek.v3.2", "DeepSeek V3.2", _DEEPSEEK, DEEPSEEK, TEXT_ONLY_TOOLS),
+    # R1: documents yes; "doesn't support tool use" (also in streaming mode)
+    FoundationModel("us.deepseek.r1-v1:0", "DeepSeek R1", _DEEPSEEK, DEEPSEEK, TEXT_NO_TOOLS),
 
     # --- Google: Gemma ---
     FoundationModel("google.gemma-3-27b-it", "Gemma 3 27B", _GOOGLE, OPENAI_STYLE, TEXT_TOOLS),

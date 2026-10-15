@@ -124,6 +124,7 @@ How the converse page uses them:
 | `MISTRAL_2402` | ✓ | ✓ | – | 1 / 4096 / 8192 | Mistral Large/Small 24.02, Pixtral (on-demand) | |
 | `MISTRAL_PIXTRAL_US` | ✓ | – | – | 1 / 512 / 8192 | Pixtral Large (us.) | |
 | `MISTRAL_DEFAULT` | ✓ | ✓ | ✓ (`TopK`) | 1 / 512 / 8192 | Mistral Large 3, Magistral, Ministral | |
+| `DEEPSEEK` | ✓ | ✓ | – | 1 / 4096 / 32768 | DeepSeek V3.2, R1 | R1 rejects `top_k`; V3.2 caps it at 128 ("Invalid 'top_k': value '250' larger than maximum '128'"), below the page sliders' 500 |
 | `COHERE` | ✓ | ✓ (`p`) | ✓ (`k`) | 1 / 2048 / 4096 | Command R / R+ | Cohere's native names are `p` / `k` |
 | `WRITER` | ✓ | ✓ | ✓ (`top_k`) | 1 / 2048 / 4096 | Palmyra X4, X5 | X5 rejects capitalised `TopK` ("Request contains unrecognized fields") |
 | `OPENAI_STYLE` | ✓ | ✓ | – | 1 / 2048 / 4096 | Qwen, gpt-oss, Gemma, Nemotron | |
@@ -145,9 +146,10 @@ currently check `vision` (image uploads) and `document_chat` (document uploads).
 | `ALL_FEATURES` | — | Claude, Nova (global/on-demand), Qwen3 VL |
 | `TEXT_TOOLS` | vision, streaming_tool_use | Most non-Claude text models |
 | `VISION_TOOLS` | streaming_tool_use | Llama 3.2 / 4, newer Mistral |
-| `TEXT_NO_TOOLS` | vision, tool_use, streaming_tool_use | Llama 2, Nova 2 Lite (us.) |
+| `TEXT_NO_TOOLS` | vision, tool_use, streaming_tool_use | Llama 2, Nova 2 Lite (us.), DeepSeek R1 |
 | `NO_VISION` | vision | Nova Micro |
 | `COHERE_FEATURES` | vision, guardrails | Command R / R+ |
+| `TEXT_ONLY_TOOLS` | document_chat, vision | DeepSeek V3.2 ("doesn't support documents"); tool use works, also streaming |
 | `MISTRAL_SMALL_FEATURES` | document_chat, vision, streaming_tool_use | Mistral Small 24.02 |
 
 Build a new set with `all_features_except(Feature.VISION, ...)`; it rejects unknown names.

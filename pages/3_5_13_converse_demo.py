@@ -83,6 +83,7 @@ def get_conversation_download():
 def clear_conversation():
     """Clear conversation state"""
     st.session_state.menu_converse_messages = []
+    st.session_state.pop("menu_converse_last_metrics", None)
 
 def upload_conversation(uploaded_file):
     """Upload and verify conversation integrity"""
@@ -441,8 +442,11 @@ with main_col:
         message_history = st.session_state.menu_converse_messages.copy()
         message_user_latest = {"role": "user", "content": [{ "text": prompt }]}
 
-        if chat_input_prompt.files:
-            attachment_blocks, unsupported = build_attachment_blocks(chat_input_prompt.files)
+        # .files raises AttributeError when the model takes no attachments (accept_file=False)
+        chat_input_files = (chat_input_prompt.files if chat_input_file_types else None) or []
+
+        if chat_input_files:
+            attachment_blocks, unsupported = build_attachment_blocks(chat_input_files)
             message_user_latest["content"].extend(attachment_blocks)
             if unsupported:
                 st.warning(f"Unsupported file type(s) skipped: {', '.join(unsupported)}")
@@ -450,7 +454,7 @@ with main_col:
         message_history.append(message_user_latest)
         with st.chat_message("user"):
             st.write(prompt)
-            for f in chat_input_prompt.files or []:
+            for f in chat_input_files:
                 if f.type in mime_mapping_image:
                     st.image(f.getvalue(), caption=f.name, width=300)
                 elif f.type in mime_mapping_document:
@@ -470,7 +474,6 @@ with main_col:
                 response = get_bedrock_runtime(opt_fm.region).converse_stream(**request)
 
                 with st.chat_message("assistant"):
-                    result_container = st.container(border=True)
                     result_area = st.empty()
                     streamed_chunks = []
 
@@ -481,7 +484,8 @@ with main_col:
                     result = process_stream(response["stream"], on_text_delta=show_text_delta)
 
                     metrics = result.metrics
-                    result_container.write(f"| token.in={metrics.input_tokens} token.out={metrics.output_tokens} token={metrics.total_tokens} latency={metrics.latency_ms} provider={opt_fm.provider}")
+                    # Shown in the Info Panel; kept in session state so it survives the rerun below
+                    st.session_state["menu_converse_last_metrics"] = (opt_fm.display_name, metrics)
                     if metrics.total_tokens:
                         try:
                             push_to_cloudwatch("default_user", metrics.input_tokens, metrics.output_tokens, metrics.total_tokens)  # Replace with actual user name if available
@@ -554,6 +558,18 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
             usage_pct = (len(st.session_state.menu_converse_messages) / MAX_MESSAGES) * 100
             st.progress(usage_pct / 100)
             st.caption(f"{usage_pct:.1f}% used")
+
+    if "menu_converse_last_metrics" in st.session_state:
+        last_model_name, last_metrics = st.session_state["menu_converse_last_metrics"]
+        with st.container(border=True):
+            st.markdown("**Last Response**")
+            st.caption(last_model_name)
+            with st.container(horizontal=True):
+                st.metric("Tokens In", f"{last_metrics.input_tokens:,}")
+                st.metric("Tokens Out", f"{last_metrics.output_tokens:,}")
+            with st.container(horizontal=True):
+                st.metric("Total", f"{last_metrics.total_tokens:,}")
+                st.metric("Latency", f"{last_metrics.latency_ms:,} ms")
 
     with st.container(border=True):
         st.markdown("**Current Model**")
