@@ -3,7 +3,7 @@ import json
 import ast
 import operator as op
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class AbstractBedrockConverseTool:
     definition:object
     def __init__(self, name, definition):

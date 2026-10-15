@@ -11,7 +11,7 @@ class ProductToolRenderer(AbstractToolRenderer):
 
     def render(self, tool_args: dict, tool_result: Any, result_container) -> None:
         with result_container:
-            st.markdown(":blue[🗄️ **Generated SQL:**]")
+            st.markdown(":blue[**Generated SQL:**]")
             st.code(
                 tool_args.get("sql", ""),
                 language="sql",

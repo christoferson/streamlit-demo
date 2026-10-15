@@ -1,5 +1,5 @@
 CONVERSE_TOOL_GUIDE = """
-**💡 Example Questions to Try**
+**Example Questions to Try**
 
 **Year-over-Year Analysis**
 - Compare 2024 vs 2023 sales performance. What caused any underperformance?

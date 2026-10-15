@@ -137,7 +137,7 @@ Registries are assembled per page in `get_tool_registry()` / `get_renderer_regis
 | `cloudwatch_metrics_lib.py` | CloudWatch metrics / Logs Insights queries for the metrics pages. |
 | `multimodal_search.py` | Titan multimodal embeddings + OpenSearch Serverless. Has its own config and calls `st.*` from service code (see §7). |
 | `rekognition_lib.py` | Image labels. **Unused**. |
-| `bedrock_converse_tools*.py` | **Legacy flat tool tree** (11 files, own base class). Still used by `3_7_1`–`3_7_4` and `3_7_5_converse_tool_v2`. Superseded by `cmn/tools/tool/`. |
+| `bedrock_converse_tools*.py` | **Legacy flat tool tree** (11 files, own base class). Superseded by `cmn/tools/tool/`; still used by the `3_7_4_converse_tool_demo` prototype. |
 
 ### 3.6 Dependency rules
 
@@ -225,17 +225,16 @@ is too low for APIs in use.
 
 | Archive | Keep | Folder |
 |---|---|---|
-| `3_7_1`, `3_7_2`, `3_7_3` converse_tool_demo | `3_7_5_converse_tool_v3` | `converse_tool/` |
-| `3_7_4_converse_tool_demo` (prototype, "reference only") | 〃 | `converse_tool/` |
-| `3_7_5_converse_tool_v2` (in-page copy of manager/processor) | 〃 | `converse_tool/` |
+| ~~`3_7_1`–`3_7_3` converse_tool_demo~~ — archived 2026-10-15 | `3_7_4_converse_tool_demo` (prototype) | `converse_tool/` |
+| ~~`3_7_5_converse_tool_v2`~~ — archived 2026-10-15 | `3_7_5_converse_tool_v3` | `converse_tool/` |
 | `5_2_6_kb_demo` | `5_2_7_kb_demo` | `kb_demo/` |
 | `5_3_1_kb_rg_demo` | `5_3_2_kb_rg_demo` | `kb_rg_demo/` |
 | `9_2_1_image_generator_si` (old `v1:0` Stability IDs) | `9_1_8_image_generator` | `image_generator/` |
 | `9_3_5`, `9_3_6` image_variation (SDXL end-of-life) | — | `image_variation/` |
 | `11_1_7_ranking` (stub, never displays results) | `11_1_7_metric` | `metric/` |
 
-Archiving `3_7_1`–`3_7_5_v2` also orphans the legacy `cmn/bedrock_converse_tools*.py` tree, which
-can then move to the archive as well.
+The legacy `cmn/bedrock_converse_tools*.py` tree stays while the `3_7_4` prototype is live; only
+the base, acronym, url, datetime and wikipedia modules are needed by it.
 
 ### 7.3 Broken or degraded pages
 

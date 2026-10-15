@@ -12,7 +12,7 @@ MONTH_NAMES = {
     9: "September",10: "October", 11: "November",  12: "December",
 }
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class SalesForecastBedrockConverseTool(AbstractBedrockConverseTool):
     """
     Forecasts future sales using linear regression.

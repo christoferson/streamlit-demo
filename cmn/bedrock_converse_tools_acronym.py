@@ -1,6 +1,6 @@
 from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class AcronymBedrockConverseTool(AbstractBedrockConverseTool):
 
  

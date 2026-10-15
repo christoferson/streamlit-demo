@@ -3,7 +3,7 @@
 import wikipedia
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
 
     def __init__(self):

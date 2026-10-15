@@ -56,18 +56,18 @@ class PdfToolRenderer(AbstractToolRenderer):
         with result_container:
 
             # ── Header ────────────────────────────────────────────────────────
-            st.markdown(f"**📄 {title}**")
+            st.markdown(f"**{title}**")
             st.caption(
                 f"Brand: `{brand}` · {pages} page{'s' if pages != 1 else ''} · `{filename}`"
             )
 
             # ── Warnings ──────────────────────────────────────────────────────
             for w in warnings:
-                st.info(f"💡 {w}")
+                st.info(f"{w}")
 
             # ── Download button ───────────────────────────────────────────────
             st.download_button(
-                label               = "⬇️ Download PDF",
+                label               = "Download PDF",
                 data                = pdf_bytes,
                 file_name           = filename,
                 mime                = "application/pdf",

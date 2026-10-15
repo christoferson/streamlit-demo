@@ -27,7 +27,7 @@ class SalesForecastToolRenderer(AbstractToolRenderer):
         summary       = tool_result.get("summary",  {})
 
         with result_container:
-            st.markdown(f"**📈 Sales Forecast — {metric.title()}**")
+            st.markdown(f"**Sales Forecast — {metric.title()}**")
 
             col1, col2, col3 = st.columns(3)
             col1.metric("Trend",      summary.get("trend", "").title())

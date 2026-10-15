@@ -4,7 +4,7 @@ from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 
 logger = logging.getLogger(__name__)
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class SalesKpiBedrockConverseTool(AbstractBedrockConverseTool):
     """
     Renders KPI metric cards using st.metric().

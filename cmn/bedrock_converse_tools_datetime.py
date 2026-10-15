@@ -2,7 +2,7 @@ from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 from datetime import datetime
 import pytz
 
-@DeprecationWarning
+# Deprecated: superseded by cmn/tools/tool/
 class DateTimeBedrockConverseTool(AbstractBedrockConverseTool):
 
     def __init__(self):

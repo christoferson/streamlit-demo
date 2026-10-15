@@ -53,25 +53,25 @@ class PptxToolRenderer(AbstractToolRenderer):
         with result_container:
 
             # ── Header ────────────────────────────────────────────────────────
-            st.markdown(f"**📊 {title}**")
+            st.markdown(f"**{title}**")
             st.caption(
                 f"Brand: `{brand}` · {slide_count} slides · `{filename}`"
             )
 
             # ── Warnings — info not error ─────────────────────────────────────
             for w in warnings:
-                st.info(f"💡 {w}")
+                st.info(f"{w}")
 
             # ── Slide outline ─────────────────────────────────────────────────
             if titles:
-                with st.expander("📋 Slide Outline", expanded=False):
+                with st.expander("Slide Outline", expanded=False):
                     for i, t in enumerate(titles, 1):
                         label = t if t else "*(untitled)*"
                         st.markdown(f"{i}. {label}")
 
             # ── Download ──────────────────────────────────────────────────────
             st.download_button(
-                label               = "⬇️ Download PowerPoint",
+                label               = "Download PowerPoint",
                 data                = pptx_bytes,
                 file_name           = filename,
                 mime                = (

@@ -79,6 +79,8 @@ from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
 from cmn.bedrock_converse_tools_url import UrlContentBedrockConverseTool
 from cmn.bedrock_converse_tools_wikipedia import WikipediaBedrockConverseTool
 from cmn.bedrock_converse_tools_datetime import DateTimeBedrockConverseTool
+from cmn.bedrock_models import FOUNDATION_MODELS, Feature, FoundationModel
+from cmn.bedrock.converse.request_builder import InferenceSettings, build_inference_config, build_additional_model_fields
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -94,7 +96,11 @@ settings = {
 
 ####################################################################################
 
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
+@st.cache_resource
+def get_bedrock_runtime(region=None):
+    """bedrock-runtime client for a model's region override (FoundationModel.region), else AWS_REGION"""
+    return boto3.client('bedrock-runtime', region_name=region or AWS_REGION)
+
 calculator_tool = CalculatorBedrockConverseTool()
 acronym_tool = AcronymBedrockConverseTool()
 url_loader_tool = UrlContentBedrockConverseTool()
@@ -143,7 +149,7 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
         }
         tool_input = ""
 
-        response = bedrock_runtime.converse_stream(
+        response = get_bedrock_runtime(opt_fm.region).converse_stream(
             modelId=opt_model_id,
             messages=message_history,
             system=system_prompts,
@@ -218,19 +224,19 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
 
                 if "internalServerException" in event:
                     exception = event["internalServerException"]
-                    result_text += f"\n\{exception}"
+                    result_text += f"\n\n{exception}"
                     result_area.write(result_text)
                 if "modelStreamErrorException" in event:
                     exception = event["modelStreamErrorException"]
-                    result_text += f"\n\{exception}"
+                    result_text += f"\n\n{exception}"
                     result_area.write(result_text)
                 if "throttlingException" in event:
                     exception = event["throttlingException"]
-                    result_text += f"\n\{exception}"
+                    result_text += f"\n\n{exception}"
                     result_area.write(result_text)
                 if "validationException" in event:
                     exception = event["validationException"]
-                    result_text += f"\n\{exception}"
+                    result_text += f"\n\n{exception}"
                     result_area.write(result_text)
 
     except ClientError as err:
@@ -240,31 +246,41 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
         st.chat_message("system").write(message)
 
 
-opt_model_id_list = [
-    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "global.anthropic.claude-sonnet-4-20250514-v1:0",
-    #"us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "cohere.command-r-v1:0",
-    "cohere.command-r-plus-v1:0",
-    "meta.llama2-13b-chat-v1",
-    "meta.llama2-70b-chat-v1",
-    "meta.llama3-8b-instruct-v1:0",
-    "meta.llama3-70b-instruct-v1:0",
-    "mistral.mistral-small-2402-v1:0",
-    "mistral.mistral-large-2402-v1:0",
+# Models come from FOUNDATION_MODELS (cmn/bedrock_models.py), limited to models
+# that can call tools while streaming (this page uses converse_stream with
+# toolConfig), and to fast and light models: no Opus / Fable, no large-tier models
+opt_model_excluded = ("opus", "fable", "nova-pro", "70b", "large")
+opt_model_list = [
+    model for model in FOUNDATION_MODELS.listed_models()
+    if model.is_feature_supported(Feature.STREAMING_TOOL_USE)
+    and not any(excluded in model.model_id for excluded in opt_model_excluded)
 ]
 
-opt_top_p = 1.0
-opt_top_k = 250
 with st.sidebar:
-    opt_model_id = st.selectbox(label="Model ID", options=opt_model_id_list, index=0, key="model_id")
-    opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
-    #opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-    #opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
-    opt_max_tokens = st.slider(label="Max Tokens", min_value=0, max_value=4096, value=2048, step=1, key="max_tokens")
+    opt_fm: FoundationModel = st.selectbox(label="Model", options=opt_model_list, index=0, format_func=lambda model: model.display_name, key="model_id")
+
+opt_model_id = opt_fm.model_id
+
+opt_fm_max_tokens = opt_fm.inference_parameters.max_tokens
+opt_fm_temperature = opt_fm.inference_parameters.temperature
+opt_fm_top_p = opt_fm.inference_parameters.top_p
+opt_fm_top_k = opt_fm.inference_parameters.top_k
+
+# Sliders only for the parameters the model accepts; the request builder drops the rest
+with st.sidebar:
+    opt_temperature = None
+    opt_top_p = None
+    opt_top_k = None
+    if opt_fm_temperature.is_supported:
+        opt_temperature = st.slider(label="Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key="temperature")
+    if opt_fm_top_p.is_supported:
+        opt_top_p = st.slider(label="Top P", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
+    if opt_fm_top_k.is_supported:
+        opt_top_k = st.slider(label="Top K", min_value=0, max_value=500, value=250, step=1, key="top_k")
+    opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
 
-st.markdown("💬 Converse Tool 375")
+st.markdown("Converse Tool 375")
 
 if "menu_converse_tool_messages" not in st.session_state:
     st.session_state["menu_converse_tool_messages"] = []
@@ -377,12 +393,10 @@ if prompt:
 
     system_prompts = [{"text": opt_system_msg}]
 
-    inference_config = {
-        "temperature": opt_temperature,
-        "maxTokens": opt_max_tokens,
-    }
-
-    additional_model_fields = None
+    # Only the parameters the model supports are sent
+    inference_settings = InferenceSettings(max_tokens=opt_max_tokens, temperature=opt_temperature, top_p=opt_top_p, top_k=opt_top_k)
+    inference_config = build_inference_config(opt_fm, inference_settings)
+    additional_model_fields = build_additional_model_fields(opt_fm, inference_settings) or None
 
     with st.spinner('Processing...'):
         try:
@@ -391,7 +405,7 @@ if prompt:
             }
             tool_input = ""
 
-            response = bedrock_runtime.converse_stream(
+            response = get_bedrock_runtime(opt_fm.region).converse_stream(
                 modelId=opt_model_id,
                 messages=message_history,
                 system=system_prompts,
@@ -463,19 +477,19 @@ if prompt:
 
                     if "internalServerException" in event:
                         exception = event["internalServerException"]
-                        result_text += f"\n\{exception}"
+                        result_text += f"\n\n{exception}"
                         result_area.write(result_text)
                     if "modelStreamErrorException" in event:
                         exception = event["modelStreamErrorException"]
-                        result_text += f"\n\{exception}"
+                        result_text += f"\n\n{exception}"
                         result_area.write(result_text)
                     if "throttlingException" in event:
                         exception = event["throttlingException"]
-                        result_text += f"\n\{exception}"
+                        result_text += f"\n\n{exception}"
                         result_area.write(result_text)
                     if "validationException" in event:
                         exception = event["validationException"]
-                        result_text += f"\n\{exception}"
+                        result_text += f"\n\n{exception}"
                         result_area.write(result_text)
 
             print(tool_invocation)

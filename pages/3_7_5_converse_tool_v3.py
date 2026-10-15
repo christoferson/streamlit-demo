@@ -227,12 +227,12 @@ class InvocationStat:
 
     def as_markdown(self) -> str:
         lines = [
-            f"🔢 in={self.input_tokens} out={self.output_tokens} "
+            f"in={self.input_tokens} out={self.output_tokens} "
             f"total={self.total_tokens} latency={self.latency_ms}ms "
             f"calls={self.llm_calls}"
         ]
         if self.tools_called:
-            lines.append(f"🔧 tools: {', '.join(f'`{n}`' for n in self.tools_called)}")
+            lines.append(f"tools: {', '.join(f'`{n}`' for n in self.tools_called)}")
         return "  \n".join(lines)
 
 # STOP_REASON_MESSAGES = {
@@ -745,6 +745,8 @@ def build_default_system_prompt(registry: ToolRegistry) -> str:
         "You are a BI analyst assistant.",
         tool_summary,
         "Call tools ONE AT A TIME. Wait for each result before calling the next.",
+        "Do not use emoji in your responses, including in headings, lists and status markers. "
+        "Use them only when they are necessary, for example when the user asks for them.",
     ]))
 
 OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
@@ -764,7 +766,7 @@ with st.sidebar:
 ################################################################################
 
 with st.container(horizontal=True, vertical_alignment="center"):
-    st.markdown("💬 Converse Tool")
+    st.markdown("Converse Tool")
     show_examples = st.toggle("Examples", value=False)
 #st.markdown(f"Tools: {', '.join(tool_registry.tool_names)}")
 
@@ -938,7 +940,7 @@ if prompt:
         def on_tool_invoked(tool_name: str, tool_args: dict, tool_result: Any):
             turn_stat.record_tool(tool_name)
             accumulated["text"] += (
-                f"\n\n:blue[🔧 **Tool:** `{tool_name}`]\n"
+                f"\n\n:blue[**Tool:** `{tool_name}`]\n"
                 f"```json\n{json.dumps(tool_args, indent=2)}\n```\n"
                 f"**Result:** `{tool_result}`\n\n"
             )
