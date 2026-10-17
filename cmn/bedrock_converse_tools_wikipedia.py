@@ -1,7 +1,13 @@
 # cmn/bedrock_converse_tools_wikipedia.py
 
+import json
+
 import wikipedia
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
+
+# Wikimedia asks API clients for a descriptive User-Agent; the library's generic
+# default is shared by every user and gets throttled (HTTP 429) sooner
+wikipedia.set_user_agent("streamlit-demo/1.0 (AWS Bedrock converse tool demo; https://github.com/christoferson/streamlit-demo)")
 
 # Deprecated: superseded by cmn/tools/tool/
 class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
@@ -81,5 +87,9 @@ class WikipediaBedrockConverseTool(AbstractBedrockConverseTool):
 
             return f"Could not retrieve a valid Wikipedia page for: {search_query}"
 
+        except json.JSONDecodeError:
+            # The library parses every API response as JSON; a throttled request gets
+            # HTTP 429 with a plain-text body, which surfaces as this decode error
+            return "Wikipedia is rate limiting requests right now (HTTP 429). Try again in a minute."
         except Exception as e:
             return f"Error fetching Wikipedia content: {str(e)}"

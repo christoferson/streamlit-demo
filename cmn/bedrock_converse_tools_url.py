@@ -59,6 +59,13 @@ class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
                 lines = (line.strip() for line in soup.get_text(separator="\n").splitlines())
                 text = "\n".join(line for line in lines if line)
 
+            if not text:
+                # e.g. Reddit serves a JavaScript-only shell (HTTP 200) to automated requests
+                return (
+                    f"The page returned no readable text (HTTP {response.status_code}). It probably "
+                    "renders its content with JavaScript or blocks automated requests."
+                )
+
             # Cap at 10000 characters to avoid token limits
             return text[:10000]
 

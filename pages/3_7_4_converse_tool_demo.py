@@ -18,7 +18,8 @@ simple prototypes and learning but becomes difficult to maintain and test as com
 
 KEY CHARACTERISTICS
 ------------------
-- Single tool call per turn: Handles only one tool invocation followed by one LLM follow-up call
+- Capped tool loop: runs every tool the model requests (several per response), then calls the
+  model again, up to MAX_TOOL_ROUNDS rounds per turn
 - Inline stream parsing: AWS Bedrock event stream parsing logic embedded directly in UI code
 - Manual tool matching: Iterates through tool list to find matching tool by name
 - Simple metrics: Displays token counts per LLM call without accumulation across turns
@@ -28,10 +29,9 @@ KEY CHARACTERISTICS
 
 LIMITATIONS
 -----------
-Cannot handle multi-step tool chains where the model needs to call multiple tools in sequence
-or loop back for additional tool calls based on previous results. For example, if the model
-needs to fetch data, perform a calculation, and then create a chart, it can only execute the
-first tool and must stop. Complex workflows requiring iterative tool use are not supported.
+The tool loop stops after MAX_TOOL_ROUNDS rounds; tool requests beyond that are logged in the
+Info Panel as not run. Stream parsing, the loop and the UI still live inline in this page, and
+tool results have no rich rendering. Version 3.7.5 moves the loop into ConversationManager.
 
 TOOL SUPPORT
 -----------
@@ -86,6 +86,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
+MAX_TOOL_ROUNDS = 5  # rounds of tool calls per turn before the tool loop stops
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -164,15 +165,26 @@ def read_invocation_metrics(metadata):
         "latency_ms": metadata.get("metrics", {}).get("latencyMs", 0),
     }
 
+def parse_tool_input(tool_input):
+    """A tool use's streamed JSON input as a dict (Converse needs a dict even if the JSON is bad)."""
+    try:
+        return json.loads(tool_input or "{}")
+    except json.JSONDecodeError:
+        logger.warning("Tool input is not valid JSON: %s", tool_input)
+        return {"invalid_json": tool_input}
+
 def invoke_llm(message_history, system_prompts, tool_config, inference_config, additional_model_fields, assistant_message):
     """
-    Follow-up call after the tool results, streamed into the same assistant bubble.
-    Returns (response text, invocation metrics or None, tool uses the model requested).
-    This prototype runs one round of tools per turn, so requested tool uses are not run.
+    One converse_stream call, streamed into the turn's assistant bubble. Returns a dict:
+        text              - response text
+        metrics           - invocation metrics, or None
+        tool_uses         - requested tools: {"toolUseId", "name", "input" (JSON text)}
+        assistant_content - the response as Converse content blocks (reasoning, text, toolUse),
+                            sent back as the assistant message together with the tool results
     """
     call_metrics = None
     result_text = ""
-    tool_uses = {}  # contentBlockIndex -> {"toolUseId", "name", "input" (JSON text)}
+    content_blocks = {}  # contentBlockIndex -> block being streamed (reasoningContent / text / toolUse)
     try:
         response = get_bedrock_runtime(opt_fm.region).converse_stream(
             modelId=opt_model_id,
@@ -200,21 +212,35 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
                         if 'toolUse' in content_block_start_start:
                             content_block_tool_use = content_block_start_start['toolUse']
                             print(f"tool_use_id={content_block_tool_use['toolUseId']} tool_use_name={content_block_tool_use['name']}")
-                            tool_uses[content_block_start['contentBlockIndex']] = {
+                            content_blocks[content_block_start['contentBlockIndex']] = {"toolUse": {
                                 "toolUseId": content_block_tool_use['toolUseId'],
                                 "name": content_block_tool_use['name'],
                                 "input": "",
-                            }
+                            }}
 
                 if 'contentBlockDelta' in event:
+                    block_index = event['contentBlockDelta']['contentBlockIndex']
                     content_delta = event['contentBlockDelta']['delta']
                     print(f"content_delta {content_delta}")
                     if 'text' in content_delta:
                         result_text += f"{content_delta['text']}"
                         result_area.write(result_text)
+                        content_blocks.setdefault(block_index, {"text": ""})["text"] += content_delta['text']
                     if 'toolUse' in content_delta:
                         # Each tool use streams its own input; several can come in one response
-                        tool_uses[event['contentBlockDelta']['contentBlockIndex']]["input"] += content_delta['toolUse']['input']
+                        content_blocks[block_index]["toolUse"]["input"] += content_delta['toolUse']['input']
+                    if 'reasoningContent' in content_delta:
+                        # Thinking must go back unchanged (with its signature) alongside the tool results
+                        reasoning_delta = content_delta['reasoningContent']
+                        if 'redactedContent' in reasoning_delta:
+                            content_blocks[block_index] = {"reasoningContent": {"redactedContent": reasoning_delta['redactedContent']}}
+                        else:
+                            reasoning_text = content_blocks.setdefault(
+                                block_index, {"reasoningContent": {"reasoningText": {"text": ""}}}
+                            )["reasoningContent"]["reasoningText"]
+                            reasoning_text["text"] += reasoning_delta.get('text', '')
+                            if 'signature' in reasoning_delta:
+                                reasoning_text["signature"] = reasoning_delta['signature']
 
                 if 'messageStop' in event:
                     print(f"messageStop")
@@ -256,7 +282,45 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
         print("A client error occured: " + format(message))
         st.chat_message("system").write(message)
 
-    return result_text, call_metrics, list(tool_uses.values())
+    tool_uses = []
+    assistant_content = []
+    for block_index in sorted(content_blocks):
+        block = content_blocks[block_index]
+        if "toolUse" in block:
+            tool_use = block["toolUse"]
+            tool_uses.append(tool_use)
+            assistant_content.append({"toolUse": {
+                "toolUseId": tool_use["toolUseId"],
+                "name": tool_use["name"],
+                "input": parse_tool_input(tool_use["input"]),
+            }})
+        elif "text" in block:
+            if block["text"].strip():  # Converse rejects blank text blocks
+                assistant_content.append(block)
+        else:
+            assistant_content.append(block)
+
+    return {"text": result_text, "metrics": call_metrics, "tool_uses": tool_uses, "assistant_content": assistant_content}
+
+def build_display_messages(history):
+    """
+    The messages the chat shows: [role, text, document name or None] per bubble.
+    History holds whole turns (tool requests / results too); only text is shown,
+    one assistant bubble per turn like the live view. Also used for the message
+    count and the history limit, so both match what the user sees.
+    """
+    display_messages = []
+    for msg in history:
+        texts = [block["text"] for block in msg["content"] if "text" in block]
+        if not texts:
+            continue  # toolUse / toolResult only
+        text = "\n\n".join(texts)
+        if msg["role"] == "assistant" and display_messages and display_messages[-1][0] == "assistant":
+            display_messages[-1][1] += "\n\n" + text
+            continue
+        document_name = next((block["document"]["name"] for block in msg["content"] if "document" in block), None)
+        display_messages.append([msg["role"], text, document_name])
+    return display_messages
 
 
 # Models come from FOUNDATION_MODELS (cmn/bedrock_models.py), limited to models
@@ -293,8 +357,17 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
 
-# Docked to the bottom of the page (outside the columns)
-prompt = st.chat_input()
+    # Static list, so it lives in the left sidebar; the right panel is per-turn output
+    with st.container(border=True):
+        st.markdown("**Available Tools**")
+        for tool in tools:
+            st.caption(tool.definition['toolSpec']['name'])
+
+# Docked to the bottom of the page (outside the columns), with the message count just above it.
+# The count is filled in at the end of the script so it includes the turn that just ran.
+with st.bottom:
+    message_count_area = st.empty()
+    prompt = st.chat_input()
 
 with main_col:
     st.markdown("Converse Tool 375")
@@ -306,23 +379,9 @@ with main_col:
         st.session_state["menu_converse_tool_log"] = []  # every tool call: name, input, result
 
 
-    idx = 1
-    for msg in st.session_state.menu_converse_tool_messages:
-        idx = idx + 1
-        contents = msg["content"]
-        with st.chat_message(msg["role"]):
-            content = contents[0]
-            content_text = content["text"]
-            document_name = None
-            if "user" == msg["role"]:
-                if len(contents) > 1:
-                    content_1 = contents[1]
-                    if "document" in content_1:
-                        content_1_document = content_1["document"]
-                        document_name = content_1_document["name"]
-                st.markdown(f"{content_text} \n\n:green[Document: {document_name}]" if document_name else content_text)
-            if "assistant" == msg["role"]:
-                st.markdown(f"{content_text}")
+    for role, content_text, document_name in build_display_messages(st.session_state.menu_converse_tool_messages):
+        with st.chat_message(role):
+            st.markdown(f"{content_text} \n\n:green[Document: {document_name}]" if document_name else content_text)
 
     if "menu_converse_tool_uploader_key" not in st.session_state:
         st.session_state.menu_converse_tool_uploader_key = 0
@@ -416,101 +475,36 @@ with main_col:
 
         with st.spinner('Processing...'):
             try:
-                tool_uses = {}  # contentBlockIndex -> {"toolUseId", "name", "input" (JSON text)}
-                call_metrics = None
-                llm_calls = []  # invocation metrics of every LLM call in this turn
-
-                response = get_bedrock_runtime(opt_fm.region).converse_stream(
-                    modelId=opt_model_id,
-                    messages=message_history,
-                    system=system_prompts,
-                    toolConfig=tool_config,
-                    inferenceConfig=inference_config,
-                    additionalModelRequestFields=additional_model_fields
-                )
-
-                result_text = ""
-                # One bubble per turn: the follow-up answer after the tool results streams into it too
+                llm_calls = []      # invocation metrics of every LLM call in this turn
+                messages = message_history
+                # One bubble per turn: every call in the tool loop streams its text into it
                 assistant_message = st.chat_message("assistant")
-                with assistant_message:
-                    result_area = st.empty()
-                    stream = response.get('stream')
-                    for event in stream:
 
-                        if 'messageStart' in event:
-                            pass
+                # Tool loop: run the requested tools and call the model again until it answers
+                # without tools, at most MAX_TOOL_ROUNDS rounds of tool calls per turn
+                for tool_round in range(MAX_TOOL_ROUNDS + 1):
+                    call = invoke_llm(messages, system_prompts, tool_config, inference_config, additional_model_fields, assistant_message)
+                    if call["metrics"]:
+                        llm_calls.append(call["metrics"])
+                    if not call["tool_uses"]:
+                        break
 
-                        if 'contentBlockStart' in event:
-                            content_block_start = event['contentBlockStart']
-                            print(content_block_start)
-                            if 'start' in content_block_start:
-                                content_block_start_start = content_block_start['start']
-                                if 'toolUse' in content_block_start_start:
-                                    content_block_tool_use = content_block_start_start['toolUse']
-                                    print(f"tool_use_id={content_block_tool_use['toolUseId']} tool_use_name={content_block_tool_use['name']}")
-                                    tool_uses[content_block_start['contentBlockIndex']] = {
-                                        "toolUseId": content_block_tool_use['toolUseId'],
-                                        "name": content_block_tool_use['name'],
-                                        "input": "",
-                                    }
+                    if tool_round == MAX_TOOL_ROUNDS:
+                        # Safety stop: log what the model still asked for
+                        for tool_use in call["tool_uses"]:
+                            st.session_state.menu_converse_tool_log.append({
+                                "tool_name": tool_use["name"],
+                                "tool_use_id": tool_use["toolUseId"],
+                                "input": tool_use["input"],
+                                "result": f"Not run: reached the limit of {MAX_TOOL_ROUNDS} tool rounds per turn",
+                            })
+                        break
 
-                        if 'contentBlockDelta' in event:
-                            content_delta = event['contentBlockDelta']['delta']
-                            if 'text' in content_delta:
-                                result_text += f"{content_delta['text']}"
-                                result_area.write(result_text)
-                            if 'toolUse' in content_delta:
-                                # Each tool use streams its own input; several can come in one response
-                                tool_uses[event['contentBlockDelta']['contentBlockIndex']]["input"] += content_delta['toolUse']['input']
-
-                        if 'messageStop' in event:
-                            stop_reason = event['messageStop']['stopReason']
-                            if stop_reason == 'end_turn':
-                                pass
-                            elif "tool_use" == stop_reason:
-                                print(f"tool uses: {list(tool_uses.values())}")
-                                pass
-                            else:
-                                stop_reason_display = stop_reason
-                                if stop_reason == 'max_tokens':
-                                    stop_reason_display = "Insufficient Tokens. Increaes MaxToken Settings."
-                                result_text_error = f"{result_text}\n\n:red[Generation Stopped: {stop_reason_display}]"
-                                result_area.write(result_text_error)
-
-                        if 'metadata' in event:
-                            call_metrics = read_invocation_metrics(event['metadata'])
-
-                        if "internalServerException" in event:
-                            exception = event["internalServerException"]
-                            result_text += f"\n\n{exception}"
-                            result_area.write(result_text)
-                        if "modelStreamErrorException" in event:
-                            exception = event["modelStreamErrorException"]
-                            result_text += f"\n\n{exception}"
-                            result_area.write(result_text)
-                        if "throttlingException" in event:
-                            exception = event["throttlingException"]
-                            result_text += f"\n\n{exception}"
-                            result_area.write(result_text)
-                        if "validationException" in event:
-                            exception = event["validationException"]
-                            result_text += f"\n\n{exception}"
-                            result_area.write(result_text)
-
-                if call_metrics:
-                    llm_calls.append(call_metrics)
-
-                if tool_uses:
-                    # The model can request several tools in one response; Converse needs a
-                    # toolResult for every toolUse, so all of them run (one round per turn)
-                    tool_request_content = []
+                    # Run every requested tool; Converse needs a toolResult for each toolUse
                     tool_result_content = []
-                    for tool_use in tool_uses.values():
+                    for tool_use in call["tool_uses"]:
                         tool_name = tool_use["name"]
-                        tool_args_json = json.loads(tool_use["input"] or "{}")
-                        tool_request_content.append({
-                            "toolUse": {"toolUseId": tool_use["toolUseId"], "name": tool_name, "input": tool_args_json}
-                        })
+                        tool_args_json = parse_tool_input(tool_use["input"])
 
                         matched_tool = next((tool for tool in tools if tool.matches(tool_name)), None)
                         try:
@@ -537,38 +531,35 @@ with main_col:
                             "result": expr_result,
                         })
 
-                    tool_request_message = {"role": "assistant", "content": tool_request_content}
-                    tool_result_message = {"role": "user", "content": tool_result_content}
-
-                    # Full history (ends with message_user_latest) so the follow-up call keeps earlier turns
-                    messages = message_history + [tool_request_message, tool_result_message]
-
-                    follow_up_text, follow_up_metrics, follow_up_tool_uses = invoke_llm(messages, system_prompts, tool_config, inference_config, additional_model_fields, assistant_message)
-                    if follow_up_metrics:
-                        llm_calls.append(follow_up_metrics)
-                    # One tool round per turn: further tool requests are logged, not run
-                    for tool_use in follow_up_tool_uses:
-                        st.session_state.menu_converse_tool_log.append({
-                            "tool_name": tool_use["name"],
-                            "tool_use_id": tool_use["toolUseId"],
-                            "input": tool_use["input"],
-                            "result": "Not run: this prototype runs one round of tool calls per turn (3_7_5_converse_tool_v3 loops)",
-                        })
-                    # Save the answer that came after the tool result, not just the text before the tool call
-                    result_text = "\n\n".join(text for text in (result_text, follow_up_text) if text.strip())
+                    # Full history (ends with message_user_latest) plus this turn's tool rounds
+                    messages = messages + [
+                        {"role": "assistant", "content": call["assistant_content"]},
+                        {"role": "user", "content": tool_result_content},
+                    ]
 
                 st.session_state.menu_converse_tool_last_metrics = {"model": opt_fm.display_name, "calls": llm_calls}
 
-                message_assistant_latest = {"role": "assistant", "content": [{"text": result_text or "(no response)"}]}
+                # Save the whole turn, tool requests / results included, so later turns can see
+                # which tools already ran (text-only history made the model redo earlier tool calls).
+                # Thinking is only needed inside an active tool loop, so it is not kept.
+                turn_messages = messages[len(message_history) - 1:]  # message_user_latest + tool rounds
+                # Final call: text only (if the loop hit its limit, its toolUse blocks have no results)
+                final_content = [block for block in call["assistant_content"] if "text" in block]
+                turn_messages.append({"role": "assistant", "content": final_content or [{"text": "(no response)"}]})
+                for turn_message in turn_messages:
+                    st.session_state.menu_converse_tool_messages.append({
+                        "role": turn_message["role"],
+                        "content": [block for block in turn_message["content"] if "reasoningContent" not in block],
+                    })
 
-                st.session_state.menu_converse_tool_messages.append(message_user_latest)
-                st.session_state.menu_converse_tool_messages.append(message_assistant_latest)
-
-                # Trim message History
+                # Trim from the front; history must start with a user text message, never mid tool exchange
                 menu_converse_tool_messages = st.session_state.menu_converse_tool_messages
-                menu_converse_tool_messages_len = len(menu_converse_tool_messages)
-                if menu_converse_tool_messages_len > MAX_MESSAGES:
-                    del menu_converse_tool_messages[0 : (menu_converse_tool_messages_len - MAX_MESSAGES) * 2]
+                while menu_converse_tool_messages and (
+                    len(build_display_messages(menu_converse_tool_messages)) > MAX_MESSAGES
+                    or menu_converse_tool_messages[0]["role"] != "user"
+                    or not any("text" in block for block in menu_converse_tool_messages[0]["content"])
+                ):
+                    del menu_converse_tool_messages[0]
 
                 if uploaded_file_name:
                     st.session_state.menu_converse_tool_uploader_key += 1
@@ -598,11 +589,6 @@ st.html(
 
 with right_sidebar_col, st.container(key="info_panel_sticky"):
     st.markdown("### Info Panel")
-
-    with st.container(border=True):
-        st.markdown("**Statistics**")
-        st.metric("Messages", len(st.session_state.menu_converse_tool_messages))
-        st.metric("Limit", MAX_MESSAGES)
 
     # Invocation metrics of the last turn: one LLM call, or two when a tool was used
     last_metrics = st.session_state.get("menu_converse_tool_last_metrics")
@@ -635,7 +621,18 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
                 st.caption("Result")
                 st.code(json.dumps(entry["result"], indent=2, default=str), language="json")
 
-    with st.container(border=True):
-        st.markdown("**Available Tools**")
-        for tool in tools:
-            st.caption(tool.definition['toolSpec']['name'])
+def clear_conversation():
+    """Clear the conversation and everything the Info Panel shows for it"""
+    st.session_state.menu_converse_tool_messages = []
+    st.session_state.menu_converse_tool_log = []
+    st.session_state.pop("menu_converse_tool_last_metrics", None)
+
+# Message count and clear button above the chat input (same style as 3_5_13_converse_demo);
+# filled last so the count includes the turn that just ran. Counts the messages the chat
+# shows (tool requests / results are in history but not counted).
+with message_count_area.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="xxsmall"):
+    st.markdown(
+        f":violet[**{len(build_display_messages(st.session_state.menu_converse_tool_messages))}/{MAX_MESSAGES}**]",
+        help="Messages in conversation history / limit",
+    )
+    st.button(":material/delete_history:", type="tertiary", help="Clear Conversation", key="clear_conversation", on_click=clear_conversation)
