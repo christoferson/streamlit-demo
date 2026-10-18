@@ -6,6 +6,8 @@ Tool: url_content_loader
 Fetches and extracts readable text content from a given URL.
 Strips non-content tags (script, style, nav, footer, etc.)
 and caps output at 10,000 characters to avoid token limits.
+Only public http(s) addresses are loaded, with every redirect hop checked
+(see tool_safety.py), so the model can't reach internal hosts.
 
 Dependencies: requests, beautifulsoup4
 """
@@ -15,6 +17,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
+from cmn.tools.tool.tool_safety import BlockedUrlError, fetch_public_url, response_charset
 
 logger = logging.getLogger(__name__)
 
@@ -78,27 +81,33 @@ class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
         logger.info("UrlContentTool: fetching url=%s", target_url)
 
         try:
-            response = requests.get(
-                target_url,
-                headers = _REQUEST_HEADERS,
-                timeout = _REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
+            response, body = fetch_public_url(target_url, _REQUEST_HEADERS, _REQUEST_TIMEOUT)
 
-            return self._extract_text(response.text)
+            text = self._extract_text(body, response_charset(response))
+            if not text:
+                # e.g. Reddit serves a JavaScript-only shell (HTTP 200) to automated requests
+                return (
+                    f"The page returned no readable text (HTTP {response.status_code}). It probably "
+                    "renders its content with JavaScript or blocks automated requests."
+                )
+            return text
 
+        except BlockedUrlError as e:
+            logger.warning("UrlContentTool: blocked url=%s reason=%s", target_url, e)
+            return f"URL not loaded: {e}"
         except requests.RequestException as e:
             logger.error("UrlContentTool: request failed url=%s error=%s", target_url, e)
             return f"Error fetching URL content: {str(e)}"
 
     # ── Private ───────────────────────────────────────────────────────────────
 
-    def _extract_text(self, html: str) -> str:
+    def _extract_text(self, html: bytes, charset: str = None) -> str:
         """
         Parse HTML, strip non-content tags, extract clean text.
         Caps output at _MAX_CONTENT_LENGTH characters.
+        charset: the server's declared charset, or None to detect it (e.g. from <meta>).
         """
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "html.parser", from_encoding=charset)
 
         for tag in soup(_STRIP_TAGS):
             tag.decompose()

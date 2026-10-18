@@ -2,6 +2,7 @@
 
 import httpx
 import logging
+from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from cmn.tools.tool.bedrock_converse_tools_tool import AbstractBedrockConverseTool
 
@@ -9,6 +10,24 @@ logger = logging.getLogger(__name__)
 
 # ── Known correct AWS docs URL patterns ──────────────────────────────────────
 AWS_DOCS_BASE = "https://docs.aws.amazon.com"
+AWS_DOCS_HOST = "docs.aws.amazon.com"
+MAX_REDIRECTS = 5
+
+
+def is_aws_docs_url(url: str) -> bool:
+    """
+    True only for https://docs.aws.amazon.com/... The model supplies the URL, and a prefix
+    check would also pass docs.aws.amazon.com.evil.example or
+    https://docs.aws.amazon.com@169.254.169.254/ (everything before '@' is a username).
+    """
+    parsed = urlparse(url)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == AWS_DOCS_HOST
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port in (None, 443)
+    )
 
 KNOWN_DOCS = {
     "lambda":   "https://docs.aws.amazon.com/lambda/latest/dg",
@@ -145,7 +164,7 @@ class AwsDocsBedrockConverseTool(AbstractBedrockConverseTool):
                     continue
 
                 href = link_el["href"]
-                if not href.startswith("https://docs.aws.amazon.com"):
+                if not is_aws_docs_url(href):
                     continue
 
                 results.append({
@@ -173,15 +192,24 @@ class AwsDocsBedrockConverseTool(AbstractBedrockConverseTool):
     def _read(self, url: str) -> dict:
         """Fetch and parse an AWS docs page."""
         try:
-            if not url.startswith("https://docs.aws.amazon.com"):
-                return {"error": "Only docs.aws.amazon.com URLs are allowed"}
+            if not is_aws_docs_url(url):
+                return {"error": "Only https://docs.aws.amazon.com URLs are allowed"}
 
-            response = httpx.get(
-                url,
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=15,
-                follow_redirects=True,
-            )
+            # Redirects are followed by hand so every hop stays on docs.aws.amazon.com
+            for _ in range(MAX_REDIRECTS + 1):
+                response = httpx.get(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=15,
+                    follow_redirects=False,
+                )
+                if not response.is_redirect:
+                    break
+                url = urljoin(url, response.headers["location"])
+                if not is_aws_docs_url(url):
+                    return {"error": f"Redirected outside docs.aws.amazon.com: {url}"}
+            else:
+                return {"error": f"More than {MAX_REDIRECTS} redirects"}
 
             if response.status_code == 404:
                 return {

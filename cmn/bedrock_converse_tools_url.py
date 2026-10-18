@@ -2,6 +2,9 @@ from cmn.bedrock_converse_tools import AbstractBedrockConverseTool
 import requests
 from bs4 import BeautifulSoup
 
+# Only public http(s) addresses, every redirect hop checked, downloads capped
+from cmn.tools.tool.tool_safety import BlockedUrlError, fetch_public_url, response_charset
+
 # Deprecated: superseded by cmn/tools/tool/
 class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
 
@@ -40,10 +43,9 @@ class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
-            response = requests.get(target_url, headers=headers, timeout=10)
-            response.raise_for_status()
+            response, body = fetch_public_url(target_url, headers)
 
-            soup = BeautifulSoup(response.text, "html.parser")
+            soup = BeautifulSoup(body, "html.parser", from_encoding=response_charset(response))
 
             # Remove script, style, nav, footer, and other non-content tags
             for tag in soup(["script", "style", "nav", "footer", "header", "aside", "meta", "link"]):
@@ -69,5 +71,7 @@ class UrlContentBedrockConverseTool(AbstractBedrockConverseTool):
             # Cap at 10000 characters to avoid token limits
             return text[:10000]
 
+        except BlockedUrlError as e:
+            return f"URL not loaded: {e}"
         except requests.RequestException as e:
             return f"Error fetching URL content: {str(e)}"

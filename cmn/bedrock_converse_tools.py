@@ -1,7 +1,6 @@
 import json
 
-import ast
-import operator as op
+from cmn.tools.tool.tool_safety import evaluate_expression
 
 # Deprecated: superseded by cmn/tools/tool/
 class AbstractBedrockConverseTool:
@@ -25,17 +24,6 @@ class AbstractBedrockConverseTool:
         return None
 
 class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
-
-    # supported operators
-    operators = {
-        ast.Add: op.add, 
-        ast.Sub: op.sub, 
-        ast.Mult: op.mul,
-        ast.Div: op.truediv, 
-        ast.Pow: op.pow, 
-        ast.BitXor: op.xor,
-        ast.USub: op.neg
-    }
 
     def __init__(self):
         name = "expr_evaluator"
@@ -69,38 +57,7 @@ class CalculatorBedrockConverseTool(AbstractBedrockConverseTool):
         expression = tool_args.get("expression") if tool_args else None
         if not expression:
             return {"error": "No expression provided"}
-        return self.eval_(ast.parse(expression, mode='eval').body)
-        #return self.eval_(ast.parse(params, mode='eval').body)
-
-    def eval_(self, node):
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, int):
-                return node.value  # integer
-            elif isinstance(node.value, float):
-                return node.value  # integer
-            else:
-                return node.value  # integer
-        elif isinstance(node, ast.BinOp):
-            left = self.eval_(node.left)
-            right = self.eval_(node.right)
-            return self.operators[type(node.op)](left, right)
-        elif isinstance(node, ast.UnaryOp):
-            operand = self.eval_(node.operand)
-            return self.operators[type(node.op)](operand)
-        elif isinstance(node, ast.Call):
-            func = self.eval_(node.func)
-            args = [self.eval_(arg) for arg in node.args]
-            keywords = {kw.arg: self.eval_(kw.value) for kw in node.keywords}
-            return func(*args, **keywords)
-        elif isinstance(node, ast.Name):
-            return self.lookup_variable(node.id)
-        else:
-            raise TypeError(node)
-    
-    def lookup_variable(self, name):
-        if name == 'round':
-            return round
-        raise NameError(f"Name {name} is not defined")
-
-
-
+        try:
+            return evaluate_expression(expression)  # size-limited, see cmn/tools/tool/tool_safety.py
+        except Exception as err:  # syntax errors, unsupported operators, limits, division by zero, ...
+            return {"error": f"{type(err).__name__}: {err}"}
