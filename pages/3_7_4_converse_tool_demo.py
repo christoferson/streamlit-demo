@@ -181,8 +181,10 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
         tool_uses         - requested tools: {"toolUseId", "name", "input" (JSON text)}
         assistant_content - the response as Converse content blocks (reasoning, text, toolUse),
                             sent back as the assistant message together with the tool results
+        error             - error message if the call or its stream failed (already shown), else None
     """
     call_metrics = None
+    error = None
     result_text = ""
     content_blocks = {}  # contentBlockIndex -> block being streamed (reasoningContent / text / toolUse)
     try:
@@ -261,28 +263,13 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
                 if 'metadata' in event:
                     call_metrics = read_invocation_metrics(event['metadata'])
 
-                if "internalServerException" in event:
-                    exception = event["internalServerException"]
-                    result_text += f"\n\n{exception}"
-                    result_area.write(result_text)
-                if "modelStreamErrorException" in event:
-                    exception = event["modelStreamErrorException"]
-                    result_text += f"\n\n{exception}"
-                    result_area.write(result_text)
-                if "throttlingException" in event:
-                    exception = event["throttlingException"]
-                    result_text += f"\n\n{exception}"
-                    result_area.write(result_text)
-                if "validationException" in event:
-                    exception = event["validationException"]
-                    result_text += f"\n\n{exception}"
-                    result_area.write(result_text)
-
-    except ClientError as err:
-        message = err.response["Error"]["Message"]
-        logger.error("A client error occurred: %s", message)
-        print("A client error occured: " + format(message))
-        st.chat_message("system").write(message)
+    except (ClientError, BotoCoreError) as err:
+        # Also covers errors in the middle of the stream: botocore never yields throttling /
+        # validation / internal-error events, it raises EventStreamError (a ClientError) for them,
+        # and BotoCoreError for read timeouts and dropped connections
+        error = err.response["Error"]["Message"] if isinstance(err, ClientError) else str(err)
+        logger.error("Bedrock call failed: %s", error)
+        st.chat_message("system").write(f":red[{error}]")
 
     tool_uses = []
     assistant_content = []
@@ -302,7 +289,7 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
         else:
             assistant_content.append(block)
 
-    return {"text": result_text, "metrics": call_metrics, "tool_uses": tool_uses, "assistant_content": assistant_content}
+    return {"text": result_text, "metrics": call_metrics, "tool_uses": tool_uses, "assistant_content": assistant_content, "error": error}
 
 def without_tool_blocks(history):
     """
@@ -545,6 +532,10 @@ with main_col:
                     call = invoke_llm(messages, system_prompts, tool_config, inference_config, additional_model_fields, assistant_message)
                     if call["metrics"]:
                         llm_calls.append(call["metrics"])
+                    if call["error"]:
+                        # Shown in the chat. Stop here: a broken stream can end mid tool request,
+                        # and nothing from this turn is saved, so the user can simply resend
+                        break
                     if not call["tool_uses"]:
                         break
 
@@ -599,36 +590,39 @@ with main_col:
 
                 st.session_state.menu_converse_tool_last_metrics = {"model": opt_fm.display_name, "calls": llm_calls}
 
-                # Save the whole turn, tool requests / results included, so later turns can see
-                # which tools already ran (text-only history made the model redo earlier tool calls).
-                # Thinking is only needed inside an active tool loop, so it is not kept.
-                turn_messages = messages[len(message_history) - 1:]  # message_user_latest + tool rounds
-                # Final call: text only (if the loop hit its limit, its toolUse blocks have no results)
-                final_content = [block for block in call["assistant_content"] if "text" in block]
-                turn_messages.append({"role": "assistant", "content": final_content or [{"text": "(no response)"}]})
-                for turn_message in turn_messages:
-                    st.session_state.menu_converse_tool_messages.append({
-                        "role": turn_message["role"],
-                        "content": [block for block in turn_message["content"] if "reasoningContent" not in block],
-                    })
+                # A failed call was shown in the chat; the turn is not saved (like 3_5_13), so the
+                # history stays valid and the user can resend
+                if call["error"] is None:
+                    # Save the whole turn, tool requests / results included, so later turns can see
+                    # which tools already ran (text-only history made the model redo earlier tool calls).
+                    # Thinking is only needed inside an active tool loop, so it is not kept.
+                    turn_messages = messages[len(message_history) - 1:]  # message_user_latest + tool rounds
+                    # Final call: text only (if the loop hit its limit, its toolUse blocks have no results)
+                    final_content = [block for block in call["assistant_content"] if "text" in block]
+                    turn_messages.append({"role": "assistant", "content": final_content or [{"text": "(no response)"}]})
+                    for turn_message in turn_messages:
+                        st.session_state.menu_converse_tool_messages.append({
+                            "role": turn_message["role"],
+                            "content": [block for block in turn_message["content"] if "reasoningContent" not in block],
+                        })
 
-                # Trim from the front; history must start with a user text message, never mid tool exchange
-                menu_converse_tool_messages = st.session_state.menu_converse_tool_messages
-                while menu_converse_tool_messages and (
-                    len(build_display_messages(menu_converse_tool_messages)) > MAX_MESSAGES
-                    or menu_converse_tool_messages[0]["role"] != "user"
-                    or not any("text" in block for block in menu_converse_tool_messages[0]["content"])
-                ):
-                    del menu_converse_tool_messages[0]
+                    # Trim from the front; history must start with a user text message, never mid tool exchange
+                    menu_converse_tool_messages = st.session_state.menu_converse_tool_messages
+                    while menu_converse_tool_messages and (
+                        len(build_display_messages(menu_converse_tool_messages)) > MAX_MESSAGES
+                        or menu_converse_tool_messages[0]["role"] != "user"
+                        or not any("text" in block for block in menu_converse_tool_messages[0]["content"])
+                    ):
+                        del menu_converse_tool_messages[0]
 
-                if uploaded_file_name:
-                    st.session_state.menu_converse_tool_uploader_key += 1
+                    if uploaded_file_name:
+                        st.session_state.menu_converse_tool_uploader_key += 1
 
-            except ClientError as err:
-                message = err.response["Error"]["Message"]
-                logger.error("A client error occurred: %s", message)
-                print("A client error occured: " + format(message))
-                st.chat_message("system").write(message)
+            except (ClientError, BotoCoreError) as err:
+                # Safety net: invoke_llm handles errors from the Bedrock calls themselves
+                message = err.response["Error"]["Message"] if isinstance(err, ClientError) else str(err)
+                logger.error("Bedrock call failed: %s", message)
+                st.chat_message("system").write(f":red[{message}]")
 
 # Right side Info Panel, pinned while the conversation scrolls (same CSS as
 # 3_5_13_converse_demo: the COLUMN containing the keyed container is made sticky)

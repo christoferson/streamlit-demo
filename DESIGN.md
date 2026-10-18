@@ -185,10 +185,12 @@ startup; `AWS_REGION` and `CONVERSE_CH_ALGORITHM` have no defaults.
 
 - `tests/test_bedrock_models.py` — catalog invariants
 - `tests/test_converse.py` — request builder, `process_stream`, history helpers
+- `tests/test_tool_safety.py` — `cmn/tools/tool/tool_safety.py` limits (calculator size limits, public-URL-only fetching with per-redirect checks) and the `aws_docs` host check; no network
+- `tests/test_converse_tool_demo.py` — the 3_7_4 page in `AppTest` with a fake bedrock-runtime client: tool loop, round cap, history trimming, tool checkboxes, stream / timeout errors
 - `tools/check_models.py [--ping]` — catalog IDs vs the live account
 - Page tests: `streamlit.testing.v1.AppTest` with `boto3.client` patched
 
-Not covered yet: `ConversationManager` loop, `ToolRegistry`, `RendererRegistry`, individual tools.
+Not covered yet: `ConversationManager` loop (v3), `ToolRegistry`, `RendererRegistry`, most individual tools.
 
 ---
 
