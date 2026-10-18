@@ -87,6 +87,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 100 * 2
 MAX_TOOL_ROUNDS = 5  # rounds of tool calls per turn before the tool loop stops
+# Text block added to a user message (once the user has toggled tools) recording which tools
+# were available for it; kept in history for the model, hidden in the chat
+TOOL_AVAILABILITY_PREFIX = "[Tools available for this message:"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -121,10 +124,7 @@ wikipedia_tool = WikipediaBedrockConverseTool()
 datetime_tool = DateTimeBedrockConverseTool()
 
 tools = [calculator_tool, acronym_tool, url_loader_tool, wikipedia_tool, datetime_tool]
-
-tool_config = {
-        "tools": [tool.definition for tool in tools]
-    }
+# The tools sent to the model (tool_config) are the ones ticked in the sidebar
 
 ####################################################################################
 
@@ -186,14 +186,16 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
     result_text = ""
     content_blocks = {}  # contentBlockIndex -> block being streamed (reasoningContent / text / toolUse)
     try:
-        response = get_bedrock_runtime(opt_fm.region).converse_stream(
+        request = dict(
             modelId=opt_model_id,
             messages=message_history,
             system=system_prompts,
-            toolConfig=tool_config,
             inferenceConfig=inference_config,
             additionalModelRequestFields=additional_model_fields
         )
+        if tool_config:  # None when every tool is unticked
+            request["toolConfig"] = tool_config
+        response = get_bedrock_runtime(opt_fm.region).converse_stream(**request)
 
         with assistant_message:
             result_area = st.empty()
@@ -302,6 +304,49 @@ def invoke_llm(message_history, system_prompts, tool_config, inference_config, a
 
     return {"text": result_text, "metrics": call_metrics, "tool_uses": tool_uses, "assistant_content": assistant_content}
 
+def without_tool_blocks(history):
+    """
+    History for calls that send no toolConfig (every tool unticked): Converse rejects toolUse /
+    toolResult blocks then. Each one becomes a short text note instead of being dropped, so the
+    model still sees which tools ran and what they returned, and roles still alternate.
+    """
+    plain_history = []
+    for msg in history:
+        content = []
+        for block in msg["content"]:
+            if "toolUse" in block:
+                tool_use = block["toolUse"]
+                content.append({"text": f"[Called tool {tool_use['name']} with {json.dumps(tool_use['input'], default=str)}]"})
+            elif "toolResult" in block:
+                result = json.dumps(block["toolResult"]["content"], default=str)
+                content.append({"text": f"[Tool result: {result[:2000]}]"})
+            else:
+                content.append(block)
+        plain_history.append({"role": msg["role"], "content": content})
+    return plain_history
+
+def tool_availability_note(enabled_tools):
+    """
+    System prompt note once the user has unticked any tool in this conversation, so the model
+    doesn't take earlier turns (made with a different set of tools) for its own mistakes.
+    None while every tool has stayed on.
+    """
+    if len(enabled_tools) < len(tools):
+        st.session_state.menu_converse_tool_availability_changed = True
+    if not st.session_state.get("menu_converse_tool_availability_changed"):
+        return None
+    tool_name = lambda tool: tool.definition['toolSpec']['name']
+    enabled = ", ".join(tool_name(tool) for tool in enabled_tools) or "none"
+    disabled = ", ".join(tool_name(tool) for tool in tools if tool not in enabled_tools) or "none"
+    return (
+        "The user chooses which tools are available, and this can change between turns. "
+        f"Available now: {enabled}. Disabled now: {disabled}. User messages end with a "
+        f"'{TOOL_AVAILABILITY_PREFIX} ...]' note recording the tools available when they were sent "
+        "(messages without the note had every tool available). Earlier turns reflect the tools "
+        "available at that time: tool calls and results in the history were real, and a tool "
+        "described as disabled earlier was disabled then. Do not treat either as a mistake."
+    )
+
 def build_display_messages(history):
     """
     The messages the chat shows: [role, text, document name or None] per bubble.
@@ -311,7 +356,8 @@ def build_display_messages(history):
     """
     display_messages = []
     for msg in history:
-        texts = [block["text"] for block in msg["content"] if "text" in block]
+        texts = [block["text"] for block in msg["content"]
+                 if "text" in block and not block["text"].startswith(TOOL_AVAILABILITY_PREFIX)]
         if not texts:
             continue  # toolUse / toolResult only
         text = "\n\n".join(texts)
@@ -357,11 +403,17 @@ with st.sidebar:
     opt_max_tokens = st.slider(label="Max Tokens", min_value=opt_fm_max_tokens.min_value, max_value=opt_fm_max_tokens.max_value, value=opt_fm_max_tokens.default_value, step=1, key="max_tokens")
     opt_system_msg = st.text_area(label="System Message", value="You are a question and answering chatbot", key="system_msg")
 
-    # Static list, so it lives in the left sidebar; the right panel is per-turn output
+    # Tool selection lives in the left sidebar; the right panel is per-turn output.
+    # Only ticked tools are offered to the model; changes apply from the next message.
     with st.container(border=True):
         st.markdown("**Available Tools**")
+        enabled_tools = []
         for tool in tools:
-            st.caption(tool.definition['toolSpec']['name'])
+            tool_spec = tool.definition['toolSpec']
+            if st.checkbox(tool_spec['name'], value=True, key=f"tool_enabled_{tool_spec['name']}", help=tool_spec['description']):
+                enabled_tools.append(tool)
+
+tool_config = {"tools": [tool.definition for tool in enabled_tools]} if enabled_tools else None
 
 # Docked to the bottom of the page (outside the columns), with the message count just above it.
 # The count is filled in at the end of the script so it includes the turn that just ran.
@@ -467,6 +519,12 @@ with main_col:
         st.chat_message("user").write(prompt)
 
         system_prompts = [{"text": opt_system_msg}]
+        availability_note = tool_availability_note(enabled_tools)
+        if availability_note:
+            system_prompts.append({"text": availability_note})
+            # Per-turn record in history (message_user_latest is the last message of message_history)
+            enabled_names = ", ".join(tool.definition['toolSpec']['name'] for tool in enabled_tools) or "none"
+            message_user_latest["content"].append({"text": f"{TOOL_AVAILABILITY_PREFIX} {enabled_names}]"})
 
         # Only the parameters the model supports are sent
         inference_settings = InferenceSettings(max_tokens=opt_max_tokens, temperature=opt_temperature, top_p=opt_top_p, top_k=opt_top_k)
@@ -476,7 +534,8 @@ with main_col:
         with st.spinner('Processing...'):
             try:
                 llm_calls = []      # invocation metrics of every LLM call in this turn
-                messages = message_history
+                # With every tool unticked no toolConfig is sent, so earlier tool blocks must go
+                messages = message_history if tool_config else without_tool_blocks(message_history)
                 # One bubble per turn: every call in the tool loop streams its text into it
                 assistant_message = st.chat_message("assistant")
 
@@ -506,10 +565,11 @@ with main_col:
                         tool_name = tool_use["name"]
                         tool_args_json = parse_tool_input(tool_use["input"])
 
-                        matched_tool = next((tool for tool in tools if tool.matches(tool_name)), None)
+                        matched_tool = next((tool for tool in enabled_tools if tool.matches(tool_name)), None)
                         try:
                             if matched_tool is None:
-                                expr_result = {"error": f"Unknown tool: {tool_name}"}
+                                is_known_tool = any(tool.matches(tool_name) for tool in tools)
+                                expr_result = {"error": f"Tool {tool_name} is disabled" if is_known_tool else f"Unknown tool: {tool_name}"}
                             else:
                                 expr_result = matched_tool.invoke(tool_args_json.get('expression'), tool_args=tool_args_json)
                         except Exception as err:
@@ -626,6 +686,7 @@ def clear_conversation():
     st.session_state.menu_converse_tool_messages = []
     st.session_state.menu_converse_tool_log = []
     st.session_state.pop("menu_converse_tool_last_metrics", None)
+    st.session_state.pop("menu_converse_tool_availability_changed", None)
 
 # Message count and clear button above the chat input (same style as 3_5_13_converse_demo);
 # filled last so the count includes the turn that just ran. Counts the messages the chat
