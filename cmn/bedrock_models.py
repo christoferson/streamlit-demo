@@ -239,6 +239,7 @@ NO_VISION = all_features_except(Feature.VISION)
 COHERE_FEATURES = all_features_except(Feature.VISION, Feature.GUARDRAILS)
 MISTRAL_SMALL_FEATURES = all_features_except(Feature.DOCUMENT_CHAT, Feature.VISION, Feature.STREAMING_TOOL_USE)
 TEXT_ONLY_TOOLS = all_features_except(Feature.DOCUMENT_CHAT, Feature.VISION)    # DeepSeek V3.2: "doesn't support documents"
+NO_DOCUMENTS = all_features_except(Feature.DOCUMENT_CHAT)                         # GPT-6.1 Terra: Converse rejects document blocks
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +329,7 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     FoundationModel("us.anthropic.claude-sonnet-5", "Claude Sonnet 5.0", _ANTHROPIC, CLAUDE_NO_SAMPLING_64K, listed=False),
     FoundationModel("global.anthropic.claude-sonnet-4-6", "Claude Sonnet 4.6", _ANTHROPIC, CLAUDE_TEMPERATURE_AND_TOP_K_64K),
     FoundationModel("global.anthropic.claude-sonnet-4-5-20250929-v1:0", "Claude Sonnet 4.5", _ANTHROPIC, CLAUDE_TEMPERATURE_ONLY_8K),
-    FoundationModel("global.anthropic.claude-sonnet-4-20250514-v1:0", "Claude Sonnet 4.0", _ANTHROPIC, CLAUDE_LEGACY),
+    FoundationModel("global.anthropic.claude-sonnet-4-20250514-v1:0", "Claude Sonnet 4.0", _ANTHROPIC, CLAUDE_LEGACY, listed=False),  # end of life 2026-11-01
     FoundationModel("us.anthropic.claude-sonnet-4-20250514-v1:0", "Claude Sonnet 4.0", _ANTHROPIC, CLAUDE_SONNET_4_8K, listed=False),
     # --- Anthropic: Haiku ---
     FoundationModel("global.anthropic.claude-haiku-5-5", "Claude Haiku 5.5", _ANTHROPIC, CLAUDE_NO_SAMPLING_64K),
@@ -357,6 +358,8 @@ FOUNDATION_MODELS = FoundationModelCatalog([
     FoundationModel("amazon.nova-micro-v1:0", "Amazon Nova Micro", _AMAZON, NOVA, NO_VISION, listed=False),
 
     # --- OpenAI ---
+    FoundationModel("global.openai.gpt-6.1-terra", "GPT-6.1 Terra", _OPENAI, OPENAI_GPT_5_6, NO_DOCUMENTS),
+    FoundationModel("us.openai.gpt-6.1-terra", "GPT-6.1 Terra", _OPENAI, OPENAI_GPT_5_6, NO_DOCUMENTS, listed=False),
     FoundationModel("global.openai.gpt-5.6-terra", "GPT-5.6 Terra", _OPENAI, OPENAI_GPT_5_6, TEXT_TOOLS),
     FoundationModel("global.openai.gpt-5.6-sol", "GPT-5.6 Sol", _OPENAI, OPENAI_GPT_5_6, TEXT_TOOLS),
     FoundationModel("global.openai.gpt-5.6-luna", "GPT-5.6 Luna", _OPENAI, OPENAI_GPT_5_6, TEXT_TOOLS),

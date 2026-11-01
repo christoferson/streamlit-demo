@@ -751,6 +751,7 @@ def get_tool_registry(enable_web_search: bool):
 opt_model_id_list = [
     #"global.anthropic.claude-opus-4-7",
     "anthropic.claude-opus-4-7",
+    "openai.gpt-6.1-terra",  # Mantle: us-east-1 only
     "openai.gpt-5.5",
     "openai.gpt-5.6-sol",
     "openai.gpt-5.6-terra",

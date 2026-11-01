@@ -140,6 +140,7 @@ from cmn.view.processor.file_uploader_chat import render_file_uploader
 
 from cmn.bedrock.converse import ConversationManager, StreamResult
 from cmn.bedrock.client_manager import BedrockClientFactory
+from cmn.bedrock_models import FOUNDATION_MODELS
 
 #from cmn.bedrock_converse_tools import CalculatorBedrockConverseTool
 #from cmn.bedrock_converse_tools_acronym import AcronymBedrockConverseTool
@@ -708,6 +709,7 @@ tool_registry  = get_tool_registry()
 opt_model_id_list = [
     "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "global.anthropic.claude-sonnet-4-20250514-v1:0",
+    "global.openai.gpt-6.1-terra",
     "cohere.command-r-v1:0",
     "cohere.command-r-plus-v1:0",
     "meta.llama3-8b-instruct-v1:0",
@@ -753,7 +755,10 @@ OPT_SYSTEM_MSG_DEFAULT = build_default_system_prompt(tool_registry)
 
 with st.sidebar:
     opt_model_id    = st.selectbox("Model ID", opt_model_id_list, index=0, key="model_id")
-    opt_temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1, key="temperature")
+    opt_fm = FOUNDATION_MODELS.find(opt_model_id)
+    opt_temperature = None
+    if opt_fm is None or opt_fm.inference_parameters.temperature.is_supported:
+        opt_temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1, key="temperature")
     opt_max_tokens  = st.slider("Max Tokens", 0, 8192, 4096, 1, key="max_tokens")
     opt_system_msg  = st.text_area("System Message", OPT_SYSTEM_MSG_DEFAULT, key="system_msg")
     opt_show_metrics = st.checkbox("Show Invocation Metrics", value=False, key="show_metrics")
@@ -951,10 +956,8 @@ if prompt:
             bedrock_client=bedrock_client,
             tool_registry=tool_registry,
             model_id=opt_model_id,
-            inference_config={
-                "temperature": opt_temperature,
-                "maxTokens":   opt_max_tokens,
-            },
+            inference_config={"maxTokens": opt_max_tokens}
+            | ({} if opt_temperature is None else {"temperature": opt_temperature}),
             system_prompts=[{"text": opt_system_msg}],
         )
 

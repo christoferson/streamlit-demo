@@ -128,7 +128,7 @@ How the converse page uses them:
 | `COHERE` | ✓ | ✓ (`p`) | ✓ (`k`) | 1 / 2048 / 4096 | Command R / R+ | Cohere's native names are `p` / `k` |
 | `WRITER` | ✓ | ✓ | ✓ (`top_k`) | 1 / 2048 / 4096 | Palmyra X4, X5 | X5 rejects capitalised `TopK` ("Request contains unrecognized fields") |
 | `OPENAI_STYLE` | ✓ | ✓ | – | 1 / 2048 / 4096 | Qwen, gpt-oss, Gemma, Nemotron | |
-| `OPENAI_GPT_5_6` | – | – | – | 1 / 2048 / 4096 | GPT-5.6 Terra/Sol/Luna | |
+| `OPENAI_GPT_5_6` | – | – | – | 1 / 2048 / 4096 | GPT-5.6 Terra/Sol/Luna, GPT-6.1 Terra | |
 
 Sets are frozen dataclasses shared between models, so they can't be changed by accident.
 
@@ -150,6 +150,7 @@ currently check `vision` (image uploads) and `document_chat` (document uploads).
 | `NO_VISION` | vision | Nova Micro |
 | `COHERE_FEATURES` | vision, guardrails | Command R / R+ |
 | `TEXT_ONLY_TOOLS` | document_chat, vision | DeepSeek V3.2 ("doesn't support documents"); tool use works, also streaming |
+| `NO_DOCUMENTS` | document_chat | GPT-6.1 Terra (Converse rejects `document` blocks and images inside `toolResult`) |
 | `MISTRAL_SMALL_FEATURES` | document_chat, vision, streaming_tool_use | Mistral Small 24.02 |
 
 Build a new set with `all_features_except(Feature.VISION, ...)`; it rejects unknown names.
