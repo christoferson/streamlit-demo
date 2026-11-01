@@ -17,7 +17,7 @@ agents, image generation, metrics). Each page is self-contained; shared code liv
 few top-level `cmn_*.py` modules.
 
 ```
-Browser ──► Streamlit server (app.py + pages/*.py, auto-discovered)
+Browser ──► Streamlit server (app.py router → home.py + pages/*.py listed in cmn/view/menu.py)
                 │
                 ├── Presentation   pages/*.py, cmn/tools/renderer/*, cmn/view/processor/*   (imports streamlit)
                 ├── Business logic cmn/bedrock/converse/*, cmn/tools/tool/*, cmn/bedrock_models.py (no streamlit)
@@ -32,10 +32,10 @@ Browser ──► Streamlit server (app.py + pages/*.py, auto-discovered)
 
 | Concern | How it works today |
 |---|---|
-| Entry point | `app.py` — landing page with a settings demo and a "list models" button. Not a router. |
-| Navigation | Streamlit `pages/` auto-discovery. Sorted by the leading number; the rest of the version prefix shows in the sidebar label (e.g. "5 13 converse demo"). `st.navigation` is not used. |
+| Entry point | `app.py` — router: builds `st.navigation()` from `MENU_SECTIONS` (`cmn/view/menu.py`). `home.py` is the landing page. See `MENU.md`. |
+| Navigation | `st.navigation` with sections (Chat & agents, Search & knowledge, Images & vision, Prompts & tools). Only pages in `MENU_SECTIONS` are reachable; broken pages are left out (listed in `MENU.md`). URLs keep the old auto-discovery form (`/app/converse_tool_v3`). |
 | Config | `cmn_settings.py` loads `.env` (cwd, then repo root) into module constants at import. `.streamlit/config.toml` sets `baseUrlPath="app"`, upload limit, theme. |
-| Auth | `cmn_auth.check_password()` (hmac against `st.secrets["passwords"]`). Imported by ~30 pages but **called nowhere** — the app is effectively unauthenticated. ALB/OIDC header handling in `app.py` is a stub. |
+| Auth | `cmn_auth.check_password()` (hmac against `st.secrets["passwords"]`). Imported by ~30 pages but **called nowhere** — the app is effectively unauthenticated. ALB/OIDC header handling was removed from `app.py`. |
 | Interpreter | Python 3.12 + Streamlit 1.59 (see CLAUDE.md). Imports assume the working directory is the repo root. |
 | Deployment | `Dockerfile` at repo root. |
 
@@ -44,7 +44,9 @@ Browser ──► Streamlit server (app.py + pages/*.py, auto-discovered)
 ## 2. Repository layout
 
 ```
-app.py                     Landing page
+app.py                     Router (st.navigation from cmn/view/menu.py)
+home.py                    Landing page
+MENU.md                    App menu: listed, featured and hidden pages (and why)
 cmn_settings.py            Environment config (.env → constants)            ← canonical settings module
 settings.py                Legacy subset of cmn_settings (AWS_REGION only)  ← deprecated, see §7
 cmn_auth.py                Password gate (st.secrets)
@@ -268,7 +270,7 @@ Ordered by value / effort.
    logo + optional `check_password()`), a model-picker sidebar, and a chat-history renderer. Removes
    boilerplate repeated in 24–38 pages.
 5. **Decide on auth.** Either call `cmn_auth.check_password()` from the scaffold or drop the
-   ~30 dead imports. Avoid private `st._config.set_option` in `app.py`.
+   ~30 dead imports.
 6. **Page-scoped session state.** 15 pages share the bare `messages` key, so history leaks between
    pages. Prefix keys per page (e.g. `f"{PAGE_ID}.messages"`).
 7. **Fold top-level modules into `cmn/`.** `cmn_settings` → `cmn/settings.py` (with validation and

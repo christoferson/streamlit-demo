@@ -1,202 +1,22 @@
+import re
+from pathlib import Path
+
 import streamlit as st
-import cmn_auth
-#from streamlit.web.server.websocket_headers import _get_websocket_headers
-import boto3
-from botocore.exceptions import ClientError
 
-import jwt
-from typing import Any, Dict
-import json
-import random
-
-###### Get Name from OIDC
-
-#def _decode_access_token(access_token: str) -> Dict[str, Any]:
-#    decoded = jwt.decode(access_token, options={"verify_signature": False})
-#    return decoded
-
-def process_aws_oidc_data():
-
-   access_token = "oidc_data"
-#    headers = st.context.headers #_get_websocket_headers()
-#    if headers:
-#       #if "X-Amzn-Oidc-Identity" in headers:
-#       #   identity = headers["X-Amzn-Oidc-Identity"]
-#       if "X-Amzn-Oidc-Accesstoken" in headers:
-#          access_token_jwt =  headers["X-Amzn-Oidc-Accesstoken"]
-#          #access_token_claim = _decode_access_token(access_token=access_token_jwt)
-#          access_token_claims = jwt.decode(access_token_jwt, options={"verify_signature": False})
-#          #access_token = json.dumps(access_token_claims)
-#          if "name" in access_token_claims:
-#             access_token = access_token_claims["name"]
-#          elif "upn" in access_token_claims:
-#             access_token = access_token_claims["upn"]
-
-   return access_token
-
-session_identity = process_aws_oidc_data()
-st.write(f"Welcome: {session_identity}")
+from cmn.view.menu import MENU_SECTIONS
 
 
-####
+def legacy_url_path(path: str) -> str:
+    # Same URL the old pages/ auto-navigation used ("3_7_5_converse_tool_v3" -> "converse_tool_v3"), so old links keep working
+    return re.sub(r"^[\d_]+", "", Path(path).stem)
 
 
-###### AUTH START #####
+home = st.Page("home.py", title="Home", icon=":material/home:", default=True)
 
-#if not cmn_auth.check_password():
-#   st.stop()
+navigation = {"": [home]}
+for section, pages in MENU_SECTIONS.items():
+    navigation[section] = [
+        st.Page(page.path, title=page.title, icon=page.icon, url_path=legacy_url_path(page.path)) for page in pages
+    ]
 
-######  AUTH END #####
-session_identity = process_aws_oidc_data()
-st.write(f"Welcome: {session_identity}")
-
-# Create tabs
-#tab1, tab2 = st.tabs(["Main", "Settings"])
-
-# with tab1:
-#    st.title("Main Tab")
-#    st.write("Hello world")
-#    #st.page_link("pages/5_2_3_kb_demo.py", label="Page 1", icon="1️⃣")
-# Initialize session state
-if 'theme' not in st.session_state:
-    st.session_state.theme = 'light'
-if 'font_size' not in st.session_state:
-    st.session_state.font_size = 'medium'
-    
-# with tab2:
-st.title("Settings")
-# Theme settings
-st.header("Theme Settings")
-
-# Create a radio button for theme selection
-theme_choice = st.radio(
-    "Choose theme:",
-    options=['Light', 'Dark'],
-    index=0 if st.session_state.theme == 'light' else 1,
-    horizontal=True
-)
-
-# Update the theme based on the radio button selection
-if theme_choice == 'Light':
-    st.session_state.theme = 'light'
-else:
-    st.session_state.theme = 'dark'
-
-# Apply the theme
-
-
-#st.write(f"Current theme: {st.session_state.theme}")
-
-# Font size settings
-st.header("Font Size")
-if 'font_size' not in st.session_state:
-   st.session_state.font_size = 'medium'
-font_size = st.select_slider('Choose font size', options=['small', 'medium', 'large'])
-if font_size != st.session_state.font_size:
-   st.session_state.font_size = font_size
-   #st.rerun()
-st.markdown(f"<p style='font-size: {font_size};'>This text will change size based on your selection.</p>", unsafe_allow_html=True)
-
-# Language settings
-st.header("Language")
-languages = ['English', 'Spanish', 'French', 'German', 'Chinese']
-selected_language = st.selectbox('Select your preferred language', languages)
-st.write(f"Selected language: {selected_language}")
-
-# Notification settings
-st.header("Notification Settings")
-email_notifications = st.toggle('Enable email notifications')
-push_notifications = st.toggle('Enable push notifications')
-st.write(f"Email notifications: {'Enabled' if email_notifications else 'Disabled'}")
-st.write(f"Push notifications: {'Enabled' if push_notifications else 'Disabled'}")
-
-# Data privacy settings
-st.header("Data Privacy")
-data_collection = st.checkbox('Allow data collection for improving user experience')
-st.write(f"Data collection: {'Allowed' if data_collection else 'Not allowed'}")
-
-# Accessibility features
-st.header("Accessibility")
-high_contrast = st.toggle('High contrast mode')
-screen_reader = st.toggle('Screen reader support')
-st.write(f"High contrast mode: {'Enabled' if high_contrast else 'Disabled'}")
-st.write(f"Screen reader support: {'Enabled' if screen_reader else 'Disabled'}")
-
-# Custom color picker
-st.header("Custom Accent Color")
-accent_color = st.color_picker('Pick a custom accent color', '#00f900')
-st.markdown(f"<p style='color:{accent_color};'>This text will change color based on your selection.</p>", unsafe_allow_html=True)
-
-# Easter egg
-st.header("Secret Setting")
-if st.button("Don't click me"):
-   st.balloons()
-   st.write("You found the secret! Here's a random joke:")
-   jokes = [
-      "Why don't scientists trust atoms? Because they make up everything!",
-      "Why did the scarecrow win an award? He was outstanding in his field!",
-      "Why don't eggs tell jokes? They'd crack each other up!",
-      "What do you call a fake noodle? An impasta!"
-   ]
-   st.write(random.choice(jokes))
-
-# Save settings
-if st.button('Save Settings'):
-   st._config.set_option('theme.base', st.session_state.theme)
-   st.success('Settings saved successfully!')
-   st.rerun()
-
-# Quick Links
-st.header("Quick Links")
-st.page_link("pages/14_1_1_session_rag.py", label="Session-Based RAG", icon="🧠")
-
-
-# Add a new section for listing Bedrock Foundation models
-st.header("Bedrock Foundation Models")
-# Initialize Bedrock client
-bedrock = boto3.client('bedrock', region_name='us-east-1')
-
-def list_bedrock_models():
-    try:
-
-
-        # Call the list_foundation_models API
-        response = bedrock.list_foundation_models()
-
-
-        # Display the models
-        if 'modelSummaries' in response:
-            st.subheader("Available Models:")
-            for model in response['modelSummaries']:
-                with st.expander(f"{model.get('modelName', 'Unknown')} ({model.get('providerName', 'Unknown')}) - {model.get('modelId', 'N/A')}"):
-                    st.write(f"Model ID: {model.get('modelId', 'N/A')}")
-                    st.write(f"Model ARN: {model.get('modelArn', 'N/A')}")
-
-                    # Handle optional fields
-                    if 'inputModalities' in model:
-                        st.write(f"Input Modalities: {', '.join(model['inputModalities'])}")
-
-                    if 'outputModalities' in model:
-                        st.write(f"Output Modalities: {', '.join(model['outputModalities'])}")
-
-                    if 'responseStreamingSupported' in model:
-                        st.write(f"Streaming Supported: {model['responseStreamingSupported']}")
-
-                    if 'customizationsSupported' in model and model['customizationsSupported']:
-                        st.write(f"Customizations: {', '.join(model['customizationsSupported'])}")
-
-                    if 'inferenceTypesSupported' in model and model['inferenceTypesSupported']:
-                        st.write(f"Inference Types: {', '.join(model['inferenceTypesSupported'])}")
-
-                    if 'modelLifecycle' in model and 'status' in model['modelLifecycle']:
-                        st.write(f"Status: {model['modelLifecycle']['status']}")
-
-
-    except ClientError as e:
-        st.error(f"Error accessing Bedrock: {str(e)}")
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-
-# Create a button to list the models
-if st.button("List Bedrock Foundation Models"):
-    list_bedrock_models()
+st.navigation(navigation).run()
