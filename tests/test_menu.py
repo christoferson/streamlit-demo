@@ -25,6 +25,16 @@ class MenuTest(unittest.TestCase):
             self.assertRegex(page.icon, r"^:material/[a-z_]+:$", page.path)
             self.assertTrue(page.summary.strip(), page.path)
 
+    def test_every_page_has_details_and_something_to_try(self):
+        for page in ALL_PAGES:
+            self.assertTrue(page.details, page.path)
+            self.assertTrue(page.try_this.strip(), page.path)
+
+    def test_text_has_no_markdown_brackets_that_break_badges(self):
+        for page in ALL_PAGES:
+            for service in page.services:
+                self.assertNotRegex(service, r"[\[\]]", page.path)
+
     def test_featured_pages_fit_the_home_page_cards(self):
         featured = [page for page in ALL_PAGES if page.featured]
         self.assertTrue(1 <= len(featured) <= 6)

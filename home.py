@@ -5,7 +5,7 @@ from cmn.view.menu import MENU_SECTIONS
 
 REPO_URL = "https://github.com/christoferson/streamlit-demo"
 
-st.set_page_config(page_title="Amazon Bedrock Demos", page_icon=":material/home:", layout="wide")
+st.set_page_config(page_title="Amazon Bedrock Demos", page_icon="images/logo.png", layout="wide")
 st.logo(icon_image="images/logo.png", image="images/logo_text.png")
 
 all_pages = [page for pages in MENU_SECTIONS.values() for page in pages]
@@ -23,23 +23,56 @@ demos_column.metric("Demos", len(all_pages), border=True)
 models_column.metric("Models to choose from", len(listed_models), border=True)
 providers_column.metric("Model providers", len({model.provider for model in listed_models}), border=True)
 
+def service_badges(page) -> str:
+    return " ".join(f":blue-badge[{service}]" for service in page.services)
+
+
+def render_demo_details(page) -> None:
+    st.markdown(f"#### {page.icon} {page.title}")
+    st.markdown(page.summary)
+    if page.services:
+        st.markdown(service_badges(page))
+    if page.details:
+        st.markdown("\n".join(f"- {detail}" for detail in page.details))
+    if page.try_this:
+        st.markdown(f":green[**:material/play_circle: Try this:**] {page.try_this}")
+    if page.needs:
+        st.markdown(f":orange[**:material/build_circle: Needs setup:**] {page.needs}")
+    if page.differs:
+        st.markdown(f":violet[**:material/compare_arrows: How it differs:**] {page.differs}")
+    st.page_link(page.path, label="Open demo", icon=":material/arrow_forward:")
+
+
 st.header("Start here")
-st.caption("A good first tour. Each demo explains itself on its own page.")
+st.caption("A good first tour. Every demo calls Bedrock live, so replies take a few seconds.")
 featured = [page for page in all_pages if page.featured]
 for row_start in range(0, len(featured), 3):
     columns = st.columns(3)
     for column, page in zip(columns, featured[row_start:row_start + 3]):
         with column.container(border=True, height="stretch"):
             st.markdown(f"#### {page.icon} {page.title}")
-            st.write(page.summary)
+            st.markdown(page.summary)
+            st.markdown(service_badges(page))
+            if page.try_this:
+                st.markdown(f":green[**Try this:**] {page.try_this}")
             st.page_link(page.path, label="Open demo", icon=":material/arrow_forward:")
 
 st.header("All demos")
-for section, pages in MENU_SECTIONS.items():
-    with st.expander(f"**{section}** ({len(pages)})"):
-        for page in pages:
-            st.page_link(page.path, label=page.title, icon=page.icon)
-            st.caption(page.summary)
+st.markdown(
+    "Each demo below lists what you can do in it, and how to read the colors: "
+    ":blue-badge[AWS service or API] "
+    ":green[**Try this**] a one-minute test, "
+    ":orange[**Needs setup**] resources it expects in the AWS account, "
+    ":violet[**How it differs**] from similar-looking demos."
+)
+for tab, (section, pages) in zip(st.tabs([f"{section} ({len(pages)})" for section, pages in MENU_SECTIONS.items()]),
+                                 MENU_SECTIONS.items()):
+    with tab:
+        for row_start in range(0, len(pages), 2):
+            columns = st.columns(2)
+            for column, page in zip(columns, pages[row_start:row_start + 2]):
+                with column.container(border=True, height="stretch"):
+                    render_demo_details(page)
 
 st.header("How it's built")
 left, right = st.columns(2)

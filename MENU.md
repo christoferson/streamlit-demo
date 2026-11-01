@@ -3,6 +3,9 @@
 What visitors see: the sidebar menu and the home page. Both are generated from one list,
 `MENU_SECTIONS` in `cmn/view/menu.py`, so edit that and this file together.
 
+Per-page facts (UI, APIs, models, settings, quirks, differences between similar pages) are in
+`design/demo-pages.md`. Write menu text from there instead of re-reading the pages.
+
 ## How it works
 
 - `app.py` is the router. It builds `st.navigation()` from `MENU_SECTIONS`, so **only pages listed
@@ -16,13 +19,28 @@ Run it: `py -3.12 -m streamlit run app.py --server.headless true`, then open htt
 
 ### Adding a page to the menu
 
-1. Add a `MenuPage(path, title, icon, summary)` to the right section in `cmn/view/menu.py`.
+1. Add a `MenuPage(...)` to the right section in `cmn/view/menu.py`.
    - `title`: what it does, in plain words ("Edit images"), not the file name.
    - `icon`: a Material icon, `":material/<name>:"` (no emoji).
    - `summary`: one or two sentences for someone who has never seen the app.
+   - `details`: two to four "what you can do" bullets.
+   - `services`: AWS services / APIs, shown as blue badges.
+   - `try_this`: something a visitor can do in a minute (green). Base it on what the page really
+     supports, e.g. an example prompt it ships with.
+   - `needs`: resources it expects in the AWS account (orange). Leave empty if none.
+   - `differs`: how it differs from a similar-looking demo (violet).
    - `featured=True` puts it on the home page's "Start here" cards. Keep that to about six pages
      you have checked end to end.
 2. Add it to the table below.
+
+### Home page colors
+
+| Look | Meaning |
+|---|---|
+| :blue-badge[...] | AWS service or API the demo uses |
+| :green[**Try this**] | A one-minute test |
+| :orange[**Needs setup**] | Resources the demo expects in the AWS account |
+| :violet[**How it differs**] | Difference from similar-looking demos |
 
 ## Menu
 
@@ -32,22 +50,22 @@ Featured pages are marked ★.
 
 | Menu title | File | Notes |
 |---|---|---|
-| ★ Chat with any model | `3_5_13_converse_demo.py` | Model picker comes from the catalog |
+| ★ Chat with any model | `3_5_13_converse_demo.py` | Model picker comes from the catalog. English guide text is still Lorem ipsum; Export menu does nothing |
 | ★ Tool-using assistant | `3_7_5_converse_tool_v3.py` | Slow first load (imports plotting, PDF, PPTX) |
 | Tool use, step by step | `3_7_4_converse_tool_demo.py` | Prototype of the tool loop |
 | ★ OpenAI-compatible API | `3_8_01_bedrock_mantle.py` | Bedrock Mantle, us-east-1 |
 | AgentCore harness chat | `3_9_01_bedrock_harness_chat.py` | Needs an AgentCore harness in the account |
-| Chat with native requests | `3_4_chat_demo.py` | InvokeModel + Polly |
+| Chat with native requests | `3_4_chat_demo.py` | InvokeModel. Polly code is present but never called |
 
 ### Search & knowledge (RAG)
 
 | Menu title | File | Notes |
 |---|---|---|
-| ★ Chat with your documents | `14_1_1_session_rag.py` | Local FAISS, sessions saved under `session_data/` |
-| Managed knowledge bases | `3_9_50_bedrock_managed_kb.py` | The account's knowledge base has no data sources yet |
-| S3 Vectors store | `2_s3_vector.py` | Needs an S3 Vectors bucket |
-| Multi-tenant knowledge base | `2_s3_vector_kb_3.py` | Needs an S3 Vectors bucket |
-| Ask about a file | `6_2_4_filekb_demo.py` | |
+| ★ Ask about a file | `6_2_4_filekb_demo.py` | No setup; RetrieveAndGenerate on one uploaded file |
+| Chat with your documents | `14_1_1_session_rag.py` | Local FAISS, sessions saved under `session_data/`. PDF/DOCX are read as plain text, and the temperature slider isn't sent |
+| Managed knowledge bases | `3_9_50_bedrock_managed_kb.py` | The account's knowledge base has no data sources yet; model ARN is fixed to us-east-1 |
+| S3 Vectors store | `2_s3_vector.py` | Needs an S3 Vectors bucket. Sample Query buttons only show the text |
+| Multi-tenant knowledge base | `2_s3_vector_kb_3.py` | Needs a KB, S3 buckets, DynamoDB tables and an ingestion Lambda |
 
 ### Images & vision
 
