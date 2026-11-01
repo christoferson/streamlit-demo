@@ -9,6 +9,7 @@ mime_mapping_image = {
 mime_mapping_document = {
     "text/plain":               "txt",
     "application/vnd.ms-excel": "csv",
+    "text/csv":                 "csv",
     "application/pdf":          "pdf",
     "text/markdown":            "md",
 }

@@ -1,5 +1,5 @@
 """
-Tests for pages/3_7_4_converse_tool_demo.py: the tool loop, history, limits, tool checkboxes and
+Tests for demos/3_7_4_converse_tool_demo.py: the tool loop, history, limits, tool checkboxes and
 error handling. The page runs in streamlit.testing.v1.AppTest with boto3.client patched to a fake
 bedrock-runtime client, so there are no AWS calls.
 
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import streamlit as st
 from botocore.exceptions import ClientError, EventStreamError, ReadTimeoutError
 
-PAGE = str(Path(__file__).resolve().parent.parent / "pages" / "3_7_4_converse_tool_demo.py")
+PAGE = str(Path(__file__).resolve().parent.parent / "demos" / "3_7_4_converse_tool_demo.py")
 TOOLS = ["expr_evaluator", "acronym_evaluator", "url_content_loader", "wikipedia_loader", "datetime_tool"]
 
 try:

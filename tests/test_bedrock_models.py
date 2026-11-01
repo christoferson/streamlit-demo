@@ -11,7 +11,7 @@ from cmn.bedrock_models import (
     FoundationModelCatalog, InferenceParameterSet, Provider, all_features_except,
 )
 
-PAGE_DEFAULT_MODEL = "global.anthropic.claude-sonnet-5"  # pages/3_5_13_converse_demo.py
+PAGE_DEFAULT_MODEL = "global.anthropic.claude-sonnet-5"  # demos/3_5_13_converse_demo.py
 
 
 class CatalogTest(unittest.TestCase):

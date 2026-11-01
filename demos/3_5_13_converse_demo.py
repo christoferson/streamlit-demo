@@ -20,6 +20,9 @@ from botocore.exceptions import ClientError, ReadTimeoutError
 AWS_REGION = cmn_settings.AWS_REGION
 MAX_MESSAGES = 80 * 2
 
+PAGE_TITLE = "Chat with any model"
+AVATARS = {"user": ":material/person:", "assistant": ":material/smart_toy:", "system": ":material/error:"}
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -48,8 +51,8 @@ cloudwatch_logs = boto3.client('logs', region_name=AWS_REGION)
 ####################################################################################
 
 st.set_page_config(
-    page_title="Converse",
-    page_icon="🧊",
+    page_title=PAGE_TITLE,
+    page_icon=":material/chat:",
     layout="wide", # "centered" or "wide" — wide: page hosts chat + info panel side by side
     initial_sidebar_state="expanded", #"auto", "expanded", or "collapsed"
     menu_items={
@@ -285,7 +288,7 @@ with st.sidebar:
 
 with main_col:
     header_flex = st.container(horizontal=True, width="stretch", horizontal_alignment="left", vertical_alignment="bottom", border=False)
-    header_flex.markdown("#### 💬 :blue[Converse 3-5-13]")
+    header_flex.markdown(f"#### :material/chat: :blue[{PAGE_TITLE}]")
     header_flex.space("stretch")
     show_guide = header_flex.toggle(":violet[**Guide**]", value=False, key="show_guide_toggle")
 
@@ -364,7 +367,7 @@ with main_col:
     for msg in st.session_state.menu_converse_messages:
         idx = idx + 1
         contents = msg["content"]
-        with st.chat_message(msg["role"]):
+        with st.chat_message(msg["role"], avatar=AVATARS.get(msg["role"])):
             content = contents[0]
             content_text = content["text"]
             if "user" == msg["role"]:
@@ -404,6 +407,12 @@ with main_col:
 # Chat input at the bottom of viewport
 with st.bottom:
     with st.container(horizontal=True, width="stretch", horizontal_alignment="right", vertical_alignment="center", border=False, height="content", gap="xxsmall", autoscroll=False):
+        current_settings = [f":material/smart_toy: **{opt_fm.display_name}**"]
+        if opt_fm_temperature.is_supported:
+            current_settings.append(f"Temperature {opt_temperature:.1f}")
+        current_settings.append(f"Max tokens {opt_max_tokens:,}")
+        st.markdown(":gray[" + " · ".join(current_settings) + "]")
+        st.space("stretch")
         st.markdown(
             f":violet[**{len(st.session_state.menu_converse_messages)}/{MAX_MESSAGES}**]",
             help="Messages in conversation history",
@@ -432,7 +441,7 @@ with st.bottom:
         accept_audio=True,
         accept_file="multiple" if chat_input_file_types else False,
         file_type=chat_input_file_types or None,
-        placeholder="Type your message here — attach files with 📎...",
+        placeholder=f"Ask {opt_fm.display_name}",
     )
 
 with main_col:
@@ -452,7 +461,7 @@ with main_col:
                 st.warning(f"Unsupported file type(s) skipped: {', '.join(unsupported)}")
 
         message_history.append(message_user_latest)
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar=AVATARS["user"]):
             st.write(prompt)
             for f in chat_input_files:
                 if f.type in mime_mapping_image:
@@ -473,7 +482,7 @@ with main_col:
             try:
                 response = get_bedrock_runtime(opt_fm.region).converse_stream(**request)
 
-                with st.chat_message("assistant"):
+                with st.chat_message("assistant", avatar=AVATARS["assistant"]):
                     result_area = st.empty()
                     streamed_chunks = []
 
@@ -517,10 +526,10 @@ with main_col:
             except ClientError as err:
                 message = err.response["Error"]["Message"]
                 logger.error("A client error occurred: %s", message)
-                st.chat_message("system").write(message)
+                st.chat_message("system", avatar=AVATARS["system"]).write(message)
             except ReadTimeoutError as err:
                 logger.error("A client error occurred: %s", err)
-                st.chat_message("system").write(str(err))
+                st.chat_message("system", avatar=AVATARS["system"]).write(str(err))
 
 # Right sidebar content
 # Pin the Info Panel so it stays visible while the conversation scrolls.
@@ -549,16 +558,6 @@ st.html(
 with right_sidebar_col, st.container(key="info_panel_sticky"):
     st.markdown("### Info Panel")
 
-    with st.container(border=True):
-        st.markdown("**Statistics**")
-        st.metric("Messages", len(st.session_state.menu_converse_messages))
-        st.metric("Limit", MAX_MESSAGES)
-
-        if st.session_state.menu_converse_messages:
-            usage_pct = (len(st.session_state.menu_converse_messages) / MAX_MESSAGES) * 100
-            st.progress(usage_pct / 100)
-            st.caption(f"{usage_pct:.1f}% used")
-
     if "menu_converse_last_metrics" in st.session_state:
         last_model_name, last_metrics = st.session_state["menu_converse_last_metrics"]
         with st.container(border=True):
@@ -570,14 +569,6 @@ with right_sidebar_col, st.container(key="info_panel_sticky"):
             with st.container(horizontal=True):
                 st.metric("Total", f"{last_metrics.total_tokens:,}")
                 st.metric("Latency", f"{last_metrics.latency_ms:,} ms")
-
-    with st.container(border=True):
-        st.markdown("**Current Model**")
-        st.caption(opt_fm.display_name)
-        st.markdown("**Temperature**")
-        st.caption(f"{opt_temperature:.1f}")
-        st.markdown("**Max Tokens**")
-        st.caption(f"{opt_max_tokens}")
 
     with st.container(border=True):
         st.markdown("**Quick Info**")

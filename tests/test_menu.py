@@ -16,7 +16,8 @@ class MenuTest(unittest.TestCase):
 
     def test_pages_and_url_paths_are_unique(self):
         paths = [page.path for page in ALL_PAGES]
-        url_paths = [re.sub(r"^[\d_]+", "", Path(path).stem) for path in paths]
+        # Streamlit's default url_path: the file name minus its first number
+        url_paths = [re.sub(r"^[0-9]*[_ -]*", "", Path(path).stem) for path in paths]
         self.assertEqual(len(paths), len(set(paths)))
         self.assertEqual(len(url_paths), len(set(url_paths)))
 

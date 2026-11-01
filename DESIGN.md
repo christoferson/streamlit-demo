@@ -17,9 +17,9 @@ agents, image generation, metrics). Each page is self-contained; shared code liv
 few top-level `cmn_*.py` modules.
 
 ```
-Browser ──► Streamlit server (app.py router → home.py + pages/*.py listed in cmn/view/menu.py)
+Browser ──► Streamlit server (app.py router → home.py + demos/*.py listed in cmn/view/menu.py)
                 │
-                ├── Presentation   pages/*.py, cmn/tools/renderer/*, cmn/view/processor/*   (imports streamlit)
+                ├── Presentation   demos/*.py, cmn/tools/renderer/*, cmn/view/processor/*   (imports streamlit)
                 ├── Business logic cmn/bedrock/converse/*, cmn/tools/tool/*, cmn/bedrock_models.py (no streamlit)
                 └── AWS access     boto3 clients (bedrock-runtime, bedrock-agent[-runtime], bedrock,
                                    polly, rekognition, cloudwatch, logs, s3vectors, opensearch)
@@ -33,7 +33,7 @@ Browser ──► Streamlit server (app.py router → home.py + pages/*.py liste
 | Concern | How it works today |
 |---|---|
 | Entry point | `app.py` — router: builds `st.navigation()` from `MENU_SECTIONS` (`cmn/view/menu.py`). `home.py` is the landing page. See `MENU.md`. |
-| Navigation | `st.navigation` with sections (Chat & agents, Search & knowledge, Images & vision, Prompts & tools). Only pages in `MENU_SECTIONS` are reachable; broken pages are left out (listed in `MENU.md`). URLs keep the old auto-discovery form (`/app/converse_tool_v3`). |
+| Navigation | `st.navigation` with sections (Chat & agents, Search & knowledge, Images & vision, Prompts & tools). Only pages in `MENU_SECTIONS` are reachable; broken pages are left out (listed in `MENU.md`). URLs are Streamlit's default, same as the old auto-discovery (`/app/7_5_converse_tool_v3`). |
 | Config | `cmn_settings.py` loads `.env` (cwd, then repo root) into module constants at import. `.streamlit/config.toml` sets `baseUrlPath="app"`, upload limit, theme. |
 | Auth | `cmn_auth.check_password()` (hmac against `st.secrets["passwords"]`). Imported by ~30 pages but **called nowhere** — the app is effectively unauthenticated. ALB/OIDC header handling was removed from `app.py`. |
 | Interpreter | Python 3.12 + Streamlit 1.59 (see CLAUDE.md). Imports assume the working directory is the repo root. |
@@ -54,7 +54,7 @@ cmn_security.py            HMAC signing of saved conversations (ConversationSecu
 cmn_constants.py           Shared help text + CSS snippets
 cmn_st_audio.py            Polly / Comprehend helpers (only used by archived pages)
 app_bedrock_lib.py         List knowledge bases / agents / models
-pages/                     Live demo pages (N_M_K_<topic>.py)
+demos/                     Demo pages (N_M_K_<topic>.py). Not named pages/: see MENU.md
 pages-archive/<topic>/     Superseded page versions (git-ignored, not loaded)
 cmn/                       Shared package (see §3)
 design/                    Topic design docs
@@ -68,7 +68,7 @@ images/                    Logos used by st.logo() in most pages
 `<topic>_<sub>_<version>_<name>.py`, e.g. `3_5_13_converse_demo.py` = topic 3 (chat), sub-topic 5
 (converse), version 13. When a newer version lands, the old one moves to
 `pages-archive/<name>/` (e.g. `pages-archive/converse_demo/3_5_01 … 3_5_12`). Only the latest
-version of each topic should stay in `pages/`.
+version of each topic should stay in `demos/`.
 
 | Topic | Pages |
 |---|---|
@@ -144,7 +144,7 @@ Registries are assembled per page in `get_tool_registry()` / `get_renderer_regis
 ### 3.6 Dependency rules
 
 ```
-pages/*  ─► cmn/tools/renderer, cmn/view/processor  (streamlit allowed)
+demos/*  ─► cmn/tools/renderer, cmn/view/processor  (streamlit allowed)
    │
    └────► cmn/bedrock/converse, cmn/tools/tool, cmn/bedrock_models   (NO streamlit)
                  │
@@ -156,7 +156,7 @@ clients are passed in or obtained from `BedrockClientFactory`.
 
 ---
 
-## 4. Page anatomy (reference: `pages/3_5_13_converse_demo.py`, `pages/3_7_5_converse_tool_v3.py`)
+## 4. Page anatomy (reference: `demos/3_5_13_converse_demo.py`, `demos/3_7_5_converse_tool_v3.py`)
 
 1. `st.set_page_config(...)`, `st.logo(...)`
 2. Cached resources: `@st.cache_resource` Bedrock client (honouring `FoundationModel.region`), tool / renderer registries
@@ -213,7 +213,7 @@ Not covered yet: `ConversationManager` loop (v3), `ToolRegistry`, `RendererRegis
 | `1.2.0` | pip log from an unquoted `pip install duckdb>=1.2.0` — delete |
 | `.static/` | duplicate logo, not served — delete |
 | `static/` | duplicate logo, served but unreferenced — delete or switch `st.logo` to it |
-| `views/` | stale copy of `pages/14_1_1_session_rag.py` — delete |
+| `views/` | stale copy of `demos/14_1_1_session_rag.py` — delete |
 | `cmn/rekognition_lib.py` | no importers — delete or use from the 8_x pages |
 | `cmn_st_audio.py` | imported only by archived pages — move to archive |
 | `settings.py` | redundant with `cmn_settings`; 4 pages import it unused, 3 use only `AWS_REGION` — migrate and delete |

@@ -21,7 +21,7 @@ class MenuPage:
 MENU_SECTIONS: dict[str, list[MenuPage]] = {
     "Chat & agents": [
         MenuPage(
-            "pages/3_5_13_converse_demo.py", "Chat with any model", ":material/chat:",
+            "demos/3_5_13_converse_demo.py", "Chat with any model", ":material/chat:",
             "A full-featured chat that works with every model in the catalog (Claude, GPT, Llama, Nova, "
             "Mistral, DeepSeek and more) through one API.",
             details=(
@@ -36,7 +36,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/3_7_5_converse_tool_v3.py", "Tool-using assistant", ":material/construction:",
+            "demos/3_7_5_converse_tool_v3.py", "Tool-using assistant", ":material/construction:",
             "A business-analyst assistant that decides which tools to call, chains several calls in a row, "
             "and shows the results as charts, tables and downloadable reports.",
             details=(
@@ -52,7 +52,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/3_7_4_converse_tool_demo.py", "Tool use, step by step", ":material/build:",
+            "demos/3_7_4_converse_tool_demo.py", "Tool use, step by step", ":material/build:",
             "A simpler, single-file tool-use chat that shows each tool call and result as raw JSON, so you "
             "can see exactly how the model and tools talk to each other.",
             details=(
@@ -66,7 +66,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             differs="The readable prototype; Tool-using assistant is the full version with 14 tools and charts.",
         ),
         MenuPage(
-            "pages/3_8_01_bedrock_mantle.py", "OpenAI-compatible API", ":material/api:",
+            "demos/3_8_01_bedrock_mantle.py", "OpenAI-compatible API", ":material/api:",
             "Chat with OpenAI GPT models (and Claude) through Bedrock's OpenAI-compatible endpoint, with "
             "web search and cited sources.",
             details=(
@@ -82,7 +82,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/3_9_01_bedrock_harness_chat.py", "AgentCore harness chat", ":material/smart_toy:",
+            "demos/3_9_01_bedrock_harness_chat.py", "AgentCore harness chat", ":material/smart_toy:",
             "Chat with a managed agent running on Amazon Bedrock AgentCore, and look inside it: its memory, "
             "past sessions and the machine it runs on.",
             details=(
@@ -96,7 +96,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             needs="An AgentCore harness in the account; memory features need memory configured on it.",
         ),
         MenuPage(
-            "pages/3_4_chat_demo.py", "Chat with native requests", ":material/code:",
+            "demos/3_4_chat_demo.py", "Chat with native requests", ":material/code:",
             "A plain text chat that sends each provider's own request format (Claude, Nova, Llama, Mistral) "
             "instead of a common API, to show what Converse saves you from.",
             details=(
@@ -110,7 +110,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
     ],
     "Search & knowledge (RAG)": [
         MenuPage(
-            "pages/6_2_4_filekb_demo.py", "Ask about a file", ":material/upload_file:",
+            "demos/6_2_4_filekb_demo.py", "Ask about a file", ":material/upload_file:",
             "Upload one file and ask questions about it, with numbered citations back to the text. Nothing "
             "to set up: no knowledge base or database.",
             details=(
@@ -124,7 +124,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/14_1_1_session_rag.py", "Chat with your documents", ":material/description:",
+            "demos/14_1_1_session_rag.py", "Chat with your documents", ":material/description:",
             "Build your own small search engine: upload documents, split and embed them into a local "
             "vector index, then ask questions answered from them.",
             details=(
@@ -137,7 +137,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             differs="Retrieval-augmented generation built by hand, without a managed knowledge base.",
         ),
         MenuPage(
-            "pages/3_9_50_bedrock_managed_kb.py", "Managed knowledge bases", ":material/library_books:",
+            "demos/3_9_50_bedrock_managed_kb.py", "Managed knowledge bases", ":material/library_books:",
             "A console for the knowledge bases in your account: browse their documents, then search them "
             "or get answers with citations.",
             details=(
@@ -151,7 +151,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             needs="At least one Bedrock Knowledge Base with synced documents.",
         ),
         MenuPage(
-            "pages/2_s3_vector.py", "S3 Vectors store", ":material/database:",
+            "demos/2_s3_vector.py", "S3 Vectors store", ":material/database:",
             "Store and search text by meaning in Amazon S3 Vectors, and compare embedding models. Retrieval "
             "only, no chat answer.",
             details=(
@@ -165,7 +165,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             needs="An S3 Vectors bucket and index (VECTOR_BUCKET_NAME, VECTOR_INDEX_NAME).",
         ),
         MenuPage(
-            "pages/2_s3_vector_kb_3.py", "Multi-tenant knowledge base", ":material/groups:",
+            "demos/2_s3_vector_kb_3.py", "Multi-tenant knowledge base", ":material/groups:",
             "One shared knowledge base serving many users, where each user only ever sees their own "
             "documents.",
             details=(
@@ -181,7 +181,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
     ],
     "Images & vision": [
         MenuPage(
-            "pages/9_1_8_image_generator.py", "Generate images", ":material/image:",
+            "demos/9_1_8_image_generator.py", "Generate images", ":material/image:",
             "Describe a picture and get it, with three Stability AI models to compare.",
             details=(
                 "Models: Stable Image Ultra, Stable Image Core, SD3.5 Large",
@@ -193,7 +193,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/9_5_7_image_stability_edit.py", "Edit images", ":material/auto_fix_high:",
+            "demos/9_5_7_image_stability_edit.py", "Edit images", ":material/auto_fix_high:",
             "Change a photo you upload: remove the background, erase or replace objects, recolor, or extend "
             "the edges.",
             details=(
@@ -206,7 +206,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
-            "pages/9_5_7_image_stability_control.py", "Sketch & style control", ":material/brush:",
+            "demos/9_5_7_image_stability_control.py", "Sketch & style control", ":material/brush:",
             "Make a new image guided by one you upload: turn a sketch into a picture, keep a photo's layout, "
             "or copy an image's style.",
             details=(
@@ -217,7 +217,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             try_this="Pick Control Sketch, upload a rough line drawing and keep the default prompt.",
         ),
         MenuPage(
-            "pages/9_5_7_image_stability_upscale.py", "Upscale images", ":material/high_quality:",
+            "demos/9_5_7_image_stability_upscale.py", "Upscale images", ":material/high_quality:",
             "Make a small image bigger and sharper.",
             details=(
                 "Fast (4x), Conservative (keeps detail) and Creative (up to 4K, can add detail from a prompt)",
@@ -226,7 +226,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             try_this="Upload a small JPEG, run Fast Upscale and compare.",
         ),
         MenuPage(
-            "pages/8_1_6_image_query.py", "Ask about an image", ":material/image_search:",
+            "demos/8_1_6_image_query.py", "Ask about an image", ":material/image_search:",
             "Upload a picture and chat about it: describe it, read text from it, find objects, judge its "
             "composition.",
             details=(
@@ -238,7 +238,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             differs="Open-ended chat about one image. Compare image colors compares two.",
         ),
         MenuPage(
-            "pages/8_5_7_image_color_compare.py", "Compare image colors", ":material/palette:",
+            "demos/8_5_7_image_color_compare.py", "Compare image colors", ":material/palette:",
             "Upload two images and get a written comparison of their colors and quality, with a similarity "
             "score from 1 to 10.",
             details=(
@@ -249,7 +249,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             try_this="Upload two photos of one product in different colors and click \"Compare with Meta\".",
         ),
         MenuPage(
-            "pages/99_01_multimodal_search.py", "Multimodal product search", ":material/manage_search:",
+            "demos/99_01_multimodal_search.py", "Multimodal product search", ":material/manage_search:",
             "A product catalog you can search with a photo or with words, because images and text share "
             "one embedding space.",
             details=(
@@ -263,14 +263,14 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
     ],
     "Prompts & tools": [
         MenuPage(
-            "pages/1_count_token.py", "Token counter", ":material/tag:",
+            "demos/1_count_token.py", "Token counter", ":material/tag:",
             "See how many input tokens a prompt or whole conversation will cost before you send it.",
             details=("Count a single message, or a conversation with a system prompt and several turns",),
             services=("Bedrock CountTokens",),
             try_this="Use the pre-filled conversation and click Count Tokens. Counting is free.",
         ),
         MenuPage(
-            "pages/2_prompt_template.py", "Prompt manager", ":material/edit_note:",
+            "demos/2_prompt_template.py", "Prompt manager", ":material/edit_note:",
             "Run prompts saved in Bedrock Prompt Management: fill in their variables, override settings, "
             "and invoke.",
             details=(
@@ -282,7 +282,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             needs="At least one prompt saved in Bedrock Prompt Management.",
         ),
         MenuPage(
-            "pages/13_1_1_resformat.py", "Structured output", ":material/data_object:",
+            "demos/13_1_1_resformat.py", "Structured output", ":material/data_object:",
             "Four ways to make a model return reliable JSON, compared side by side on the same driving data "
             "to produce a driver risk score.",
             details=(
@@ -294,7 +294,7 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             try_this="Keep the defaults and run the Streaming and Tool Use tabs; compare speed and output.",
         ),
         MenuPage(
-            "pages/12_1_1_dataset.py", "Table row selection", ":material/table_rows:",
+            "demos/12_1_1_dataset.py", "Table row selection", ":material/table_rows:",
             "A Streamlit table where clicking a row shows its details. A UI pattern, no AWS calls.",
             details=("Row selection, progress bars and dropdowns inside the table",),
             try_this="Click any row, then generate new data.",

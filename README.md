@@ -39,7 +39,7 @@ http://localhost:8501/
 
 ##### Bedrock Converse Streaming API
 
-[Converse API](pages/5_12_converse_demo.py)
+[Converse API](demos/3_5_13_converse_demo.py)
 
 
 ##### Bedrock Models

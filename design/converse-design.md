@@ -7,8 +7,8 @@ This document provides comprehensive documentation of the Converse Tool implemen
 ## File Locations
 
 ### Main Application Files
-- **v3.7.4**: `pages/3_7_4_converse_tool_demo.py` - Prototype implementation
-- **v3.7.5**: `pages/3_7_5_converse_tool_v3.py` - Production-ready refactored version
+- **v3.7.4**: `demos/3_7_4_converse_tool_demo.py` - Prototype implementation
+- **v3.7.5**: `demos/3_7_5_converse_tool_v3.py` - Production-ready refactored version
 
 ### Core Library Modules
 ```
@@ -1639,12 +1639,12 @@ st.chat_message("user").markdown(prompt)  # ← Consistent with other rendering
 
 ### v3.7.4 File Structure
 ```
-pages/3_7_4_converse_tool_demo.py  (481 lines, everything inline)
+demos/3_7_4_converse_tool_demo.py  (481 lines, everything inline)
 ```
 
 ### v3.7.5 File Structure
 ```
-pages/3_7_5_converse_tool_v3.py                          (868 lines, UI layer)
+demos/3_7_5_converse_tool_v3.py                          (868 lines, UI layer)
 cmn/bedrock/converse/conversation_manager.py             (150 lines, orchestration)
 cmn/bedrock/converse/stream_processor.py                 (200 lines, parsing)
 cmn/bedrock/converse/models.py                           (100 lines, data structures)

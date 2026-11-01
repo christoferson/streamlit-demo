@@ -22,7 +22,7 @@ model.region                                       # None, or e.g. "us-west-2"
 FOUNDATION_MODELS.find("global.anthropic.claude-opus-5-5")   # lookup by ID, or None
 ```
 
-`pages/3_5_13_converse_demo.py` uses the model objects directly as picker
+`demos/3_5_13_converse_demo.py` uses the model objects directly as picker
 options. `3_6_01`, `7_4` and `8_1_6` keep their own model ID
 lists and look each one up with `FOUNDATION_MODELS.find()`.
 

@@ -9,11 +9,15 @@ Per-page facts (UI, APIs, models, settings, quirks, differences between similar 
 ## How it works
 
 - `app.py` is the router. It builds `st.navigation()` from `MENU_SECTIONS`, so **only pages listed
-  there appear in the sidebar**. Files in `pages/` that aren't listed aren't reachable.
+  there appear in the sidebar**. Files in `demos/` that aren't listed aren't reachable.
+- The folder is `demos/`, not `pages/`, on purpose. While a `pages/` folder exists, Streamlit runs
+  a fresh server's first request with its old auto-navigation, so a visitor who opens a demo URL
+  directly gets a sidebar of raw file names (all pages, broken ones too). Don't create `pages/`.
 - `home.py` is the landing page: intro, counts, "Start here" cards (pages with `featured=True`),
   every demo by section, and a short "How it's built".
-- Page URLs keep the old auto-navigation form: the file name minus its numeric prefix
-  (`pages/3_7_5_converse_tool_v3.py` -> `/app/converse_tool_v3`), so old links still work.
+- Page URLs are Streamlit's default: the file name minus its first number
+  (`demos/3_7_5_converse_tool_v3.py` -> `/app/7_5_converse_tool_v3`), the same as the old
+  `pages/` auto-navigation, so old links still work.
 
 Run it: `py -3.12 -m streamlit run app.py --server.headless true`, then open http://localhost:8501/app.
 
@@ -90,7 +94,7 @@ Featured pages are marked ★.
 
 ## Not in the menu
 
-These files are still in `pages/` but are left out until fixed. Status from a load test and a
+These files are still in `demos/` but are left out until fixed. Status from a load test and a
 Bedrock model listing on 2026-11-01.
 
 | File | Why it's hidden |

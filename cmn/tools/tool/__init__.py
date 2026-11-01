@@ -26,6 +26,7 @@ from cmn.tools.tool.bedrock_converse_tools_tool_url            import UrlContent
 from cmn.tools.tool.bedrock_converse_tools_tool_wikipedia   import WikipediaBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_chart           import ChartBedrockConverseTool
 from cmn.tools.tool.bedrock_converse_tools_tool_product         import ProductBedrockConverseTool
+from cmn.tools.tool.bedrock_converse_tools_tool_web_search      import WebSearchBedrockConverseTool
 
 
 __all__ = [
@@ -50,5 +51,6 @@ __all__ = [
     "WikipediaBedrockConverseTool",
     "ChartBedrockConverseTool",
     "ProductBedrockConverseTool",
-    
+    "WebSearchBedrockConverseTool",
+
 ]
