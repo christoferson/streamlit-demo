@@ -261,6 +261,24 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             needs="An OpenSearch Serverless vector collection (OPENSEARCH_ENDPOINT).",
         ),
     ],
+    "Voice & speech": [
+        MenuPage(
+            "demos/3_6_50_polly_speech.py", "Text to speech", ":material/record_voice_over:",
+            "Hear any text spoken by Amazon Polly's upgraded generative voices, and compare them with the "
+            "older engines.",
+            details=(
+                "55 generative voices in 24 languages, including the 14 voices new in October 2026 and "
+                "first-time Hindi and Finnish",
+                "Samples that show off the upgrade: prices, dates, addresses, codes, and tone that follows "
+                "the text (surprise, uncertainty)",
+                "Play the same text on the generative and an older engine side by side",
+                "Plain text or SSML; download the audio as MP3 or OGG",
+            ),
+            services=("Amazon Polly", "Generative engine"),
+            try_this="Pick the \"Surprise\" sample with Kenneth, then try \"Finnish\" to hear Suvi.",
+            differs="Plain text to speech. No model call: Polly reads exactly what you type.",
+        ),
+    ],
     "Prompts & tools": [
         MenuPage(
             "demos/1_count_token.py", "Token counter", ":material/tag:",

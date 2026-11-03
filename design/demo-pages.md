@@ -136,6 +136,16 @@ Settings come from `cmn_settings.py` (`.env` / environment) unless noted. "Catal
 
 **Differences:** `9_1_8` text-to-image (us-west-2). `9_5_7` pages are image-to-image through `us.stability.*` profiles: edit changes your image, control makes a new image guided by yours, upscale only raises resolution. `8_1_6` multi-turn chat about one image (Converse); `8_5_7` one-shot color / quality comparison of two images with measurements in the prompt (InvokeModel).
 
+## Voice & speech
+
+### `3_6_50_polly_speech.py` — Text to speech (added 2026-11-04)
+- **UI:** sidebar Engine (Generative default / Long-form / Neural / Standard), "Only voices new in the October 2026 upgrade" toggle, Language, Voice (new voices listed first and marked "(new)"), "Compare with" (same voice on another engine it supports), audio format (MP3 / OGG). Main: "What's new" expander, sample pills (Money & numbers, Dates & addresses, Codes & phone numbers, Surprise, Uncertainty, Hindi → Kiara, Finnish → Suvi), text area (3000 characters max), SSML toggle, Speak. Results: one card per engine with player, characters billed, latency, size and download; kept in session state.
+- **APIs:** `polly` `describe_voices(Engine=...)` (paged, cached 1 h) and `synthesize_speech`. Bilingual voices (Arjun, Kiara, Kajal: en-IN + hi-IN) get `LanguageCode` when speaking their second language. No Bedrock call.
+- **Facts (us-east-1, 2026-11-04):** 55 generative voices, 24 languages. All 12 new voice names present: Kenneth, Nate (en-US), Russell, Curtis (en-AU), Kiara, Arjun (en-IN + hi-IN), Tina (de-DE), Carlos (es-US), Leo, Carolina (pt-BR), Hyunduk (ko-KR), Suvi (fi-FI). Russell also supports standard; Suvi also neural. Typical latency: generative 1.3–2.7 s, neural about 0.5 s.
+- **Not used:** `StartSpeechSynthesisStream` (bidirectional streaming) is not in boto3 1.43.103. Speech marks are not supported on generative voices.
+- **Settings:** `AWS_REGION` (generative is in 11 regions); IAM `polly:DescribeVoices`, `polly:SynthesizeSpeech`.
+- **Try:** "Surprise" with Kenneth; then Ruth with "Compare with" → Neural.
+
 ## Prompts & tools
 
 ### `1_count_token.py` — Token counter

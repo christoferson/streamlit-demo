@@ -83,6 +83,12 @@ Featured pages are marked ★.
 | Compare image colors | `8_5_7_image_color_compare.py` | |
 | Multimodal product search | `99_01_multimodal_search.py` | Needs an OpenSearch endpoint |
 
+### Voice & speech
+
+| Menu title | File | Notes |
+|---|---|---|
+| Text to speech | `3_6_50_polly_speech.py` | Amazon Polly generative engine (Oct 2026 upgrade). SynthesizeSpeech only; this boto3 has no StartSpeechSynthesisStream |
+
 ### Prompts & tools
 
 | Menu title | File | Notes |
