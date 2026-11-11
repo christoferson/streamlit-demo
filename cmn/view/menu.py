@@ -124,6 +124,21 @@ MENU_SECTIONS: dict[str, list[MenuPage]] = {
             featured=True,
         ),
         MenuPage(
+            "demos/3_9_02_agentcore_web_search.py", "Search the web", ":material/travel_explore:",
+            "Call AgentCore's new Web Search API straight from code: get ranked web results with excerpts, "
+            "filtered by site and date, then let a model answer from them with citations.",
+            details=(
+                "Up to 25 results per search, each with an excerpt and, when known, title, URL and publish date",
+                "Include or exclude up to 100 domains, and limit to a published-after / before range",
+                "Optional cited answer from any catalog model, with excerpts trimmed to keep the prompt small",
+                "Shows latency, cost per search, the boto3 call and the raw response",
+            ),
+            services=("Bedrock AgentCore Web Search", "Bedrock Converse API"),
+            try_this="Pick the \"One site only\" sample, search, and check every result comes from that site.",
+            needs="IAM permission bedrock-agentcore:InvokeWebSearch, and boto3 1.43.127 or later.",
+            differs="Search results for your own code. OpenAI-compatible API's built-in search runs inside the model call.",
+        ),
+        MenuPage(
             "demos/14_1_1_session_rag.py", "Chat with your documents", ":material/description:",
             "Build your own small search engine: upload documents, split and embed them into a local "
             "vector index, then ask questions answered from them.",

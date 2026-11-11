@@ -66,6 +66,7 @@ Featured pages are marked ★.
 | Menu title | File | Notes |
 |---|---|---|
 | ★ Ask about a file | `6_2_4_filekb_demo.py` | No setup; RetrieveAndGenerate on one uploaded file |
+| Search the web | `3_9_02_agentcore_web_search.py` | AgentCore InvokeWebSearch (Nov 2026), $0.007 per search. Needs boto3 1.43.127+ |
 | Chat with your documents | `14_1_1_session_rag.py` | Local FAISS, sessions saved under `session_data/`. PDF/DOCX are read as plain text, and the temperature slider isn't sent |
 | Managed knowledge bases | `3_9_50_bedrock_managed_kb.py` | The account's knowledge base has no data sources yet; model ARN is fixed to us-east-1 |
 | S3 Vectors store | `2_s3_vector.py` | Needs an S3 Vectors bucket. Sample Query buttons only show the text |
